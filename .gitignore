@@ -1,0 +1,10 @@
+.env
+.venv
+*.ipynb_checkpoints
+*.pyc
+data/
+.DS_store
+notebooks/*.csv
+*.log
+.vscode
+.python-version
