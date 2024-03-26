@@ -8,4 +8,4 @@ notebooks/*.csv
 *.log
 .vscode
 .python-version
-notebooks/lightning_logs
+lightning_logs/
