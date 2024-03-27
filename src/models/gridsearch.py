@@ -297,11 +297,12 @@ def _log_metrics_for_hyper_params(df, params, epochs):
         FROM grid_search_metrics
         WHERE model = 'NeuralProphet' AND hyper_params = %(hyper_params)s
     """
+    param_str = json.dumps(params)
     existing_params = pd.read_sql(
-        query, alchemyEngine, params={"hyper_params": json.dumps(params)}
+        query, alchemyEngine, params={"hyper_params": param_str}
     )
     if not existing_params.empty:
-        logger.info('Skipping existing parameter combination.')
+        logger.info("Skipping existing parameter combination: %s", param_str)
         return None
 
     metrics = _train(
@@ -336,7 +337,7 @@ def _log_metrics_for_hyper_params(df, params, epochs):
             ),
             {
                 "model": "NeuralProphet",
-                "hyper_params": json.dumps(params),
+                "hyper_params": param_str,
                 "tag": "baseline" if isBaseline else None,
                 "mae_val": last_metric["MAE_val"],
                 "rmse_val": last_metric["RMSE_val"],
