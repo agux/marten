@@ -33,9 +33,9 @@ t_start = time.time()
 
 load_dotenv()  # take environment variables from .env.
 
-module_path = os.getenv("LOCAL_AKSHARE_DEV_MODULE")
-if module_path is not None and module_path not in sys.path:
-    sys.path.insert(0, module_path)
+# module_path = os.getenv("LOCAL_AKSHARE_DEV_MODULE")
+# if module_path is not None and module_path not in sys.path:
+    # sys.path.insert(0, module_path)
 import akshare as ak  # noqa: E402
 
 print(ak.__version__)

@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+import json
 import argparse
 import multiprocessing
 import pandas as pd
@@ -30,9 +31,10 @@ set_log_level("ERROR")
 random_seed = 7
 logger = None
 alchemyEngine = None
-
+args = None
 
 def init():
+    global alchemyEngine, logger, random_seed
     load_dotenv()  # take environment variables from .env.
 
     module_path = os.getenv("LOCAL_AKSHARE_DEV_MODULE")
@@ -55,9 +57,9 @@ def init():
     )
 
     logger = logging.getLogger(__name__)
-    logger.setLevel(logging.ERROR)
+    logger.setLevel(logging.INFO)
 
-    file_handler = logging.FileHandler("etl.log")
+    file_handler = logging.FileHandler("grid_search.log", mode='w')
     console_handler = logging.StreamHandler()
 
     # Step 4: Create a formatter
@@ -74,7 +76,9 @@ def init():
     xshg = xcals.get_calendar("XSHG")
 
 
-def train(df, epochs=None, **kwargs):
+def _train(df, epochs=None, **kwargs):
+    global alchemyEngine, logger, random_seed
+
     set_random_seed(random_seed)
     m = NeuralProphet(**kwargs)
     covars = [col for col in df.columns if col not in ("ds", "y")]
@@ -88,6 +92,7 @@ def train(df, epochs=None, **kwargs):
 
 
 def load_anchor_ts(symbol="930955"):
+    global alchemyEngine, logger, random_seed
     # load anchor TS
     query = f"""
         SELECT date DS, change_rate y, vol_change_rate vol_cr, amt_change_rate amt_cr, 
@@ -101,6 +106,7 @@ def load_anchor_ts(symbol="930955"):
 
 
 def covar_symbols_index(anchor_symbol, min_date):
+    global alchemyEngine, logger, random_seed
     # get a list of other China indices, and not yet have metrics recorded
     query = f"""
         select
@@ -129,7 +135,8 @@ def covar_symbols_index(anchor_symbol, min_date):
     return cov_symbols
 
 
-def save_covar_metrics(anchor_symbol, cov_table, cov_symbol, cov_metrics):
+def _save_covar_metrics(anchor_symbol, cov_table, cov_symbol, cov_metrics):
+    global alchemyEngine, logger, random_seed
     # Insert data into the table
     with alchemyEngine.begin() as conn:
         # Inserting DataFrame into the database table
@@ -157,6 +164,8 @@ def save_covar_metrics(anchor_symbol, cov_table, cov_symbol, cov_metrics):
 
 
 def baseline_metrics_index(anchor_symbol, anchor_df, covar_symbols):
+    global alchemyEngine, logger, random_seed
+
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
     cov_table = "index_daily_em_view"
 
@@ -172,7 +181,7 @@ def baseline_metrics_index(anchor_symbol, anchor_df, covar_symbols):
         if cov_symbol_df.empty:
             return None
         merged_df = pd.merge(anchor_df, cov_symbol_df, on="ds", how="left")
-        output = train(
+        output = _train(
             merged_df,
             weekly_seasonality=False,
             daily_seasonality=False,
@@ -180,7 +189,7 @@ def baseline_metrics_index(anchor_symbol, anchor_df, covar_symbols):
         )
         # extract the last row of output, add symbol column, and consolidate to another dataframe
         last_row = output.iloc[[-1]]
-        save_covar_metrics(anchor_symbol, cov_table, cov_symbol, last_row)
+        _save_covar_metrics(anchor_symbol, cov_table, cov_symbol, last_row)
         return last_row
 
     # get the number of CPU cores
@@ -196,26 +205,27 @@ def baseline_metrics_index(anchor_symbol, anchor_df, covar_symbols):
             try:
                 results.append(f.result())
             except Exception as e:
-                logger.error(e)
+                logger.exception(e)
 
     return results
 
 
-def load_topn_covar_symbols(
+def _load_topn_covar_symbols(
     n, anchor_symbol, cov_table="index_daily_em_view", feature="change_rate"
 ):
+    global alchemyEngine, logger, random_seed
     query = """
         select
             cov_symbol
         from
             neuralprophet_corel
         where
-            symbol = :anchor_symbol
-            and cov_table = :cov_table
-            and feature = :feature
+            symbol = %(anchor_symbol)s
+            and cov_table = %(cov_table)s
+            and feature = %(feature)s
         order by
             loss_val asc
-        limit :limit;
+        limit %(limit)s
     """
     cov_symbols = pd.read_sql(
         query,
@@ -226,13 +236,15 @@ def load_topn_covar_symbols(
             "feature": feature,
             "limit": n,
         },
-    )['symbol'].tolist()
+    )["cov_symbol"].tolist()
 
     return cov_symbols
 
-def augment_anchor_df_with_covars(df, top_n):
+
+def augment_anchor_df_with_covars(anchor_symbol, df, top_n=100):
+    global alchemyEngine, logger, random_seed
     merged_df = df[["ds", "y"]]
-    cov100_symbols = load_topn_covar_symbols(top_n, merged_df)
+    cov100_symbols = _load_topn_covar_symbols(top_n, anchor_symbol)
 
     query = """
         SELECT symbol ID, date DS, change_rate y
@@ -240,8 +252,10 @@ def augment_anchor_df_with_covars(df, top_n):
         where symbol in %(symbols)s
         order by ID, DS asc
     """
-    params = {'symbols': tuple(cov100_symbols)}
-    cov100_daily_df = pd.read_sql(query, alchemyEngine, params=params, parse_dates=["ds"])
+    params = {"symbols": tuple(cov100_symbols)}
+    cov100_daily_df = pd.read_sql(
+        query, alchemyEngine, params=params, parse_dates=["ds"]
+    )
 
     # merge and append the 'change_rate' column of cov_df to df, by matching dates
     # split cov_df by symbol column
@@ -255,26 +269,44 @@ def augment_anchor_df_with_covars(df, top_n):
         )
         sdf = sdf[["ds", f"y_{group}"]]
         merged_df = pd.merge(merged_df, sdf[["ds", f"y_{group}"]], on="ds", how="left")
-    
+
     return merged_df
 
-def init_search_grid():
+
+def _init_search_grid():
+    global alchemyEngine, logger, random_seed
+
     # Define your hyperparameters grid
     param_grid = {
-        "n_lags": [None].append(list(range(2, 21))),
-        "yearly_seasonality": [None].append(list(range(10, 21))),
-        "ar_layers": [None].append([[i] * i for i in range(2, 17)]),
-        "lagged_reg_layers": [None].append([[i] * i for i in range(2, 17)]),
+        "n_lags": list(range(0, 21)),
+        "yearly_seasonality": ['auto'] + list(range(1, 21)),
+        "ar_layers": [[]] + [[i] * i for i in range(2, 17)],
+        "lagged_reg_layers": [[]] + [[i] * i for i in range(2, 17)],
     }
     grid = ParameterGrid(param_grid)
     logger.info("size of grid: %d", len(grid))
     return grid
 
 
-def log_metrics_for_hyper_params(df, params):
-    metrics = train(
+def _log_metrics_for_hyper_params(df, params, epochs):
+    global alchemyEngine, logger, random_seed
+
+    # check if the params combination already exists in grid_search_metrics table. And if such, return immediately.
+    query = """
+        SELECT model, hyper_params
+        FROM grid_search_metrics
+        WHERE model = 'NeuralProphet' AND hyper_params = %(hyper_params)s
+    """
+    existing_params = pd.read_sql(
+        query, alchemyEngine, params={"hyper_params": json.dumps(params)}
+    )
+    if not existing_params.empty:
+        logger.info('Skipping existing parameter combination.')
+        return None
+
+    metrics = _train(
         df,
-        epochs=500,
+        epochs=epochs,
         n_lags=params["n_lags"],
         yearly_seasonality=params["yearly_seasonality"],
         ar_layers=params["ar_layers"],
@@ -284,7 +316,14 @@ def log_metrics_for_hyper_params(df, params):
         impute_missing=True,
     )
     last_metric = metrics.iloc[-1]
+    logger.info('%s\nparams:%s', last_metric, params)
     with alchemyEngine.begin() as conn:
+        isBaseline = (
+            params["n_lags"] == 0
+            and params["yearly_seasonality"] == "auto"
+            and params["ar_layers"] == []
+            and params["lagged_reg_layers"] == []
+        )
         conn.execute(
             text(
                 """
@@ -296,9 +335,9 @@ def log_metrics_for_hyper_params(df, params):
             """
             ),
             {
-                "model": 'NeuralProphet',
-                "hyper_params": params.tostring(),
-                "tag": 'baseline' if all(v is None for v in params.values()) else None,
+                "model": "NeuralProphet",
+                "hyper_params": json.dumps(params),
+                "tag": "baseline" if isBaseline else None,
                 "mae_val": last_metric["MAE_val"],
                 "rmse_val": last_metric["RMSE_val"],
                 "loss_val": last_metric["Loss_val"],
@@ -309,27 +348,33 @@ def log_metrics_for_hyper_params(df, params):
 
     return last_metric
 
-def grid_search(df):
-    grid = init_search_grid()
+
+def grid_search(df, args):
+    global alchemyEngine, logger, random_seed
+
+    grid = _init_search_grid()
 
     # get the number of CPU cores
-    num_proc = int((multiprocessing.cpu_count()) / 1.2)
+    num_proc = args.worker if args.worker is not None else int((multiprocessing.cpu_count()) / 1.2)
 
     results = []
     # Use ThreadPoolExecutor to calculate metrics in parallel
     with ThreadPoolExecutor(max_workers=num_proc) as executor:
-        futures = [executor.submit(log_metrics_for_hyper_params, df, params) for params in grid]
+        futures = [
+            executor.submit(_log_metrics_for_hyper_params, df, params, args.epochs)
+            for params in grid
+        ]
         for f in futures:
             try:
                 results.append(f.result())
             except Exception as e:
-                logger.error(e)
+                logger.exception(e)
 
 
 def main(args):
     init()
 
-    anchor_symbol = args["symbol"]
+    anchor_symbol = args.symbol
     anchor_df = load_anchor_ts(anchor_symbol)
 
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
@@ -338,7 +383,10 @@ def main(args):
     if not cov_symbols.empty:
         baseline_metrics_index(anchor_symbol, anchor_df, cov_symbols)
 
-    load_topn_covar_symbols
+    df = augment_anchor_df_with_covars(anchor_symbol, anchor_df, args.top_n)
+
+    grid_search(df, args)
+
 
 # Command-line argument parsing
 if __name__ == "__main__":
@@ -346,8 +394,31 @@ if __name__ == "__main__":
         description="Identify potential covariates and perform grid-search for hyper-parameters."
     )
     # Add arguments based on the requirements of the notebook code
-    parser.add_argument("--covar-only", action='store_true', help="Description of arg1")
-    parser.add_argument("--grid-search-only", type=str, required=True, help="Description of arg2")
+    parser.add_argument("--covar_only", action="store_true", help="Description of arg1")
+    parser.add_argument(
+        "--grid_search_only", action="store_true", help="Description of arg2"
+    )
+    parser.add_argument(
+        "--top_n",
+        action="store",
+        type=int,
+        default=None,
+        help="Use top-n covariates for training and prediction.",
+    )
+    parser.add_argument(
+        "--epochs",
+        action="store",
+        type=int,
+        default=None,
+        help="Epochs for training the model",
+    )
+    parser.add_argument(
+        "--worker",
+        action="store",
+        type=int,
+        default=None,
+        help="Epochs for training the model",
+    )
     parser.add_argument("symbol", type=str, help="The asset symbol to handle.")
 
     # Parse arguments
