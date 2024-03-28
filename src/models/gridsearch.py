@@ -9,6 +9,7 @@ import numpy as np
 import sqlalchemy
 import exchange_calendars as xcals
 from dotenv import load_dotenv
+from joblib import Parallel, delayed
 
 # import exchange_calendars as xcals
 from datetime import datetime, timedelta
@@ -35,14 +36,12 @@ args = None
 
 def init():
     global alchemyEngine, logger, random_seed
+    
+    alchemyEngine, logger = _init_worker_resource()
+    xshg = xcals.get_calendar("XSHG")
+
+def _init_worker_resource():
     load_dotenv()  # take environment variables from .env.
-
-    module_path = os.getenv("LOCAL_AKSHARE_DEV_MODULE")
-    if module_path is not None and module_path not in sys.path:
-        sys.path.insert(0, module_path)
-    import akshare as ak  # noqa: E402
-
-    print(ak.__version__)
 
     DB_USER = os.getenv("DB_USER")
     DB_PASSWORD = os.getenv("DB_PASSWORD")
@@ -59,7 +58,7 @@ def init():
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
 
-    file_handler = logging.FileHandler("grid_search.log", mode='w')
+    file_handler = logging.FileHandler("grid_search.log")
     console_handler = logging.StreamHandler()
 
     # Step 4: Create a formatter
@@ -73,12 +72,9 @@ def init():
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
-    xshg = xcals.get_calendar("XSHG")
+    return alchemyEngine, logger
 
-
-def _train(df, epochs=None, **kwargs):
-    global alchemyEngine, logger, random_seed
-
+def _train(df, epochs=None, random_seed=7, **kwargs):
     set_random_seed(random_seed)
     m = NeuralProphet(**kwargs)
     covars = [col for col in df.columns if col not in ("ds", "y")]
@@ -163,7 +159,7 @@ def _save_covar_metrics(anchor_symbol, cov_table, cov_symbol, cov_metrics):
             )
 
 
-def baseline_metrics_index(anchor_symbol, anchor_df, covar_symbols):
+def baseline_metrics_index(anchor_symbol, anchor_df, covar_symbols, batch_size=None):
     global alchemyEngine, logger, random_seed
 
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
@@ -183,6 +179,8 @@ def baseline_metrics_index(anchor_symbol, anchor_df, covar_symbols):
         merged_df = pd.merge(anchor_df, cov_symbol_df, on="ds", how="left")
         output = _train(
             merged_df,
+            random_seed=random_seed,
+            batch_size=batch_size,
             weekly_seasonality=False,
             daily_seasonality=False,
             impute_missing=True,
@@ -245,7 +243,7 @@ def augment_anchor_df_with_covars(anchor_symbol, df, top_n=100):
     global alchemyEngine, logger, random_seed
     merged_df = df[["ds", "y"]]
     cov100_symbols = _load_topn_covar_symbols(top_n, anchor_symbol)
-
+    logger.info("loaded top %s covariates", len(cov100_symbols))
     query = """
         SELECT symbol ID, date DS, change_rate y
         FROM index_daily_em_view 
@@ -278,6 +276,7 @@ def _init_search_grid():
 
     # Define your hyperparameters grid
     param_grid = {
+        "batch_size": [None, 50, 100, 200],
         "n_lags": list(range(0, 21)),
         "yearly_seasonality": ['auto'] + list(range(1, 21)),
         "ar_layers": [[]] + [[i] * i for i in range(2, 17)],
@@ -288,8 +287,8 @@ def _init_search_grid():
     return grid
 
 
-def _log_metrics_for_hyper_params(df, params, epochs):
-    global alchemyEngine, logger, random_seed
+def _log_metrics_for_hyper_params(df, params, epochs, random_seed):
+    alchemyEngine, logger = _init_worker_resource()
 
     # check if the params combination already exists in grid_search_metrics table. And if such, return immediately.
     query = """
@@ -308,6 +307,8 @@ def _log_metrics_for_hyper_params(df, params, epochs):
     metrics = _train(
         df,
         epochs=epochs,
+        random_seed=random_seed,
+        batch_size=params["batch_size"],
         n_lags=params["n_lags"],
         yearly_seasonality=params["yearly_seasonality"],
         ar_layers=params["ar_layers"],
@@ -320,7 +321,8 @@ def _log_metrics_for_hyper_params(df, params, epochs):
     logger.info('%s\nparams:%s', last_metric, params)
     with alchemyEngine.begin() as conn:
         isBaseline = (
-            params["n_lags"] == 0
+            params["batch_size"] is None
+            and params["n_lags"] == 0
             and params["yearly_seasonality"] == "auto"
             and params["ar_layers"] == []
             and params["lagged_reg_layers"] == []
@@ -356,20 +358,29 @@ def grid_search(df, args):
     grid = _init_search_grid()
 
     # get the number of CPU cores
-    num_proc = args.worker if args.worker is not None else int((multiprocessing.cpu_count()) / 1.2)
+    n_jobs = args.worker if args.worker is not None else int((multiprocessing.cpu_count()) / 1.2)
 
-    results = []
-    # Use ThreadPoolExecutor to calculate metrics in parallel
-    with ThreadPoolExecutor(max_workers=num_proc) as executor:
-        futures = [
-            executor.submit(_log_metrics_for_hyper_params, df, params, args.epochs)
-            for params in grid
-        ]
-        for f in futures:
-            try:
-                results.append(f.result())
-            except Exception as e:
-                logger.exception(e)
+    results = Parallel(n_jobs=n_jobs)(
+        delayed(_log_metrics_for_hyper_params)(
+            df,
+            params,
+            args.epochs,
+            random_seed,
+        )
+        for params in grid
+    )
+    # results = []
+    # # Use ThreadPoolExecutor to calculate metrics in parallel
+    # with ThreadPoolExecutor(max_workers=num_proc) as executor:
+    #     futures = [
+    #         executor.submit(_log_metrics_for_hyper_params, df, params, args.epochs)
+    #         for params in grid
+    #     ]
+    #     for f in futures:
+    #         try:
+    #             results.append(f.result())
+    #         except Exception as e:
+    #             logger.exception(e)
 
 
 def main(args):
