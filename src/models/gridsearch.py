@@ -270,17 +270,31 @@ def augment_anchor_df_with_covars(anchor_symbol, df, top_n=100):
 
     return merged_df
 
+def _get_layers():
+    layers = []
+    # Loop over powers of 2 from 2^1 to 2^6
+    for i in range(1, 7):
+        power_of_two = 2**i
+        # Loop over list lengths from 2 to 16
+        for j in range(2, 17):
+            # Create a list with the current power of two, repeated 'j' times
+            element = [power_of_two] * j
+            # Append the list to the result
+            layers.append(element)
+    return layers
 
 def _init_search_grid():
     global alchemyEngine, logger, random_seed
+
+    layers = _get_layers()
 
     # Define your hyperparameters grid
     param_grid = {
         "batch_size": [None, 50, 100, 200],
         "n_lags": list(range(0, 21)),
         "yearly_seasonality": ['auto'] + list(range(1, 21)),
-        "ar_layers": [[]] + [[i] * i for i in range(2, 17)],
-        "lagged_reg_layers": [[]] + [[i] * i for i in range(2, 17)],
+        "ar_layers": layers,
+        "lagged_reg_layers": layers,
     }
     grid = ParameterGrid(param_grid)
     logger.info("size of grid: %d", len(grid))
