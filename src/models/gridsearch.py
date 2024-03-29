@@ -6,7 +6,6 @@ import argparse
 import multiprocessing
 import pandas as pd
 import numpy as np
-import sqlalchemy
 import exchange_calendars as xcals
 from dotenv import load_dotenv
 from joblib import Parallel, delayed
@@ -18,6 +17,8 @@ from datetime import datetime, timedelta
 # import pandas as pd
 # from IPython.display import display, HTML
 from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 from sqlalchemy.dialects.postgresql import insert
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
@@ -52,8 +53,10 @@ def _init_worker_resource():
     # Create an engine instance
     alchemyEngine = create_engine(
         f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}",
-        pool_recycle=3600,
+        # pool_recycle=3600,
+        poolclass=NullPool,
     )
+    sessionmaker(alchemyEngine)
 
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
@@ -291,8 +294,8 @@ def _init_search_grid():
     # Define your hyperparameters grid
     param_grid = {
         "batch_size": [None, 50, 100, 200],
-        "n_lags": list(range(0, 21)),
-        "yearly_seasonality": ['auto'] + list(range(1, 21)),
+        "n_lags": list(range(0, 31)),
+        "yearly_seasonality": ['auto'] + list(range(1, 25)),
         "ar_layers": layers,
         "lagged_reg_layers": layers,
     }
@@ -383,19 +386,6 @@ def grid_search(df, args):
         )
         for params in grid
     )
-    # results = []
-    # # Use ThreadPoolExecutor to calculate metrics in parallel
-    # with ThreadPoolExecutor(max_workers=num_proc) as executor:
-    #     futures = [
-    #         executor.submit(_log_metrics_for_hyper_params, df, params, args.epochs)
-    #         for params in grid
-    #     ]
-    #     for f in futures:
-    #         try:
-    #             results.append(f.result())
-    #         except Exception as e:
-    #             logger.exception(e)
-
 
 def main(args):
     init()
