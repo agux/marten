@@ -176,7 +176,7 @@ def _save_covar_metrics(anchor_symbol, cov_table, cov_symbol, cov_metrics):
             )
 
 
-def baseline_metrics_index(anchor_symbol, anchor_df, covar_symbols, batch_size=None):
+def baseline_metrics_index(anchor_symbol, anchor_df, covar_symbols, batch_size=None, accelerator):
     global alchemyEngine, logger, random_seed
 
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
@@ -201,7 +201,7 @@ def baseline_metrics_index(anchor_symbol, anchor_df, covar_symbols, batch_size=N
             weekly_seasonality=False,
             daily_seasonality=False,
             impute_missing=True,
-            accelerator="auto",
+            accelerator=accelerator,
         )
         # extract the last row of output, add symbol column, and consolidate to another dataframe
         last_row = output.iloc[[-1]]
@@ -408,7 +408,7 @@ def _update_metrics_table(
             action()
 
 
-def _log_metrics_for_hyper_params(anchor_symbol, df, params, epochs, random_seed):
+def _log_metrics_for_hyper_params(anchor_symbol, df, params, epochs, random_seed, accelerator):
     alchemyEngine, logger = _init_worker_resource()
 
     # to support distributed processing, we try to insert a new record (with primary keys only)
@@ -433,7 +433,7 @@ def _log_metrics_for_hyper_params(anchor_symbol, df, params, epochs, random_seed
         weekly_seasonality=False,
         daily_seasonality=False,
         impute_missing=True,
-        accelerator="auto",
+        accelerator=accelerator,
     )
     execution_time = time.time() - start_time
     last_metric = metrics.iloc[-1]
@@ -465,6 +465,7 @@ def grid_search(anchor_symbol, df, args):
             params,
             args.epochs,
             random_seed,
+            "auto" if args.accelerator else None
         )
         for params in grid
     )
@@ -480,7 +481,7 @@ def main(args):
     cov_symbols = covar_symbols_index(anchor_symbol, min_date)
 
     if not cov_symbols.empty:
-        baseline_metrics_index(anchor_symbol, anchor_df, cov_symbols)
+        baseline_metrics_index(anchor_symbol, anchor_df, cov_symbols, accelerator="auto" if args.accelerator else None)
 
     df = augment_anchor_df_with_covars(anchor_symbol, anchor_df, args.top_n)
 
@@ -497,6 +498,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--grid_search_only", action="store_true", help="Description of arg2"
     )
+    parser.add_argument("--accelerator", action="store_true", help="Use accelerator automatically")
     parser.add_argument(
         "--top_n",
         action="store",
