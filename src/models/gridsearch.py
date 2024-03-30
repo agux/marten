@@ -400,7 +400,7 @@ def _update_metrics_table(
                     "epochs": epochs,
                 },
             )
-            
+
     for attempt in Retrying(
         stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=5)
     ):
@@ -524,4 +524,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Call the main function with parsed arguments
-    main(args)
+    try:
+        main(args)
+    except Exception as e:
+        logger.error("encountered exception in main():", e)
