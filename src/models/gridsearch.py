@@ -352,7 +352,7 @@ def _new_metric_keys(anchor_symbol, hpid, hyper_params, alchemyEngine):
 
     for attempt in Retrying(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=5)):
         with attempt:
-            action()
+            return action()
 
 
 # @retry(
