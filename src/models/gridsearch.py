@@ -1,8 +1,10 @@
 import os
 import sys
+import time
 import logging
 import json
 import argparse
+import hashlib
 import multiprocessing
 import pandas as pd
 import numpy as np
@@ -12,6 +14,13 @@ from joblib import Parallel, delayed
 
 # import exchange_calendars as xcals
 from datetime import datetime, timedelta
+
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 
 # import pytz
 # import pandas as pd
@@ -35,11 +44,13 @@ logger = None
 alchemyEngine = None
 args = None
 
+
 def init():
     global alchemyEngine, logger, random_seed
-    
+
     alchemyEngine, logger = _init_worker_resource()
     xshg = xcals.get_calendar("XSHG")
+
 
 def _init_worker_resource():
     load_dotenv()  # take environment variables from .env.
@@ -54,6 +65,7 @@ def _init_worker_resource():
     alchemyEngine = create_engine(
         f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}",
         # pool_recycle=3600,
+        # pool_size=1,
         poolclass=NullPool,
     )
     sessionmaker(alchemyEngine)
@@ -77,6 +89,7 @@ def _init_worker_resource():
 
     return alchemyEngine, logger
 
+
 def _train(df, epochs=None, random_seed=7, **kwargs):
     set_random_seed(random_seed)
     m = NeuralProphet(**kwargs)
@@ -90,7 +103,7 @@ def _train(df, epochs=None, random_seed=7, **kwargs):
     return metrics
 
 
-def load_anchor_ts(symbol="930955"):
+def load_anchor_ts(symbol):
     global alchemyEngine, logger, random_seed
     # load anchor TS
     query = f"""
@@ -187,6 +200,7 @@ def baseline_metrics_index(anchor_symbol, anchor_df, covar_symbols, batch_size=N
             weekly_seasonality=False,
             daily_seasonality=False,
             impute_missing=True,
+            accelerator="auto",
         )
         # extract the last row of output, add symbol column, and consolidate to another dataframe
         last_row = output.iloc[[-1]]
@@ -273,6 +287,7 @@ def augment_anchor_df_with_covars(anchor_symbol, df, top_n=100):
 
     return merged_df
 
+
 def _get_layers():
     layers = []
     # Loop over powers of 2 from 2^1 to 2^6
@@ -286,6 +301,7 @@ def _get_layers():
             layers.append(element)
     return layers
 
+
 def _init_search_grid():
     global alchemyEngine, logger, random_seed
 
@@ -295,7 +311,7 @@ def _init_search_grid():
     param_grid = {
         "batch_size": [None, 50, 100, 200],
         "n_lags": list(range(0, 31)),
-        "yearly_seasonality": ['auto'] + list(range(1, 25)),
+        "yearly_seasonality": ["auto"] + list(range(1, 25)),
         "ar_layers": layers,
         "lagged_reg_layers": layers,
     }
@@ -304,23 +320,94 @@ def _init_search_grid():
     return grid
 
 
-def _log_metrics_for_hyper_params(df, params, epochs, random_seed):
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, max=5),
+)
+def _new_metric_keys(anchor_symbol, hpid, hyper_params, alchemyEngine):
+    try:
+        with alchemyEngine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO grid_search_metrics (model, anchor_symbol, hpid, hyper_params) 
+                    VALUES (:model, :anchor_symbol, :hpid, :hyper_params)
+                    """
+                ),
+                {
+                    "model": "NeuralProphet",
+                    "anchor_symbol": anchor_symbol,
+                    "hpid": hpid,
+                    "hyper_params": hyper_params,
+                },
+            )
+            return True
+    except Exception as e:
+        if "duplicate key value violates unique constraint" in str(e):
+            return False
+        else:
+            raise
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, max=5),
+)
+def _update_metrics_table(
+    alchemyEngine, params, anchor_symbol, hpid, epochs, last_metric, execution_time
+):
+    with alchemyEngine.begin() as conn:
+        isBaseline = (
+            params["batch_size"] is None
+            and params["n_lags"] == 0
+            and params["yearly_seasonality"] == "auto"
+            and params["ar_layers"] == []
+            and params["lagged_reg_layers"] == []
+        )
+        conn.execute(
+            text(
+                """
+                UPDATE grid_search_metrics
+                SET 
+                    mae_val = :mae_val, 
+                    rmse_val = :rmse_val, 
+                    loss_val = :loss_val, 
+                    fit_time = :fit_time,
+                    epochs = :epochs,
+                    tag = :tag
+                WHERE
+                    model = :model
+                    AND anchor_symbol = :anchor_symbol
+                    AND hpid = :hpid
+            """
+            ),
+            {
+                "model": "NeuralProphet",
+                "anchor_symbol": anchor_symbol,
+                "hpid": hpid,
+                "tag": "baseline" if isBaseline else None,
+                "mae_val": last_metric["MAE_val"],
+                "rmse_val": last_metric["RMSE_val"],
+                "loss_val": last_metric["Loss_val"],
+                "fit_time": (str(execution_time) + " seconds",),
+                "epochs": epochs,
+            },
+        )
+
+
+def _log_metrics_for_hyper_params(anchor_symbol, df, params, epochs, random_seed):
     alchemyEngine, logger = _init_worker_resource()
 
-    # check if the params combination already exists in grid_search_metrics table. And if such, return immediately.
-    query = """
-        SELECT model, hyper_params
-        FROM grid_search_metrics
-        WHERE model = 'NeuralProphet' AND hyper_params = %(hyper_params)s
-    """
+    # to support distributed processing, we try to insert a new record (with primary keys only)
+    # into grid_search_metrics first. If we hit duplicated key error, return None.
+    # Otherwise we could proceed further code execution.
     param_str = json.dumps(params)
-    existing_params = pd.read_sql(
-        query, alchemyEngine, params={"hyper_params": param_str}
-    )
-    if not existing_params.empty:
-        logger.info("Skipping existing parameter combination: %s", param_str)
+    hpid = hashlib.md5(param_str.encode("utf-8")).hexdigest()
+    if not _new_metric_keys(anchor_symbol, hpid, param_str, alchemyEngine):
+        logger.debug("Skip re-entry for %s: %s", anchor_symbol, param_str)
         return None
 
+    start_time = time.time()
     metrics = _train(
         df,
         epochs=epochs,
@@ -333,52 +420,34 @@ def _log_metrics_for_hyper_params(df, params, epochs, random_seed):
         weekly_seasonality=False,
         daily_seasonality=False,
         impute_missing=True,
+        accelerator="auto",
     )
+    execution_time = time.time() - start_time
     last_metric = metrics.iloc[-1]
-    logger.info('%s\nparams:%s', last_metric, params)
-    with alchemyEngine.begin() as conn:
-        isBaseline = (
-            params["batch_size"] is None
-            and params["n_lags"] == 0
-            and params["yearly_seasonality"] == "auto"
-            and params["ar_layers"] == []
-            and params["lagged_reg_layers"] == []
-        )
-        conn.execute(
-            text(
-                """
-                INSERT INTO grid_search_metrics 
-                (model, hyper_params, tag, mae_val, rmse_val, loss_val, predict_diff_mean, predict_diff_stddev) 
-                VALUES (:model, :hyper_params, :tag, :mae_val, :rmse_val, :loss_val, :predict_diff_mean, :predict_diff_stddev) 
-                ON CONFLICT (model, hyper_params) 
-                DO UPDATE SET mae_val = EXCLUDED.mae_val, rmse_val = EXCLUDED.rmse_val, loss_val = EXCLUDED.loss_val, predict_diff_mean = EXCLUDED.predict_diff_mean, predict_diff_stddev = EXCLUDED.predict_diff_stddev
-            """
-            ),
-            {
-                "model": "NeuralProphet",
-                "hyper_params": param_str,
-                "tag": "baseline" if isBaseline else None,
-                "mae_val": last_metric["MAE_val"],
-                "rmse_val": last_metric["RMSE_val"],
-                "loss_val": last_metric["Loss_val"],
-                "predict_diff_mean": None,
-                "predict_diff_stddev": None,
-            },
-        )
+    logger.info("%s\nparams:%s", last_metric, params)
+
+    _update_metrics_table(
+        alchemyEngine, params, anchor_symbol, hpid, epochs, last_metric, execution_time
+    )
 
     return last_metric
 
 
-def grid_search(df, args):
+def grid_search(anchor_symbol, df, args):
     global alchemyEngine, logger, random_seed
 
     grid = _init_search_grid()
 
     # get the number of CPU cores
-    n_jobs = args.worker if args.worker is not None else int((multiprocessing.cpu_count()) / 1.2)
+    n_jobs = (
+        args.worker
+        if args.worker is not None
+        else int((multiprocessing.cpu_count()) / 1.2)
+    )
 
     results = Parallel(n_jobs=n_jobs)(
         delayed(_log_metrics_for_hyper_params)(
+            anchor_symbol,
             df,
             params,
             args.epochs,
@@ -386,6 +455,7 @@ def grid_search(df, args):
         )
         for params in grid
     )
+
 
 def main(args):
     init()
@@ -401,7 +471,7 @@ def main(args):
 
     df = augment_anchor_df_with_covars(anchor_symbol, anchor_df, args.top_n)
 
-    grid_search(df, args)
+    grid_search(anchor_symbol, df, args)
 
 
 # Command-line argument parsing
@@ -418,21 +488,21 @@ if __name__ == "__main__":
         "--top_n",
         action="store",
         type=int,
-        default=None,
+        default=100,
         help="Use top-n covariates for training and prediction.",
     )
     parser.add_argument(
         "--epochs",
         action="store",
         type=int,
-        default=None,
+        default=500,
         help="Epochs for training the model",
     )
     parser.add_argument(
         "--worker",
         action="store",
         type=int,
-        default=None,
+        default=-1,
         help="Epochs for training the model",
     )
     parser.add_argument("symbol", type=str, help="The asset symbol to handle.")
