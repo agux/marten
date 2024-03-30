@@ -176,7 +176,7 @@ def _save_covar_metrics(anchor_symbol, cov_table, cov_symbol, cov_metrics):
             )
 
 
-def baseline_metrics_index(anchor_symbol, anchor_df, covar_symbols, batch_size=None, accelerator):
+def baseline_metrics_index(anchor_symbol, anchor_df, covar_symbols, batch_size=None, accelerator=None):
     global alchemyEngine, logger, random_seed
 
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
