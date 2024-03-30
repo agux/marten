@@ -16,10 +16,11 @@ from joblib import Parallel, delayed
 from datetime import datetime, timedelta
 
 from tenacity import (
-    retry,
+    # retry,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
+    # retry_if_exception_type,
+    Retrying,
 )
 
 # import pytz
@@ -320,79 +321,91 @@ def _init_search_grid():
     return grid
 
 
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, max=5),
-)
+# @retry(
+#     stop=stop_after_attempt(3),
+#     wait=wait_exponential(multiplier=1, max=5),
+# )
 def _new_metric_keys(anchor_symbol, hpid, hyper_params, alchemyEngine):
-    try:
+    def action():
+        try:
+            with alchemyEngine.begin() as conn:
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO grid_search_metrics (model, anchor_symbol, hpid, hyper_params) 
+                        VALUES (:model, :anchor_symbol, :hpid, :hyper_params)
+                        """
+                    ),
+                    {
+                        "model": "NeuralProphet",
+                        "anchor_symbol": anchor_symbol,
+                        "hpid": hpid,
+                        "hyper_params": hyper_params,
+                    },
+                )
+                return True
+        except Exception as e:
+            if "duplicate key value violates unique constraint" in str(e):
+                return False
+            else:
+                raise
+
+    for attempt in Retrying(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=5)):
+        with attempt:
+            action()
+
+
+# @retry(
+#     stop=stop_after_attempt(3),
+#     wait=wait_exponential(multiplier=1, max=5),
+# )
+def _update_metrics_table(
+    alchemyEngine, params, anchor_symbol, hpid, epochs, last_metric, execution_time
+):
+    def action():
         with alchemyEngine.begin() as conn:
+            isBaseline = (
+                params["batch_size"] is None
+                and params["n_lags"] == 0
+                and params["yearly_seasonality"] == "auto"
+                and params["ar_layers"] == []
+                and params["lagged_reg_layers"] == []
+            )
             conn.execute(
                 text(
                     """
-                    INSERT INTO grid_search_metrics (model, anchor_symbol, hpid, hyper_params) 
-                    VALUES (:model, :anchor_symbol, :hpid, :hyper_params)
-                    """
+                    UPDATE grid_search_metrics
+                    SET 
+                        mae_val = :mae_val, 
+                        rmse_val = :rmse_val, 
+                        loss_val = :loss_val, 
+                        fit_time = :fit_time,
+                        epochs = :epochs,
+                        tag = :tag
+                    WHERE
+                        model = :model
+                        AND anchor_symbol = :anchor_symbol
+                        AND hpid = :hpid
+                """
                 ),
                 {
                     "model": "NeuralProphet",
                     "anchor_symbol": anchor_symbol,
                     "hpid": hpid,
-                    "hyper_params": hyper_params,
+                    "tag": "baseline" if isBaseline else None,
+                    "mae_val": last_metric["MAE_val"],
+                    "rmse_val": last_metric["RMSE_val"],
+                    "loss_val": last_metric["Loss_val"],
+                    "fit_time": (str(execution_time) + " seconds",),
+                    "epochs": epochs,
                 },
             )
-            return True
-    except Exception as e:
-        if "duplicate key value violates unique constraint" in str(e):
-            return False
-        else:
-            raise
-
-
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, max=5),
-)
-def _update_metrics_table(
-    alchemyEngine, params, anchor_symbol, hpid, epochs, last_metric, execution_time
-):
-    with alchemyEngine.begin() as conn:
-        isBaseline = (
-            params["batch_size"] is None
-            and params["n_lags"] == 0
-            and params["yearly_seasonality"] == "auto"
-            and params["ar_layers"] == []
-            and params["lagged_reg_layers"] == []
-        )
-        conn.execute(
-            text(
-                """
-                UPDATE grid_search_metrics
-                SET 
-                    mae_val = :mae_val, 
-                    rmse_val = :rmse_val, 
-                    loss_val = :loss_val, 
-                    fit_time = :fit_time,
-                    epochs = :epochs,
-                    tag = :tag
-                WHERE
-                    model = :model
-                    AND anchor_symbol = :anchor_symbol
-                    AND hpid = :hpid
-            """
-            ),
-            {
-                "model": "NeuralProphet",
-                "anchor_symbol": anchor_symbol,
-                "hpid": hpid,
-                "tag": "baseline" if isBaseline else None,
-                "mae_val": last_metric["MAE_val"],
-                "rmse_val": last_metric["RMSE_val"],
-                "loss_val": last_metric["Loss_val"],
-                "fit_time": (str(execution_time) + " seconds",),
-                "epochs": epochs,
-            },
-        )
+            
+    for attempt in Retrying(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=5)
+    ):
+        with attempt:
+            action()
 
 
 def _log_metrics_for_hyper_params(anchor_symbol, df, params, epochs, random_seed):
