@@ -212,17 +212,31 @@ def _fit_with_covar(
     accelerator,
 ):
     alchemyEngine, _ = _init_worker_resource()
-    query = f"""
-            select date ds, {feature} {feature}_{cov_symbol}
-            from {cov_table}
-            where symbol = %(cov_symbol)s
-            and date >= %(min_date)s
-            order by date
-        """
-    params = {
-        "cov_symbol": cov_symbol,
-        "min_date": min_date,
-    }
+    # `cov_symbol` may contain special characters such as `.IXIC`. The dot is not allowed in column alias.
+    # Convert common special characters often seen in stock / index symbols to valid replacements as PostgreSQL table column alias.
+    cov_symbol_sanitized = f'{feature}_{cov_symbol.replace('.', '_')}'
+    if cov_table != 'bond_metrics_em':
+        query = f"""
+                select date ds, {feature} {cov_symbol_sanitized}
+                from {cov_table}
+                where symbol = %(cov_symbol)s
+                and date >= %(min_date)s
+                order by date
+            """
+        params = {
+            "cov_symbol": cov_symbol,
+            "min_date": min_date,
+        }
+    else:
+        query = f"""
+                select date ds, {feature} {cov_symbol_sanitized}
+                from {cov_table}
+                and date >= %(min_date)s
+                order by date
+            """
+        params = {
+            "min_date": min_date,
+        }
     cov_symbol_df = pd.read_sql(query, alchemyEngine, params=params, parse_dates=["ds"])
     if cov_symbol_df.empty:
         return None
@@ -634,21 +648,25 @@ def grid_search(df, covar_set_id, args):
         for params in grid
     )
 
-
 def _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date):
+
     for feature in features:
-        cov_symbols = _covar_symbols_from_table(
-            anchor_symbol, min_date, cov_table, feature
-        )
-        if not cov_symbols.empty:
-            _pair_covar_metrics(
-                anchor_symbol,
-                anchor_df,
-                cov_table,
-                cov_symbols,
-                feature,
-                args,
+        if cov_table != 'bond_metrics_em':
+            cov_symbols = _covar_symbols_from_table(
+                anchor_symbol, min_date, cov_table, feature
             )
+        else:
+            # construct a dummy cov_symbols dataframe with `symbol` column and the value 'bond'.
+            cov_symbols = pd.DataFrame({'symbol': ['bond']})
+        if not cov_symbols.empty:
+                _pair_covar_metrics(
+                    anchor_symbol,
+                    anchor_df,
+                    cov_table,
+                    cov_symbols,
+                    feature,
+                    args,
+                )
 
 
 def prep_covar_baseline_metrics(anchor_df, args):
@@ -687,7 +705,7 @@ def prep_covar_baseline_metrics(anchor_df, args):
         "us_yield_30y",
         "us_yield_spread_10y_2y",
     ]
-    cov_table = "us_index_daily_sina_view"
+    cov_table = "bond_metrics_em"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date)
     # TODO prep US index covariates us_index_daily_sina
     features = ["change_rate", "amt_change_rate"]
