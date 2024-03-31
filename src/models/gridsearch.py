@@ -364,7 +364,13 @@ def _load_topn_covars(n, anchor_symbol, cov_table=None, feature=None):
         params=params,
     )
 
-    return df
+    # get next sequence value from covar_set_sequence.
+    with alchemyEngine.begin() as conn:
+        covar_set_id = conn.execute(
+            text("SELECT nextval('covar_set_sequence')")
+        ).scalar()
+
+    return df, covar_set_id
 
 
 def augment_anchor_df_with_covars(df, args):
@@ -372,9 +378,10 @@ def augment_anchor_df_with_covars(df, args):
     merged_df = df[["ds", "y"]]
     if args.covar_set_id is not None:
         # TODO load covars based on the set id
-        covars_df = _load_covar_set(args.covar_set_id)
+        covar_set_id = args.covar_set_id
+        covars_df = _load_covar_set(covar_set_id)
     else:
-        covars_df = _load_topn_covars(args.top_n, args.symbol)
+        covars_df, covar_set_id = _load_topn_covars(args.top_n, args.symbol)
 
     logger.info("loaded top %s covariates", len(covars_df))
 
@@ -408,7 +415,7 @@ def augment_anchor_df_with_covars(df, args):
             sdf = sdf[["ds", col_name]]
             merged_df = pd.merge(merged_df, sdf, on="ds", how="left")
 
-    return merged_df
+    return merged_df, covar_set_id
 
 
 def _get_layers():
@@ -447,15 +454,15 @@ def _init_search_grid():
 #     stop=stop_after_attempt(3),
 #     wait=wait_exponential(multiplier=1, max=5),
 # )
-def _new_metric_keys(anchor_symbol, hpid, hyper_params, alchemyEngine):
+def _new_metric_keys(anchor_symbol, hpid, hyper_params, covar_set_id, alchemyEngine):
     def action():
         try:
             with alchemyEngine.begin() as conn:
                 conn.execute(
                     text(
                         """
-                        INSERT INTO grid_search_metrics (model, anchor_symbol, hpid, hyper_params) 
-                        VALUES (:model, :anchor_symbol, :hpid, :hyper_params)
+                        INSERT INTO grid_search_metrics (model, anchor_symbol, hpid, hyper_params, covar_set_id) 
+                        VALUES (:model, :anchor_symbol, :hpid, :hyper_params, :covar_set_id)
                         """
                     ),
                     {
@@ -463,6 +470,7 @@ def _new_metric_keys(anchor_symbol, hpid, hyper_params, alchemyEngine):
                         "anchor_symbol": anchor_symbol,
                         "hpid": hpid,
                         "hyper_params": hyper_params,
+                        "covar_set_id": covar_set_id,
                     },
                 )
                 return True
@@ -484,13 +492,13 @@ def _update_metrics_table(
 ):
     def action():
         with alchemyEngine.begin() as conn:
-            isBaseline = (
+            tag = 'baseline,multivariate' if (
                 params["batch_size"] is None
                 and params["n_lags"] == 0
                 and params["yearly_seasonality"] == "auto"
                 and params["ar_layers"] == []
                 and params["lagged_reg_layers"] == []
-            )
+            ) else None
             conn.execute(
                 text(
                     """
@@ -499,6 +507,9 @@ def _update_metrics_table(
                         mae_val = :mae_val, 
                         rmse_val = :rmse_val, 
                         loss_val = :loss_val, 
+                        mae = :mae,
+                        rmse = :rmse,
+                        loss = :loss,
                         fit_time = :fit_time,
                         epochs = :epochs,
                         tag = :tag
@@ -512,10 +523,13 @@ def _update_metrics_table(
                     "model": "NeuralProphet",
                     "anchor_symbol": anchor_symbol,
                     "hpid": hpid,
-                    "tag": "baseline" if isBaseline else None,
+                    "tag": tag,
                     "mae_val": last_metric["MAE_val"],
                     "rmse_val": last_metric["RMSE_val"],
                     "loss_val": last_metric["Loss_val"],
+                    "mae": last_metric["MAE"],
+                    "rmse": last_metric["RMSE"],
+                    "loss": last_metric["Loss"],
                     "fit_time": (str(fit_time) + " seconds"),
                     "epochs": epochs,
                 },
@@ -529,7 +543,7 @@ def _update_metrics_table(
 
 
 def _log_metrics_for_hyper_params(
-    anchor_symbol, df, params, epochs, random_seed, accelerator
+    anchor_symbol, df, params, epochs, random_seed, accelerator, covar_set_id
 ):
     alchemyEngine, logger = _init_worker_resource()
 
@@ -538,7 +552,7 @@ def _log_metrics_for_hyper_params(
     # Otherwise we could proceed further code execution.
     param_str = json.dumps(params)
     hpid = hashlib.md5(param_str.encode("utf-8")).hexdigest()
-    if not _new_metric_keys(anchor_symbol, hpid, param_str, alchemyEngine):
+    if not _new_metric_keys(anchor_symbol, hpid, param_str, covar_set_id, alchemyEngine):
         logger.debug("Skip re-entry for %s: %s", anchor_symbol, param_str)
         return None
 
@@ -569,7 +583,7 @@ def _log_metrics_for_hyper_params(
     return last_metric
 
 
-def grid_search(df, args):
+def grid_search(df, covar_set_id, args):
     global alchemyEngine, logger, random_seed
 
     grid = _init_search_grid()
@@ -589,6 +603,7 @@ def grid_search(df, args):
             args.epochs,
             random_seed,
             "auto" if args.accelerator else None,
+            covar_set_id,
         )
         for params in grid
     )
@@ -672,8 +687,8 @@ def main(args):
         prep_covar_baseline_metrics(anchor_df, args)
 
     if not args.covar_only:
-        df = augment_anchor_df_with_covars(anchor_df, args)
-        grid_search(df, args)
+        df, covar_set_id = augment_anchor_df_with_covars(anchor_df, args)
+        grid_search(df, covar_set_id, args)
 
 
 # Command-line argument parsing
