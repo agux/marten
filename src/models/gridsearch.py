@@ -216,7 +216,8 @@ def _fit_with_covar(
     merged_df = pd.merge(anchor_df, cov_symbol_df, on="ds", how="left")
     start_time = time.time()
     output = _train(
-        merged_df,
+        df=merged_df,
+        epochs=None,
         random_seed=random_seed,
         batch_size=None,
         weekly_seasonality=False,
