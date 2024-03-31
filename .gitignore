@@ -8,3 +8,4 @@ notebooks/*.csv
 .vscode
 .python-version
 lightning_logs/
+.lr_find_*.ckpt
