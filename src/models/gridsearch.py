@@ -54,6 +54,9 @@ def init():
 
 
 def _init_worker_resource():
+    # NeuralProphet: Disable logging messages unless there is an error
+    set_log_level("ERROR")
+
     load_dotenv()  # take environment variables from .env.
 
     DB_USER = os.getenv("DB_USER")
