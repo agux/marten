@@ -215,6 +215,7 @@ def _fit_with_covar(
     # `cov_symbol` may contain special characters such as `.IXIC`, or `H-FIN`. The dot and hyphen is not allowed in column alias.
     # Convert common special characters often seen in stock / index symbols to valid replacements as PostgreSQL table column alias.
     cov_symbol_sanitized = cov_symbol.replace('.', '_').replace('-', '_')
+    cov_symbol_sanitized = f"{feature}_{cov_symbol_sanitized}"
     if cov_table != 'bond_metrics_em':
         query = f"""
                 select date ds, {feature} {cov_symbol_sanitized}
