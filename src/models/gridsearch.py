@@ -102,8 +102,18 @@ def _train(df, epochs=None, random_seed=7, **kwargs):
         df,
         valid_p=1.0 / 10,
     )
-    metrics = m.fit(train_df, validation_df=test_df, progress=None, epochs=epochs)
-    return metrics
+    try:
+        metrics = m.fit(train_df, validation_df=test_df, progress=None, epochs=epochs)
+        return metrics
+    except ValueError as e:
+        # check if the message `Inputs/targets with missing values detected` was inside the error
+        if 'Inputs/targets with missing values detected' in str(e):
+            # count how many 'nan' values in the `covars` columns respectively
+            nan_counts = df[covars].isna().sum().to_dict()
+            logger.error(f'Skiping: too much missing values in the covariates: {nan_counts}')
+            return None
+        else:
+            raise e
 
 
 def load_anchor_ts(symbol):
@@ -225,6 +235,8 @@ def _fit_with_covar(
         impute_missing=True,
         accelerator=accelerator,
     )
+    if output is None:
+        return None
     fit_time = time.time() - start_time
     # extract the last row of output, add symbol column, and consolidate to another dataframe
     last_row = output.iloc[[-1]]
@@ -246,7 +258,7 @@ def _pair_covar_metrics(
         else int((multiprocessing.cpu_count()) / 1.5)
     )
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
-    results = Parallel(n_jobs=n_jobs)(
+    Parallel(n_jobs=n_jobs)(
         delayed(_fit_with_covar)(
             anchor_symbol,
             anchor_df,
@@ -260,62 +272,60 @@ def _pair_covar_metrics(
         for symbol in cov_symbols["symbol"]
     )
 
-    return results
 
+# def pair_covar_metrics_index(
+#     anchor_symbol, anchor_df, covar_symbols, batch_size=None, accelerator=None
+# ):
+#     global alchemyEngine, logger, random_seed
 
-def pair_covar_metrics_index(
-    anchor_symbol, anchor_df, covar_symbols, batch_size=None, accelerator=None
-):
-    global alchemyEngine, logger, random_seed
+#     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
+#     cov_table = "index_daily_em_view"
+#     feature = "change_rate"
 
-    min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
-    cov_table = "index_daily_em_view"
-    feature = "change_rate"
+#     def load_train(cov_symbol):
+#         query = f"""
+#             select date ds, {feature} y_{cov_symbol}
+#             from {cov_table}
+#             where symbol = '{cov_symbol}'
+#             and date >= '{min_date}'
+#             order by date
+#         """
+#         cov_symbol_df = pd.read_sql(query, alchemyEngine)
+#         if cov_symbol_df.empty:
+#             return None
+#         merged_df = pd.merge(anchor_df, cov_symbol_df, on="ds", how="left")
+#         output = _train(
+#             merged_df,
+#             random_seed=random_seed,
+#             batch_size=batch_size,
+#             weekly_seasonality=False,
+#             daily_seasonality=False,
+#             impute_missing=True,
+#             accelerator=accelerator,
+#         )
+#         # extract the last row of output, add symbol column, and consolidate to another dataframe
+#         last_row = output.iloc[[-1]]
+#         _save_covar_metrics(
+#             anchor_symbol, cov_table, cov_symbol, feature, last_row, alchemyEngine
+#         )
+#         return last_row
 
-    def load_train(cov_symbol):
-        query = f"""
-            select date ds, {feature} y_{cov_symbol}
-            from {cov_table}
-            where symbol = '{cov_symbol}'
-            and date >= '{min_date}'
-            order by date
-        """
-        cov_symbol_df = pd.read_sql(query, alchemyEngine)
-        if cov_symbol_df.empty:
-            return None
-        merged_df = pd.merge(anchor_df, cov_symbol_df, on="ds", how="left")
-        output = _train(
-            merged_df,
-            random_seed=random_seed,
-            batch_size=batch_size,
-            weekly_seasonality=False,
-            daily_seasonality=False,
-            impute_missing=True,
-            accelerator=accelerator,
-        )
-        # extract the last row of output, add symbol column, and consolidate to another dataframe
-        last_row = output.iloc[[-1]]
-        _save_covar_metrics(
-            anchor_symbol, cov_table, cov_symbol, feature, last_row, alchemyEngine
-        )
-        return last_row
+#     # get the number of CPU cores
+#     num_proc = int((multiprocessing.cpu_count() + 1) / 1.5)
 
-    # get the number of CPU cores
-    num_proc = int((multiprocessing.cpu_count() + 1) / 1.5)
+#     results = []
+#     # Use ThreadPoolExecutor to calculate metrics in parallel
+#     with ThreadPoolExecutor(max_workers=num_proc) as executor:
+#         futures = [
+#             executor.submit(load_train, symbol) for symbol in covar_symbols["symbol"]
+#         ]
+#         for f in futures:
+#             try:
+#                 results.append(f.result())
+#             except Exception as e:
+#                 logger.exception(e)
 
-    results = []
-    # Use ThreadPoolExecutor to calculate metrics in parallel
-    with ThreadPoolExecutor(max_workers=num_proc) as executor:
-        futures = [
-            executor.submit(load_train, symbol) for symbol in covar_symbols["symbol"]
-        ]
-        for f in futures:
-            try:
-                results.append(f.result())
-            except Exception as e:
-                logger.exception(e)
-
-    return results
+#     return results
 
 
 def _load_covar_set(covar_set_id):
@@ -580,6 +590,10 @@ def _log_metrics_for_hyper_params(
         impute_missing=True,
         accelerator=accelerator,
     )
+    
+    if metrics is None:
+        return None
+    
     fit_time = time.time() - start_time
     last_metric = metrics.iloc[-1]
     covars = [col for col in df.columns if col not in ("ds", "y")]
@@ -620,15 +634,15 @@ def grid_search(df, covar_set_id, args):
 
 def _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date):
     for feature in features:
-        etf_cov_symbols = _covar_symbols_from_table(
+        cov_symbols = _covar_symbols_from_table(
             anchor_symbol, min_date, cov_table, feature
         )
-        if not etf_cov_symbols.empty:
+        if not cov_symbols.empty:
             _pair_covar_metrics(
                 anchor_symbol,
                 anchor_df,
                 cov_table,
-                etf_cov_symbols,
+                cov_symbols,
                 feature,
                 args,
             )
@@ -638,6 +652,9 @@ def prep_covar_baseline_metrics(anchor_df, args):
 
     anchor_symbol = args.symbol
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
+    
+    # keep only the core features of anchor_df
+    anchor_df = anchor_df[['ds','y']]
 
     # prep CN index covariates
     features = ["change_rate", "amt_change_rate"]
@@ -769,4 +786,4 @@ if __name__ == "__main__":
     try:
         main(args)
     except Exception as e:
-        logger.error("encountered exception in main():", e)
+        logger.exception("encountered exception in main()")
