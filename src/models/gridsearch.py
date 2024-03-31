@@ -231,7 +231,7 @@ def _fit_with_covar(
         query = f"""
                 select date ds, {feature} {cov_symbol_sanitized}
                 from {cov_table}
-                and date >= %(min_date)s
+                where date >= %(min_date)s
                 order by date
             """
         params = {
