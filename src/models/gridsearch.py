@@ -758,7 +758,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "symbol", type=str, required=True, help="The asset symbol to handle."
+        "symbol", type=str, help="The asset symbol to handle."
     )
 
     # Parse arguments
