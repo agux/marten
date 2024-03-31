@@ -726,4 +726,7 @@ def main():
     logger.info("Time taken: %s seconds", time.time() - t_start)
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as e:
+        logger.error("main process terminated", e)
