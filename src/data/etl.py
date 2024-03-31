@@ -54,7 +54,9 @@ file_handler = logging.FileHandler("etl.log")
 console_handler = logging.StreamHandler()
 
 # Step 4: Create a formatter
-formatter = logging.Formatter("%(name)s - %(levelname)s - %(message)s")
+formatter = logging.Formatter(
+    "%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+)
 
 # Step 5: Attach the formatter to the handlers
 file_handler.setFormatter(formatter)
@@ -144,8 +146,8 @@ def main():
     SessionLocal = sessionmaker(bind=alchemyEngine)
 
     # %%
-    # Get laste fund / ETF data set for today (or latest trading date), and persists into database.
-
+    # Get latest fund / ETF data set for today (or latest trading date), and persists into database.
+    logger.info("running fund_etf_spot_em()...")
     df = ak.fund_etf_spot_em()
     df = df[
         [
@@ -233,6 +235,7 @@ def main():
     # # fund_etf_perf_em
 
     # %%
+    logger.info("running fund_exchange_rank_em()...")
     fund_exchange_rank_em_df = ak.fund_exchange_rank_em()
 
     saveAsCsv("fund_exchange_rank_em", fund_exchange_rank_em_df)
@@ -266,6 +269,7 @@ def main():
 
     # %%
     # retrieve list from Sina
+    logger.info("running fund_etf_category_sina()...")
     fund_etf_category_sina_df = ak.fund_etf_category_sina(symbol="ETF基金")
 
     # keep only 2 columns from `fund_etf_category_sina_df`: 代码, 名称.
@@ -291,6 +295,7 @@ def main():
     # Function to fetch and process ETF data
     def fetch_and_process_etf(symbol, url):
         try:
+            logger.info(f"running fund_etf_hist_em({symbol})...")
             df = ak.fund_etf_hist_em(
                 symbol=symbol,
                 period="daily",
@@ -347,7 +352,7 @@ def main():
 
     # Fetch the ETF list
     etf_list_df = pd.read_sql("SELECT symbol FROM fund_etf_list_sina", alchemyEngine)
-
+    logger.info(f"starting joblib on function fetch_and_process_etf()...")
     Parallel(n_jobs=-1)(
         delayed(fetch_and_process_etf)(
             symbol, alchemyEngine.url
@@ -375,7 +380,7 @@ def main():
     # %%
     # start_date = (datetime.now() - timedelta(days=20)).strftime('%Y%m%d')
     start_date = None  # For entire history.
-
+    logger.info(f"running bond_zh_us_rate()...")
     bzur = ak.bond_zh_us_rate(start_date)
     bzur = bzur.rename(
         columns={
@@ -401,13 +406,13 @@ def main():
     # ## Calc / Update metrics in fund_etf_perf_em table
 
     # %%
-    interval = 250  # assume 250 trading days annualy
     end_date = last_trade_date()
     # start_date = (end_date - timedelta(days=interval)).strftime('%Y%m%d')
     # start_date = '19700101' # For entire history.
 
     # load historical data from daily table and calc metrics, then update perf table
-    def update_etf_metrics(symbol, url):
+    def update_etf_metrics(symbol, url, end_date):
+        interval = 250  # assume 250 trading days annualy
         alchemyEngine = create_engine(url, poolclass=NullPool)
         try:
             with alchemyEngine.begin() as conn:
@@ -493,11 +498,9 @@ def main():
 
     # get the number of CPU cores
     num_proc = int((multiprocessing.cpu_count() + 1) / 2.0)
-
+    logger.info(f"starting joblib on function update_etf_metrics()...")
     Parallel(n_jobs=num_proc)(
-        delayed(update_etf_metrics)(
-            symbol, alchemyEngine.url
-        )
+        delayed(update_etf_metrics)(symbol, alchemyEngine.url, end_date)
         for symbol in etf_list_df["symbol"]
     )
 
@@ -519,7 +522,7 @@ def main():
         ("中证系列指数", "csi"),
     ]
 
-    def update_cn_indices_em(symbol, src, url):
+    def stock_zh_index_spot_em(symbol, src, url):
         try:
             szise = ak.stock_zh_index_spot_em(symbol)
             szise = szise.rename(
@@ -552,9 +555,9 @@ def main():
 
     # get the number of CPU cores
     num_proc = int((multiprocessing.cpu_count() + 1) / 2.0)
-
+    logger.info("starting joblib on function stock_zh_index_spot_em()...")
     Parallel(n_jobs=num_proc)(
-        delayed(update_cn_indices_em)(
+        delayed(stock_zh_index_spot_em)(
             symbol,
             src,
             alchemyEngine.url,
@@ -571,7 +574,7 @@ def main():
 
     # %%
     # get daily historical data
-    def update_cn_indices(symbol, src, url):
+    def stock_zh_index_daily_em(symbol, src, url):
         try:
             szide = ak.stock_zh_index_daily_em(f"{src}{symbol}")
 
@@ -595,9 +598,9 @@ def main():
 
     # get the number of CPU cores
     num_proc = int((multiprocessing.cpu_count() + 1) / 2.0)
-
+    logger.info("starting joblib on function stock_zh_index_daily_em()...")
     Parallel(n_jobs=num_proc)(
-        delayed(update_cn_indices)(
+        delayed(stock_zh_index_daily_em)(
             symbol,
             src,
             alchemyEngine.url
@@ -618,7 +621,7 @@ def main():
 
     # %%
     # refresh the list
-
+    logger.info("running stock_hk_index_spot_em()...")
     hk_index_list_df = ak.stock_hk_index_spot_em()
     hk_index_list_df = hk_index_list_df.rename(
         columns={
@@ -670,7 +673,7 @@ def main():
 
     # get the number of CPU cores
     num_proc = int((multiprocessing.cpu_count() + 1) / 2.0)
-
+    logger.info("starting joblib on function update_hk_indices()...")
     Parallel(n_jobs=num_proc)(
         delayed(update_hk_indices)(
             symbol,
@@ -709,7 +712,7 @@ def main():
 
     # get the number of CPU cores
     num_proc = int((multiprocessing.cpu_count() + 1) / 2.0)
-
+    logger.info("starting joblib on function update_us_indices()...")
     Parallel(n_jobs=num_proc)(
         delayed(update_us_indices)(
             symbol,

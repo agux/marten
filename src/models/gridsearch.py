@@ -78,7 +78,9 @@ def _init_worker_resource():
     console_handler = logging.StreamHandler()
 
     # Step 4: Create a formatter
-    formatter = logging.Formatter("%(name)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
 
     # Step 5: Attach the formatter to the handlers
     file_handler.setFormatter(formatter)
@@ -492,13 +494,17 @@ def _update_metrics_table(
 ):
     def action():
         with alchemyEngine.begin() as conn:
-            tag = 'baseline,multivariate' if (
-                params["batch_size"] is None
-                and params["n_lags"] == 0
-                and params["yearly_seasonality"] == "auto"
-                and params["ar_layers"] == []
-                and params["lagged_reg_layers"] == []
-            ) else None
+            tag = (
+                "baseline,multivariate"
+                if (
+                    params["batch_size"] is None
+                    and params["n_lags"] == 0
+                    and params["yearly_seasonality"] == "auto"
+                    and params["ar_layers"] == []
+                    and params["lagged_reg_layers"] == []
+                )
+                else None
+            )
             conn.execute(
                 text(
                     """
@@ -552,7 +558,9 @@ def _log_metrics_for_hyper_params(
     # Otherwise we could proceed further code execution.
     param_str = json.dumps(params)
     hpid = hashlib.md5(param_str.encode("utf-8")).hexdigest()
-    if not _new_metric_keys(anchor_symbol, hpid, param_str, covar_set_id, alchemyEngine):
+    if not _new_metric_keys(
+        anchor_symbol, hpid, param_str, covar_set_id, alchemyEngine
+    ):
         logger.debug("Skip re-entry for %s: %s", anchor_symbol, param_str)
         return None
 
