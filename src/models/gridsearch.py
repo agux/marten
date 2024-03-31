@@ -681,40 +681,37 @@ def prep_covar_baseline_metrics(anchor_df, args):
     features = ["change_rate", "amt_change_rate"]
     cov_table = "index_daily_em_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date)
-    # index_cov_symbols = _covar_symbols_from_table(
-    #     anchor_symbol, min_date, "index_daily_em_view", "change_rate"
-    # )
-    # if not index_cov_symbols.empty:
-    #     pair_covar_metrics_index(
-    #         anchor_symbol,
-    #         anchor_df,
-    #         index_cov_symbols,
-    #         accelerator="auto" if args.accelerator else None,
-    #     )
+
     # prep ETF covariates  fund_etf_daily_em_view
     features = ["change_rate", "amt_change_rate"]
     cov_table = "fund_etf_daily_em_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date)
-    # TODO prep bond covariates bond_metrics_em
+
+    # prep bond covariates bond_metrics_em
     features = [
         "china_yield_2y",
         "china_yield_10y",
         "china_yield_30y",
-        "china_yield_spread_10y_2y" "us_yield_2y",
+        "china_yield_spread_10y_2y",
+        "us_yield_2y",
         "us_yield_10y",
         "us_yield_30y",
         "us_yield_spread_10y_2y",
     ]
     cov_table = "bond_metrics_em"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date)
+
     # TODO prep US index covariates us_index_daily_sina
     features = ["change_rate", "amt_change_rate"]
     cov_table = "us_index_daily_sina_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date)
+
     # TODO prep HK index covariates hk_index_daily_sina
     features = ["change_rate"]
     cov_table = "hk_index_daily_em_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date)
+
+    
     # TODO prep options
     # TODO RMB exchange rate
     # TODO CPI, PPI
