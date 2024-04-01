@@ -190,6 +190,7 @@ def _save_covar_metrics(
     feature,
     cov_metrics,
     fit_time,
+    timesteps,
     alchemyEngine,
 ):
     # Insert data into the table
@@ -200,10 +201,15 @@ def _save_covar_metrics(
                 text(
                     """
                     INSERT INTO neuralprophet_corel 
-                    (symbol, cov_table, cov_symbol, feature, mae_val, rmse_val, loss_val, fit_time) 
-                    VALUES (:symbol, :cov_table, :cov_symbol, :feature, :mae_val, :rmse_val, :loss_val, :fit_time) 
+                    (symbol, cov_table, cov_symbol, feature, mae_val, rmse_val, loss_val, fit_time, timesteps) 
+                    VALUES (:symbol, :cov_table, :cov_symbol, :feature, :mae_val, :rmse_val, :loss_val, :fit_time, :timesteps) 
                     ON CONFLICT (symbol, cov_symbol, feature, cov_table) 
-                    DO UPDATE SET mae_val = EXCLUDED.mae_val, rmse_val = EXCLUDED.rmse_val, loss_val = EXCLUDED.loss_val
+                    DO UPDATE SET 
+                        mae_val = EXCLUDED.mae_val, 
+                        rmse_val = EXCLUDED.rmse_val, 
+                        loss_val = EXCLUDED.loss_val,
+                        fit_time = EXCLUDED.fit_time,
+                        timesteps = EXCLUDED.timesteps
                 """
                 ),
                 {
@@ -215,6 +221,7 @@ def _save_covar_metrics(
                     "rmse_val": row["RMSE_val"],
                     "loss_val": row["Loss_val"],
                     "fit_time": (str(fit_time) + " seconds"),
+                    "timesteps": timesteps,
                 },
             )
 
@@ -293,8 +300,10 @@ def _fit_with_covar(
     fit_time = time.time() - start_time
     # extract the last row of output, add symbol column, and consolidate to another dataframe
     last_row = metrics.iloc[[-1]]
+    # get the row count in merged_df as timesteps
+    timesteps = len(merged_df)
     _save_covar_metrics(
-        anchor_symbol, cov_table, cov_symbol, feature, last_row, fit_time, alchemyEngine
+        anchor_symbol, cov_table, cov_symbol, feature, last_row, fit_time, timesteps, alchemyEngine
     )
     return last_row
 
