@@ -110,10 +110,13 @@ def _train(df, epochs=None, random_seed=7, **kwargs):
         return metrics
     except ValueError as e:
         # check if the message `Inputs/targets with missing values detected` was inside the error
-        if 'Inputs/targets with missing values detected' in str(e):
+        if "Inputs/targets with missing values detected" in str(e):
             # count how many 'nan' values in the `covars` columns respectively
             nan_counts = df[covars].isna().sum().to_dict()
-            logger.error(f'Skiping: too much missing values in the covariates: {nan_counts}')
+            # FIXME: why there're duplicated entries of the following error log message?
+            logger.error(
+                f"Skiping: too much missing values in the covariates: {nan_counts}"
+            )
             return None
         else:
             raise e
@@ -121,16 +124,18 @@ def _train(df, epochs=None, random_seed=7, **kwargs):
 
 def load_anchor_ts(symbol):
     global alchemyEngine, logger, random_seed
+    ## TODO support arbitrary types of symbol (could be from different tables, with different features available)
+    anchor_table = "index_daily_em_view"
     # load anchor TS
     query = f"""
         SELECT date DS, change_rate y, vol_change_rate vol_cr, amt_change_rate amt_cr, 
             open, close, high, low, volume, amount
-        FROM index_daily_em_view
+        FROM {anchor_table}
         where symbol='{symbol}'
         order by DS
     """
     df = pd.read_sql(query, alchemyEngine, parse_dates=["ds"])
-    return df
+    return df, anchor_table
 
 
 def _covar_symbols_from_table(anchor_symbol, min_date, table, feature):
@@ -212,36 +217,47 @@ def _fit_with_covar(
     accelerator,
 ):
     alchemyEngine, _ = _init_worker_resource()
-    # `cov_symbol` may contain special characters such as `.IXIC`, or `H-FIN`. The dot and hyphen is not allowed in column alias.
-    # Convert common special characters often seen in stock / index symbols to valid replacements as PostgreSQL table column alias.
-    cov_symbol_sanitized = cov_symbol.replace('.', '_').replace('-', '_')
-    cov_symbol_sanitized = f"{feature}_{cov_symbol_sanitized}"
-    if cov_table != 'bond_metrics_em':
-        query = f"""
-                select date ds, {feature} {cov_symbol_sanitized}
-                from {cov_table}
-                where symbol = %(cov_symbol)s
-                and date >= %(min_date)s
-                order by date
-            """
-        params = {
-            "cov_symbol": cov_symbol,
-            "min_date": min_date,
-        }
+    if anchor_symbol == cov_symbol:
+        if feature == "y":
+            # no covariate is needed. this is a baseline metric
+            merged_df = anchor_df[["ds", "y"]]
+        else:
+            # using endogenous features as covariate
+            merged_df = anchor_df[["ds", "y", feature]]
     else:
-        query = f"""
-                select date ds, {feature} {cov_symbol_sanitized}
-                from {cov_table}
-                where date >= %(min_date)s
-                order by date
-            """
-        params = {
-            "min_date": min_date,
-        }
-    cov_symbol_df = pd.read_sql(query, alchemyEngine, params=params, parse_dates=["ds"])
-    if cov_symbol_df.empty:
-        return None
-    merged_df = pd.merge(anchor_df, cov_symbol_df, on="ds", how="left")
+        # `cov_symbol` may contain special characters such as `.IXIC`, or `H-FIN`. The dot and hyphen is not allowed in column alias.
+        # Convert common special characters often seen in stock / index symbols to valid replacements as PostgreSQL table column alias.
+        cov_symbol_sanitized = cov_symbol.replace(".", "_").replace("-", "_")
+        cov_symbol_sanitized = f"{feature}_{cov_symbol_sanitized}"
+        if cov_table != "bond_metrics_em":
+            query = f"""
+                    select date ds, {feature} {cov_symbol_sanitized}
+                    from {cov_table}
+                    where symbol = %(cov_symbol)s
+                    and date >= %(min_date)s
+                    order by date
+                """
+            params = {
+                "cov_symbol": cov_symbol,
+                "min_date": min_date,
+            }
+        else:
+            query = f"""
+                    select date ds, {feature} {cov_symbol_sanitized}
+                    from {cov_table}
+                    where date >= %(min_date)s
+                    order by date
+                """
+            params = {
+                "min_date": min_date,
+            }
+        cov_symbol_df = pd.read_sql(
+            query, alchemyEngine, params=params, parse_dates=["ds"]
+        )
+        if cov_symbol_df.empty:
+            return None
+        merged_df = pd.merge(anchor_df, cov_symbol_df, on="ds", how="left")
+
     start_time = time.time()
     output = _train(
         df=merged_df,
@@ -264,10 +280,32 @@ def _fit_with_covar(
     return last_row
 
 
+def _pair_endogenous_covar_metrics(anchor_symbol, anchor_df, cov_table, features, args):
+    global random_seed
+    # get the number of CPU cores
+    n_jobs = (
+        args.worker
+        if args.worker is not None
+        else int((multiprocessing.cpu_count()) / 1.5)
+    )
+    Parallel(n_jobs=n_jobs)(
+        delayed(_fit_with_covar)(
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            anchor_symbol,
+            None,
+            random_seed,
+            feature,
+            "auto" if args.accelerator else None,
+        )
+        for feature in features
+    )
+
+
 def _pair_covar_metrics(
     anchor_symbol, anchor_df, cov_table, cov_symbols, feature, args
 ):
-    # TODO: convert to a reusable function
     global random_seed
     # get the number of CPU cores
     n_jobs = (
@@ -608,10 +646,10 @@ def _log_metrics_for_hyper_params(
         impute_missing=True,
         accelerator=accelerator,
     )
-    
+
     if metrics is None:
         return None
-    
+
     fit_time = time.time() - start_time
     last_metric = metrics.iloc[-1]
     covars = [col for col in df.columns if col not in ("ds", "y")]
@@ -649,34 +687,75 @@ def grid_search(df, covar_set_id, args):
         for params in grid
     )
 
+
+def _remove_measured_features(anchor_symbol, cov_table, features):
+    query = f"""
+        select feature
+        from neuralprophet_corel
+        where symbol = %(symbol)s
+        and cov_table = %(cov_table)s
+        and feature in %(features)s
+    """
+    existing_features_pd = pd.read_sql(
+        query,
+        alchemyEngine,
+        params={
+            "symbol": anchor_symbol,
+            "cov_table": cov_table,
+            "features": features,
+        },
+    )
+    # remove elements in the `features` list that exist in the existing_features_pd.
+    features = list(set(features) - set(existing_features_pd["feature"]))
+    return features
+
+
 def _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date):
 
     for feature in features:
-        if cov_table != 'bond_metrics_em':
+        if cov_table != "bond_metrics_em":
             cov_symbols = _covar_symbols_from_table(
                 anchor_symbol, min_date, cov_table, feature
             )
         else:
             # construct a dummy cov_symbols dataframe with `symbol` column and the value 'bond'.
-            cov_symbols = pd.DataFrame({'symbol': ['bond']})
+            cov_symbols = pd.DataFrame({"symbol": ["bond"]})
+            features = _remove_measured_features(anchor_symbol, cov_table, features)
         if not cov_symbols.empty:
-                _pair_covar_metrics(
-                    anchor_symbol,
-                    anchor_df,
-                    cov_table,
-                    cov_symbols,
-                    feature,
-                    args,
-                )
+            _pair_covar_metrics(
+                anchor_symbol,
+                anchor_df,
+                cov_table,
+                cov_symbols,
+                feature,
+                args,
+            )
 
 
-def prep_covar_baseline_metrics(anchor_df, args):
+def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
 
     anchor_symbol = args.symbol
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
-    
-    # keep only the core features of anchor_df
-    anchor_df = anchor_df[['ds','y']]
+
+    # support default baseline (univariate if not in-place)
+    _fit_with_covar(
+        anchor_symbol,
+        anchor_df,
+        anchor_table,
+        anchor_symbol,
+        None,
+        random_seed,
+        "y",
+        "auto" if args.accelerator else None,
+    )
+    # TODO: support endogenous covariate (features other than change rate of itself)
+    extra_y_list = [col for col in anchor_df.columns if col not in ("ds", "y")]
+    _pair_endogenous_covar_metrics(
+        anchor_symbol, anchor_df, anchor_table, extra_y_list, args
+    )
+
+    # for the rest of exogenous covariates, keep only the core features of anchor_df
+    anchor_df = anchor_df[["ds", "y"]]
 
     # prep CN index covariates
     features = ["change_rate", "amt_change_rate"]
@@ -702,16 +781,17 @@ def prep_covar_baseline_metrics(anchor_df, args):
     cov_table = "bond_metrics_em"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date)
 
-    # TODO prep US index covariates us_index_daily_sina
+    # prep US index covariates us_index_daily_sina
     features = ["change_rate", "amt_change_rate"]
     cov_table = "us_index_daily_sina_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date)
 
-    # TODO prep HK index covariates hk_index_daily_sina
+    # prep HK index covariates hk_index_daily_sina
     features = ["change_rate"]
     cov_table = "hk_index_daily_em_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date)
 
+    # TODO: prep stock features
 
     # TODO prep options
     # TODO RMB exchange rate
@@ -726,10 +806,10 @@ def prep_covar_baseline_metrics(anchor_df, args):
 def main(args):
     init()
 
-    anchor_df = load_anchor_ts(args.symbol)
+    anchor_df, anchor_table = load_anchor_ts(args.symbol)
 
     if not args.grid_search_only:
-        prep_covar_baseline_metrics(anchor_df, args)
+        prep_covar_baseline_metrics(anchor_df, anchor_table, args)
 
     if not args.covar_only:
         df, covar_set_id = augment_anchor_df_with_covars(anchor_df, args)
@@ -794,9 +874,7 @@ if __name__ == "__main__":
         "--accelerator", action="store_true", help="Use accelerator automatically"
     )
 
-    parser.add_argument(
-        "symbol", type=str, help="The asset symbol to handle."
-    )
+    parser.add_argument("symbol", type=str, help="The asset symbol to handle.")
 
     # Parse arguments
     args = parser.parse_args()

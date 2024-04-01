@@ -24,6 +24,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlalchemy.dialects.postgresql import insert
+
 # from concurrent.futures import ThreadPoolExecutor
 from joblib import Parallel, delayed
 from functools import lru_cache
@@ -72,6 +73,7 @@ xshg = xcals.get_calendar("XSHG")
 
 # %% [markdown]
 # # Helper functions
+
 
 # %%
 def update_on_conflict(table, conn, df: pd.DataFrame, primary_keys):
@@ -262,7 +264,9 @@ def main():
     fund_exchange_rank_em_df.rename(columns=column_mapping, inplace=True)
 
     with alchemyEngine.begin() as conn:
-        update_on_conflict("fund_etf_perf_em", conn, fund_exchange_rank_em_df, ["fundcode"])
+        update_on_conflict(
+            "fund_etf_perf_em", conn, fund_exchange_rank_em_df, ["fundcode"]
+        )
 
     # %% [markdown]
     # # Get a full list of ETF fund
@@ -288,14 +292,31 @@ def main():
     # # Get historical trades
 
     # %%
-    end_date = datetime.now().strftime("%Y%m%d")
-    start_date = (datetime.now() - timedelta(days=20)).strftime("%Y%m%d")
-    # start_date = '19700101' # For entire history.
 
     # Function to fetch and process ETF data
     def fetch_and_process_etf(symbol, url):
         try:
             logger.info(f"running fund_etf_hist_em({symbol})...")
+
+            # check latest date on fund_etf_daily_em
+            conn = alchemyEngine.connect()
+            latest_date_pd = pd.read_sql(
+                "SELECT max(date) latest_date FROM fund_etf_daily_em where symbol=%(symbol)s",
+                conn,
+                params={"symbol": symbol},
+                parse_dates=['latest_date'],
+            )
+            conn.close()
+
+            if latest_date_pd.empty:
+                start_date = '19700101' # For entire history.
+            else:
+                start_date = (
+                    latest_date_pd["latest_date"] - timedelta(days=20)
+                ).strftime("%Y%m%d")
+
+            end_date = datetime.now().strftime("%Y%m%d")
+
             df = ak.fund_etf_hist_em(
                 symbol=symbol,
                 period="daily",
@@ -354,9 +375,7 @@ def main():
     etf_list_df = pd.read_sql("SELECT symbol FROM fund_etf_list_sina", alchemyEngine)
     logger.info(f"starting joblib on function fetch_and_process_etf()...")
     Parallel(n_jobs=-1)(
-        delayed(fetch_and_process_etf)(
-            symbol, alchemyEngine.url
-        )
+        delayed(fetch_and_process_etf)(symbol, alchemyEngine.url)
         for symbol in etf_list_df["symbol"]
     )
 
@@ -424,7 +443,7 @@ def main():
                 df = pd.read_sql(query, conn, parse_dates=["date"])
 
                 # get oldest df['date'] as state_date
-                start_date = df['date'].iloc[-1]
+                start_date = df["date"].iloc[-1]
                 # get 2-years CN bond IR as risk-free IR from bond_metrics_em table. 1-year series (natural dates).
                 # select date, china_yield_2y from table `bond_metrics_em`, where date is between start_date and end_date (inclusive). Load into a dataframe.
                 query = """SELECT date, china_yield_2y FROM bond_metrics_em WHERE date BETWEEN '{}' AND '{}' and china_yield_2y <> 'nan'""".format(
@@ -458,11 +477,13 @@ def main():
 
                 # Sortino ratio
                 sortino_ratio = (
-                    annualized_excess_return / downside_dev if downside_dev > 0 else None
+                    annualized_excess_return / downside_dev
+                    if downside_dev > 0
+                    else None
                 )
 
                 # To calculate max drawdown, get the cummulative_returns
-                df["cumulative_returns"] = np.cumprod(1 + df["change_rate"]/100.) - 1
+                df["cumulative_returns"] = np.cumprod(1 + df["change_rate"] / 100.0) - 1
                 # Calculate the maximum cumulative return up to each point
                 peak = np.maximum.accumulate(df["cumulative_returns"])
                 # Calculate drawdown as the difference between the current value and the peak
@@ -475,15 +496,19 @@ def main():
                     "UPDATE fund_etf_perf_em SET sharperatio = :sharperatio, sortinoratio = :sortinoratio, maxdrawdown = :maxdrawdown WHERE fundcode = :fundcode"
                 )
                 params = {
-                    "sharperatio": round(sharpe_ratio, 2)
-                    if sharpe_ratio is not None and math.isfinite(sharpe_ratio)
-                    else None,
-                    "sortinoratio": round(sortino_ratio, 2)
-                    if sortino_ratio is not None and math.isfinite(sortino_ratio)
-                    else None,
-                    "maxdrawdown": round(max_drawdown, 2)
-                    if math.isfinite(max_drawdown)
-                    else None,
+                    "sharperatio": (
+                        round(sharpe_ratio, 2)
+                        if sharpe_ratio is not None and math.isfinite(sharpe_ratio)
+                        else None
+                    ),
+                    "sortinoratio": (
+                        round(sortino_ratio, 2)
+                        if sortino_ratio is not None and math.isfinite(sortino_ratio)
+                        else None
+                    ),
+                    "maxdrawdown": (
+                        round(max_drawdown, 2) if math.isfinite(max_drawdown) else None
+                    ),
                     "fundcode": symbol,
                 }
                 conn.execute(update_query, params)
@@ -588,7 +613,9 @@ def main():
                 ignore_on_conflict("index_daily_em", conn, szide, ["symbol", "date"])
 
         except Exception:
-            logging.error(f"failed to update index_daily_em for {symbol}", exc_info=True)
+            logging.error(
+                f"failed to update index_daily_em for {symbol}", exc_info=True
+            )
             return None
         return szide
 
@@ -600,11 +627,7 @@ def main():
     num_proc = int((multiprocessing.cpu_count() + 1) / 2.0)
     logger.info("starting joblib on function stock_zh_index_daily_em()...")
     Parallel(n_jobs=num_proc)(
-        delayed(stock_zh_index_daily_em)(
-            symbol,
-            src,
-            alchemyEngine.url
-        )
+        delayed(stock_zh_index_daily_em)(symbol, src, alchemyEngine.url)
         for symbol, src in zip(cn_index_fulllist["symbol"], cn_index_fulllist["src"])
     )
 
@@ -659,7 +682,7 @@ def main():
             shide["symbol"] = symbol
             shide = shide.rename(
                 columns={
-                    "latest":"close",
+                    "latest": "close",
                 }
             )
             alchemyEngine = create_engine(url, poolclass=NullPool)
@@ -667,7 +690,9 @@ def main():
                 ignore_on_conflict("hk_index_daily_em", conn, shide, ["symbol", "date"])
 
         except Exception:
-            logging.error(f"failed to update hk_index_daily_em for {symbol}", exc_info=True)
+            logging.error(
+                f"failed to update hk_index_daily_em for {symbol}", exc_info=True
+            )
             return None
         return shide
 
@@ -698,10 +723,12 @@ def main():
     def update_us_indices(symbol, url):
         try:
             iuss = ak.index_us_stock_sina(symbol=symbol)
-            iuss['symbol'] = symbol
+            iuss["symbol"] = symbol
             alchemyEngine = create_engine(url, poolclass=NullPool)
             with alchemyEngine.begin() as conn:
-                update_on_conflict("us_index_daily_sina", conn, iuss, ["symbol", "date"])
+                update_on_conflict(
+                    "us_index_daily_sina", conn, iuss, ["symbol", "date"]
+                )
 
         except Exception:
             logging.error(
@@ -728,7 +755,8 @@ def main():
     # calculate and print outthe time taken to execute all the codes above
     logger.info("Time taken: %s seconds", time.time() - t_start)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     try:
         main()
     except Exception as e:
