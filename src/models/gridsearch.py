@@ -255,6 +255,7 @@ def _fit_with_covar(
         merged_df = pd.merge(anchor_df, cov_symbol_df, on="ds", how="left")
 
     start_time = time.time()
+    metrics = None
     try:
         metrics = _train(
             df=merged_df,
@@ -632,6 +633,7 @@ def _log_metrics_for_hyper_params(
         return None
 
     start_time = time.time()
+    metrics = None
     try:
         metrics = _train(
             df,
