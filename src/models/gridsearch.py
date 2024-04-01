@@ -118,19 +118,36 @@ def _train(df, epochs=None, random_seed=7, **kwargs):
             raise e
 
 
-def load_anchor_ts(symbol):
+def load_anchor_ts(symbol, limit):
     global alchemyEngine, logger, random_seed
-    ## TODO support arbitrary types of symbol (could be from different tables, with different features available)
-    anchor_table = "index_daily_em_view"
+    ## support arbitrary types of symbol (could be from different tables, with different features available)
+    tbl_cols_dict = {
+        "index_daily_em_view": "date DS, change_rate y, vol_change_rate vol_cr, amt_change_rate amt_cr, open, close, high, low, volume, amount",
+        "fund_etf_daily_em_view": "date DS, change_rate y, vol_change_rate vol_cr, amt_change_rate amt_cr, open, close, high, low, volume, turnover, turnover_rate",
+        "us_index_daily_sina_view": "date DS, change_rate y, amt_change_rate amt_cr, open, close, high, low, volume, amount",
+    }
+    # lookup which table the symbol's data is in
+    anchor_table = 'index_daily_em_view'  # Default table, replace with actual logic if necessary
+    with alchemyEngine.connect() as conn:
+        result = conn.execute(
+            text(
+                """SELECT "table" FROM symbol_dict WHERE symbol = :symbol"""
+            ),
+            {"symbol": symbol}
+        ).fetchone()
+    anchor_table = result['table'] if result else anchor_table
+
     # load anchor TS
     query = f"""
-        SELECT date DS, change_rate y, vol_change_rate vol_cr, amt_change_rate amt_cr, 
-            open, close, high, low, volume, amount
+        SELECT {tbl_cols_dict[anchor_table]}
         FROM {anchor_table}
-        where symbol='{symbol}'
-        order by DS
+        where symbol = %(symbol)s
+        order by DS desc
+        limit %(limit)s
     """
-    df = pd.read_sql(query, alchemyEngine, parse_dates=["ds"])
+    df = pd.read_sql(query, alchemyEngine, params={"symbol":symbol, "limit":limit}, parse_dates=["ds"])
+    # re-order rows by ds (which is a date column) descending (most recent date in the top row)
+    df.sort_values(by='ds', ascending=False, inplace=True)
     return df, anchor_table
 
 
@@ -742,6 +759,7 @@ def _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date):
 
 
 def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
+    global random_seed
 
     anchor_symbol = args.symbol
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
@@ -816,7 +834,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
 def main(args):
     init()
 
-    anchor_df, anchor_table = load_anchor_ts(args.symbol)
+    anchor_df, anchor_table = load_anchor_ts(args.symbol, args.timestep_limit)
 
     if not args.grid_search_only:
         prep_covar_baseline_metrics(anchor_df, anchor_table, args)
@@ -881,10 +899,17 @@ if __name__ == "__main__":
         help="Number or parallel workers (python processes) for training the model",
     )
     parser.add_argument(
+        "--timestep_limit",
+        action="store",
+        type=int,
+        default=1200,
+        help="Limit the time steps of anchor symbol to the most recent N data points.",
+    )
+    parser.add_argument(
         "--accelerator", action="store_true", help="Use accelerator automatically"
     )
 
-    parser.add_argument("symbol", type=str, help="The asset symbol to handle.")
+    parser.add_argument("symbol", type=str, help="The asset symbol as anchor to be analyzed.")
 
     # Parse arguments
     args = parser.parse_args()
