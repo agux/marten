@@ -113,11 +113,7 @@ def _train(df, epochs=None, random_seed=7, **kwargs):
         if "Inputs/targets with missing values detected" in str(e):
             # count how many 'nan' values in the `covars` columns respectively
             nan_counts = df[covars].isna().sum().to_dict()
-            # FIXME: why there're duplicated entries of the following error log message?
-            logger.error(
-                f"Skiping: too much missing values in the covariates: {nan_counts}"
-            )
-            return None
+            raise ValueError(f"Skipping: too much missing values in the covariates: {nan_counts}") from e
         else:
             raise e
 
@@ -216,7 +212,7 @@ def _fit_with_covar(
     feature,
     accelerator,
 ):
-    alchemyEngine, _ = _init_worker_resource()
+    alchemyEngine, logger = _init_worker_resource()
     if anchor_symbol == cov_symbol:
         if feature == "y":
             # no covariate is needed. this is a baseline metric
@@ -259,21 +255,23 @@ def _fit_with_covar(
         merged_df = pd.merge(anchor_df, cov_symbol_df, on="ds", how="left")
 
     start_time = time.time()
-    output = _train(
-        df=merged_df,
-        epochs=None,
-        random_seed=random_seed,
-        batch_size=None,
-        weekly_seasonality=False,
-        daily_seasonality=False,
-        impute_missing=True,
-        accelerator=accelerator,
-    )
-    if output is None:
+    try:
+        metrics = _train(
+            df=merged_df,
+            epochs=None,
+            random_seed=random_seed,
+            batch_size=None,
+            weekly_seasonality=False,
+            daily_seasonality=False,
+            impute_missing=True,
+            accelerator=accelerator,
+        )
+    except Exception as e:
+        logger.exception(e)
         return None
     fit_time = time.time() - start_time
     # extract the last row of output, add symbol column, and consolidate to another dataframe
-    last_row = output.iloc[[-1]]
+    last_row = metrics.iloc[[-1]]
     _save_covar_metrics(
         anchor_symbol, cov_table, cov_symbol, feature, last_row, fit_time, alchemyEngine
     )
@@ -632,22 +630,23 @@ def _log_metrics_for_hyper_params(
         return None
 
     start_time = time.time()
-    metrics = _train(
-        df,
-        epochs=epochs,
-        random_seed=random_seed,
-        batch_size=params["batch_size"],
-        n_lags=params["n_lags"],
-        yearly_seasonality=params["yearly_seasonality"],
-        ar_layers=params["ar_layers"],
-        lagged_reg_layers=params["lagged_reg_layers"],
-        weekly_seasonality=False,
-        daily_seasonality=False,
-        impute_missing=True,
-        accelerator=accelerator,
-    )
-
-    if metrics is None:
+    try:
+        metrics = _train(
+            df,
+            epochs=epochs,
+            random_seed=random_seed,
+            batch_size=params["batch_size"],
+            n_lags=params["n_lags"],
+            yearly_seasonality=params["yearly_seasonality"],
+            ar_layers=params["ar_layers"],
+            lagged_reg_layers=params["lagged_reg_layers"],
+            weekly_seasonality=False,
+            daily_seasonality=False,
+            impute_missing=True,
+            accelerator=accelerator,
+        )
+    except Exception as e:
+        logger.exception(e)
         return None
 
     fit_time = time.time() - start_time
@@ -694,7 +693,7 @@ def _remove_measured_features(anchor_symbol, cov_table, features):
         from neuralprophet_corel
         where symbol = %(symbol)s
         and cov_table = %(cov_table)s
-        and feature in %(features)s
+        and feature in ANY(%(features)s)
     """
     existing_features_pd = pd.read_sql(
         query,
@@ -717,6 +716,8 @@ def _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date):
             cov_symbols = _covar_symbols_from_table(
                 anchor_symbol, min_date, cov_table, feature
             )
+            # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
+            cov_symbols.drop_duplicates(subset=['symbol'], inplace=True)
         else:
             # construct a dummy cov_symbols dataframe with `symbol` column and the value 'bond'.
             cov_symbols = pd.DataFrame({"symbol": ["bond"]})
