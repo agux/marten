@@ -135,7 +135,7 @@ def load_anchor_ts(symbol, limit):
             ),
             {"symbol": symbol}
         ).fetchone()
-    anchor_table = result['table'] if result else anchor_table
+    anchor_table = result[0] if result else anchor_table
 
     # load anchor TS
     query = f"""
