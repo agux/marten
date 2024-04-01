@@ -269,6 +269,7 @@ def _fit_with_covar(
         )
     except ValueError as e:
         logger.warn(str(e))
+        return None
     except Exception as e:
         logger.exception(e)
         return None
@@ -651,6 +652,7 @@ def _log_metrics_for_hyper_params(
         )
     except ValueError as e:
         logger.warn(str(e))
+        return None
     except Exception as e:
         logger.exception(e)
         return None
@@ -745,6 +747,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
 
     # support default baseline (univariate if not in-place)
+    # FIXME: don't re-fit y and endogenous covariates every time.
     _fit_with_covar(
         anchor_symbol,
         anchor_df,
