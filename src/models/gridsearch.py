@@ -301,6 +301,13 @@ def _fit_with_covar(
 
 def _pair_endogenous_covar_metrics(anchor_symbol, anchor_df, cov_table, features, args):
     global random_seed
+
+    # remove feature elements already exists in the neuralprophet_corel table.
+    features = _remove_measured_features(anchor_symbol, cov_table, features)
+
+    if not features:
+        return
+    
     # get the number of CPU cores
     n_jobs = (
         args.worker
@@ -747,7 +754,7 @@ def _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date):
             # construct a dummy cov_symbols dataframe with `symbol` column and the value 'bond'.
             cov_symbols = pd.DataFrame({"symbol": ["bond"]})
             features = _remove_measured_features(anchor_symbol, cov_table, features)
-        if not cov_symbols.empty:
+        if not cov_symbols.empty and not features:
             _pair_covar_metrics(
                 anchor_symbol,
                 anchor_df,
@@ -764,22 +771,10 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     anchor_symbol = args.symbol
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
 
-    # support default baseline (univariate if not in-place)
-    # FIXME: don't re-fit y and endogenous covariates every time.
-    _fit_with_covar(
-        anchor_symbol,
-        anchor_df,
-        anchor_table,
-        anchor_symbol,
-        None,
-        random_seed,
-        "y",
-        "auto" if args.accelerator else None,
-    )
-    # TODO: support endogenous covariate (features other than change rate of itself)
-    extra_y_list = [col for col in anchor_df.columns if col not in ("ds", "y")]
+    # endogenous features of the anchor time series per se
+    endogenous_features = [col for col in anchor_df.columns if col not in ("ds")]
     _pair_endogenous_covar_metrics(
-        anchor_symbol, anchor_df, anchor_table, extra_y_list, args
+        anchor_symbol, anchor_df, anchor_table, endogenous_features, args
     )
 
     # for the rest of exogenous covariates, keep only the core features of anchor_df
