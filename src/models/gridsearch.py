@@ -113,7 +113,9 @@ def _train(df, epochs=None, random_seed=7, **kwargs):
         if "Inputs/targets with missing values detected" in str(e):
             # count how many 'nan' values in the `covars` columns respectively
             nan_counts = df[covars].isna().sum().to_dict()
-            raise ValueError(f"Skipping: too much missing values in the covariates: {nan_counts}") from e
+            raise ValueError(
+                f"Skipping: too much missing values in the covariates: {nan_counts}"
+            ) from e
         else:
             raise e
 
@@ -127,13 +129,13 @@ def load_anchor_ts(symbol, limit):
         "us_index_daily_sina_view": "date DS, change_rate y, amt_change_rate amt_cr, open, close, high, low, volume, amount",
     }
     # lookup which table the symbol's data is in
-    anchor_table = 'index_daily_em_view'  # Default table, replace with actual logic if necessary
+    anchor_table = (
+        "index_daily_em_view"  # Default table, replace with actual logic if necessary
+    )
     with alchemyEngine.connect() as conn:
         result = conn.execute(
-            text(
-                """SELECT "table" FROM symbol_dict WHERE symbol = :symbol"""
-            ),
-            {"symbol": symbol}
+            text("""SELECT "table" FROM symbol_dict WHERE symbol = :symbol"""),
+            {"symbol": symbol},
         ).fetchone()
     anchor_table = result[0] if result else anchor_table
 
@@ -143,11 +145,19 @@ def load_anchor_ts(symbol, limit):
         FROM {anchor_table}
         where symbol = %(symbol)s
         order by DS desc
-        limit %(limit)s
     """
-    df = pd.read_sql(query, alchemyEngine, params={"symbol":symbol, "limit":limit}, parse_dates=["ds"])
+    params = {"symbol": symbol}
+    if limit > 0:
+        query += " limit %(limit)s"
+        params["limit"] = limit
+    df = pd.read_sql(
+        query,
+        alchemyEngine,
+        params=params,
+        parse_dates=["ds"],
+    )
     # re-order rows by ds (which is a date column) descending (most recent date in the top row)
-    df.sort_values(by='ds', ascending=False, inplace=True)
+    df.sort_values(by="ds", ascending=False, inplace=True)
     return df, anchor_table
 
 
@@ -303,7 +313,14 @@ def _fit_with_covar(
     # get the row count in merged_df as timesteps
     timesteps = len(merged_df)
     _save_covar_metrics(
-        anchor_symbol, cov_table, cov_symbol, feature, last_row, fit_time, timesteps, alchemyEngine
+        anchor_symbol,
+        cov_table,
+        cov_symbol,
+        feature,
+        last_row,
+        fit_time,
+        timesteps,
+        alchemyEngine,
     )
     return last_row
 
@@ -316,7 +333,7 @@ def _pair_endogenous_covar_metrics(anchor_symbol, anchor_df, cov_table, features
 
     if not features:
         return
-    
+
     # get the number of CPU cores
     n_jobs = (
         args.worker
@@ -758,12 +775,12 @@ def _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date):
                 anchor_symbol, min_date, cov_table, feature
             )
             # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
-            cov_symbols.drop_duplicates(subset=['symbol'], inplace=True)
+            cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
         else:
             # construct a dummy cov_symbols dataframe with `symbol` column and the value 'bond'.
             cov_symbols = pd.DataFrame({"symbol": ["bond"]})
             features = _remove_measured_features(anchor_symbol, cov_table, features)
-        if not cov_symbols.empty and not features:
+        if not cov_symbols.empty and features:
             _pair_covar_metrics(
                 anchor_symbol,
                 anchor_df,
@@ -907,13 +924,15 @@ if __name__ == "__main__":
         action="store",
         type=int,
         default=1200,
-        help="Limit the time steps of anchor symbol to the most recent N data points.",
+        help="Limit the time steps of anchor symbol to the most recent N data points. Specify -1 to utilize all time steps available.",
     )
     parser.add_argument(
         "--accelerator", action="store_true", help="Use accelerator automatically"
     )
 
-    parser.add_argument("symbol", type=str, help="The asset symbol as anchor to be analyzed.")
+    parser.add_argument(
+        "symbol", type=str, help="The asset symbol as anchor to be analyzed."
+    )
 
     # Parse arguments
     args = parser.parse_args()
