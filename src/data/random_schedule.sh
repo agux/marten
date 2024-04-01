@@ -11,4 +11,7 @@ HOUR=$((RANDOM % 4 + 17)) # 17 (5 PM) to 20 (8 PM), as the last job can start at
 MINUTE=$((RANDOM % 60))
 
 # Schedule the task using at
-echo "cd $SCRIPT_DIR && bash $ACTUAL_SCRIPT" | at $HOUR:$MINUTE
+at $HOUR:$MINUTE <<EOF
+cd $SCRIPT_DIR
+bash $ACTUAL_SCRIPT
+EOF
