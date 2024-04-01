@@ -266,6 +266,8 @@ def _fit_with_covar(
             impute_missing=True,
             accelerator=accelerator,
         )
+    except ValueError as e:
+        logger.warn(str(e))
     except Exception as e:
         logger.exception(e)
         return None
@@ -645,6 +647,8 @@ def _log_metrics_for_hyper_params(
             impute_missing=True,
             accelerator=accelerator,
         )
+    except ValueError as e:
+        logger.warn(str(e))
     except Exception as e:
         logger.exception(e)
         return None
@@ -693,7 +697,7 @@ def _remove_measured_features(anchor_symbol, cov_table, features):
         from neuralprophet_corel
         where symbol = %(symbol)s
         and cov_table = %(cov_table)s
-        and feature in ANY(%(features)s)
+        and feature in %(features)s
     """
     existing_features_pd = pd.read_sql(
         query,
@@ -701,7 +705,7 @@ def _remove_measured_features(anchor_symbol, cov_table, features):
         params={
             "symbol": anchor_symbol,
             "cov_table": cov_table,
-            "features": features,
+            "features": tuple(features),
         },
     )
     # remove elements in the `features` list that exist in the existing_features_pd.
