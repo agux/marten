@@ -560,11 +560,21 @@ def _init_search_grid():
 
     # Define your hyperparameters grid
     param_grid = {
-        "batch_size": [None, 50, 100, 200],
-        "n_lags": list(range(1, 31)),
-        "yearly_seasonality": list(range(5, 30)),
-        "ar_layers": layers,
-        "lagged_reg_layers": layers,
+        {
+            # default hyperparameters
+            "batch_size": None,
+            "n_lags": 0,
+            "yearly_seasonality": "auto",
+            "ar_layers": [],
+            "lagged_reg_layers": [],
+        },
+        {
+            "batch_size": [None, 50, 100, 200],
+            "n_lags": list(range(1, 31)),
+            "yearly_seasonality": list(range(5, 30)),
+            "ar_layers": layers,
+            "lagged_reg_layers": layers,
+        },
     }
     grid = ParameterGrid(param_grid)
     logger.info("size of grid: %d", len(grid))
@@ -848,7 +858,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     # TODO car sales
     # TODO electricity consumption
     # TODO exports and imports
-    # TODO commodity prices: oil, copper, aluminum, coal, etc.
+    # TODO commodity prices: oil, copper, aluminum, coal, gold, etc.
     # TODO cash inflow
 
 

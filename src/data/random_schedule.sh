@@ -7,7 +7,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 ACTUAL_SCRIPT="run.sh"
 
 # Calculate random hour and minute
-HOUR=$((RANDOM % 4 + 17)) # 17 (5 PM) to 20 (8 PM), as the last job can start at 8:59 PM
+HOUR=$((RANDOM % 2 + 17)) # 17 (5 PM) to 19 (7 PM), as the last job can start at 6:59 PM
 MINUTE=$((RANDOM % 60))
 
 # Schedule the task using at
