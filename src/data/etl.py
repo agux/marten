@@ -297,7 +297,7 @@ def main():
     def fetch_and_process_etf(symbol, url):
         try:
             logger.info(f"running fund_etf_hist_em({symbol})...")
-
+            alchemyEngine = create_engine(url, poolclass=NullPool)
             # check latest date on fund_etf_daily_em
             conn = alchemyEngine.connect()
             latest_date_pd = pd.read_sql(
@@ -361,7 +361,6 @@ def main():
                     "turnover_rate",
                 ]
             ]
-            alchemyEngine = create_engine(url, poolclass=NullPool)
             with alchemyEngine.begin() as conn:
                 ignore_on_conflict("fund_etf_daily_em", conn, df, ["symbol", "date"])
         except Exception:
@@ -605,6 +604,7 @@ def main():
 
             # if shide is empty, return immediately
             if szide.empty:
+                logger.warn("index data is empty: %s", symbol)
                 return None
 
             szide["symbol"] = symbol
