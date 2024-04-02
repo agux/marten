@@ -712,8 +712,11 @@ def main():
                 )
                 if not latest_date_pd.empty:
                     ## keep rows only with `date` later than the latest record in database.
-                    shide = shide[shide['date'] > latest_date_pd.iloc[0]['latest_date']]
-                ignore_on_conflict("hk_index_daily_em", conn, shide, ["symbol", "date"])
+                    shide = shide[
+                        shide["date"]
+                        > (latest_date_pd.iloc[0]["latest_date"] - timedelta(days=10))
+                    ]
+                update_on_conflict("hk_index_daily_em", conn, shide, ["symbol", "date"])
 
         except Exception:
             logging.error(
@@ -759,7 +762,7 @@ def main():
                     parse_dates=["latest_date"],
                 )
                 if not latest_date_pd.empty:
-                    iuss = iuss[iuss["date"] > latest_date_pd.iloc[0]["latest_date"]]
+                    iuss = iuss[iuss["date"] > (latest_date_pd.iloc[0]["latest_date"]-timedelta(days=10))]
                 update_on_conflict(
                     "us_index_daily_sina", conn, iuss, ["symbol", "date"]
                 )
