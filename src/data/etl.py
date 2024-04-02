@@ -312,7 +312,7 @@ def main():
                 start_date = '19700101' # For entire history.
             else:
                 start_date = (
-                    latest_date_pd["latest_date"] - timedelta(days=20)
+                    latest_date_pd.iloc[0]["latest_date"] - timedelta(days=20)
                 ).strftime("%Y%m%d")
 
             end_date = datetime.now().strftime("%Y%m%d")
