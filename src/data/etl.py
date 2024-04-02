@@ -312,7 +312,7 @@ def main():
                 start_date = '19700101' # For entire history.
             else:
                 start_date = (
-                    latest_date_pd.iloc[0]["latest_date"] - timedelta(days=20)
+                    latest_date_pd.iloc[0]["latest_date"] - timedelta(days=10)
                 ).strftime("%Y%m%d")
 
             end_date = datetime.now().strftime("%Y%m%d")
@@ -600,15 +600,32 @@ def main():
     # get daily historical data
     def stock_zh_index_daily_em(symbol, src, url):
         try:
-            szide = ak.stock_zh_index_daily_em(f"{src}{symbol}")
+            alchemyEngine = create_engine(url, poolclass=NullPool)
+            conn = alchemyEngine.connect()
+            latest_date_pd = pd.read_sql(
+                "SELECT max(date) latest_date FROM index_daily_em where symbol=%(symbol)s",
+                conn,
+                params={"symbol": symbol},
+                parse_dates=["latest_date"],
+            )
+            conn.close()
+
+            start_date = "19900101"  # For entire history.
+            if not latest_date_pd.empty:
+                start_date = (
+                    latest_date_pd.iloc[0]["latest_date"] - timedelta(days=10)
+                ).strftime("%Y%m%d")
+
+            end_date = datetime.now().strftime("%Y%m%d")
+
+            szide = ak.stock_zh_index_daily_em(f"{src}{symbol}", start_date, end_date)
 
             # if shide is empty, return immediately
             if szide.empty:
-                logger.warn("index data is empty: %s", symbol)
+                logger.warning("index data is empty: %s", symbol)
                 return None
 
             szide["symbol"] = symbol
-            alchemyEngine = create_engine(url, poolclass=NullPool)
             with alchemyEngine.begin() as conn:
                 ignore_on_conflict("index_daily_em", conn, szide, ["symbol", "date"])
 
@@ -687,6 +704,15 @@ def main():
             )
             alchemyEngine = create_engine(url, poolclass=NullPool)
             with alchemyEngine.begin() as conn:
+                latest_date_pd = pd.read_sql(
+                    "SELECT max(date) latest_date FROM hk_index_daily_em where symbol=%(symbol)s",
+                    conn,
+                    params={"symbol": symbol},
+                    parse_dates=["latest_date"],
+                )
+                if not latest_date_pd.empty:
+                    ## keep rows only with `date` later than the latest record in database.
+                    shide = shide[shide['date'] > latest_date_pd.iloc[0]['latest_date']]
                 ignore_on_conflict("hk_index_daily_em", conn, shide, ["symbol", "date"])
 
         except Exception:
@@ -726,6 +752,14 @@ def main():
             iuss["symbol"] = symbol
             alchemyEngine = create_engine(url, poolclass=NullPool)
             with alchemyEngine.begin() as conn:
+                latest_date_pd = pd.read_sql(
+                    "SELECT max(date) latest_date FROM us_index_daily_sina where symbol=%(symbol)s",
+                    conn,
+                    params={"symbol": symbol},
+                    parse_dates=["latest_date"],
+                )
+                if not latest_date_pd.empty:
+                    iuss = iuss[iuss["date"] > latest_date_pd.iloc[0]["latest_date"]]
                 update_on_conflict(
                     "us_index_daily_sina", conn, iuss, ["symbol", "date"]
                 )

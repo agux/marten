@@ -299,10 +299,11 @@ def _fit_with_covar(
             weekly_seasonality=False,
             daily_seasonality=False,
             impute_missing=True,
+            early_stopping=True,
             accelerator=accelerator,
         )
     except ValueError as e:
-        logger.warn(str(e))
+        logger.warning(str(e))
         return None
     except Exception as e:
         logger.exception(e)
@@ -708,10 +709,11 @@ def _log_metrics_for_hyper_params(
             weekly_seasonality=False,
             daily_seasonality=False,
             impute_missing=True,
+            early_stopping=True,
             accelerator=accelerator,
         )
     except ValueError as e:
-        logger.warn(str(e))
+        logger.warning(str(e))
         return None
     except Exception as e:
         logger.exception(e)
@@ -723,7 +725,7 @@ def _log_metrics_for_hyper_params(
     logger.info("%s\nparams:%s\n#covars:%s", last_metric, params, len(covars))
 
     _update_metrics_table(
-        alchemyEngine, params, anchor_symbol, hpid, epochs, last_metric, fit_time
+        alchemyEngine, params, anchor_symbol, hpid, last_metric['epoch']+1, last_metric, fit_time
     )
 
     return last_metric
