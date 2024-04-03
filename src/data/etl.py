@@ -23,9 +23,23 @@ from datetime import datetime, timedelta
 # import pytz
 # import pandas as pd
 # from IPython.display import display, HTML
-from sqlalchemy import create_engine, text
+from sqlalchemy import (
+    create_engine,
+    text,
+    Table,
+    Column,
+    MetaData,
+    Text,
+    String,
+    Date,
+    Numeric,
+    Integer,
+    DateTime,
+    PrimaryKeyConstraint,
+)
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
+from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import insert
 
 # from concurrent.futures import ThreadPoolExecutor
@@ -74,6 +88,398 @@ logger.info("akshare version: %s", ak.__version__)
 
 xshg = xcals.get_calendar("XSHG")
 
+
+def table_def_index_daily_em():
+    return Table(
+        "index_daily_em",
+        MetaData(),
+        Column("symbol", Text, primary_key=True),
+        Column("date", Date, primary_key=True),
+        Column("open", Numeric),
+        Column("close", Numeric),
+        Column("high", Numeric),
+        Column("low", Numeric),
+        Column("volume", Numeric),
+        Column("last_modified", DateTime, default=datetime.utcnow),
+        Column("amount", Numeric),
+    )
+
+
+def table_def_hk_index_daily_em():
+    return Table(
+        "hk_index_daily_em",
+        MetaData(),
+        Column("symbol", Text, nullable=False),
+        Column("date", Date, nullable=False),
+        Column("open", Numeric),
+        Column("close", Numeric),
+        Column("high", Numeric),
+        Column("low", Numeric),
+        Column(
+            "last_modified", DateTime, default=func.current_timestamp(), nullable=False
+        ),
+        PrimaryKeyConstraint("symbol", "date", name="hk_index_daily_em_pkey"),
+    )
+
+def table_def_us_index_daily_sina():
+    return Table(
+        "us_index_daily_sina",
+        MetaData(),
+        Column("symbol", Text, nullable=False),
+        Column("date", Date, nullable=False),
+        Column("open", Numeric),
+        Column("close", Numeric),
+        Column("high", Numeric),
+        Column("low", Numeric),
+        Column("volume", Numeric),
+        Column("amount", Numeric),
+        Column(
+            "last_modified", DateTime, default=func.current_timestamp(), nullable=False
+        ),
+        PrimaryKeyConstraint("symbol", "date", name="us_index_daily_sina_pkey"),
+    )
+
+
+def table_def_hk_index_spot_em():
+    return Table(
+        "hk_index_spot_em",
+        MetaData(),
+        Column("seq", Integer),
+        Column("internal_code", Text),
+        Column("symbol", Text, nullable=False),
+        Column("name", Text, nullable=False),
+        Column("open", Numeric),
+        Column("close", Numeric),
+        Column("prev_close", Numeric),
+        Column("high", Numeric),
+        Column("low", Numeric),
+        Column("volume", Numeric),
+        Column("amount", Numeric),
+        Column("change_amount", Numeric),
+        Column("change_rate", Numeric),
+        Column(
+            "last_modified", DateTime, default=func.current_timestamp(), nullable=False
+        ),
+        PrimaryKeyConstraint("symbol", name="hk_index_spot_em_pkey"),
+    )
+
+def table_def_fund_etf_spot_em():
+    return Table(
+        "fund_etf_spot_em",
+        MetaData(),
+        Column("date", DateTime, nullable=False, comment="Date of the record"),
+        Column("code", String(10), nullable=False, comment="Stock code"),
+        Column("name", String(100), comment="Stock name"),
+        Column("latest_price", Numeric, comment="Latest trading price"),
+        Column("change_amount", Numeric, comment="Price change amount (涨跌额)"),
+        Column(
+            "change_rate", Numeric, comment="Price change rate in percentage (涨跌幅)"
+        ),
+        Column("volume", Numeric, comment="Trading volume (成交量)"),
+        Column("turnover", Numeric, comment="Trading turnover (成交额)"),
+        Column("opening_price", Numeric, comment="Opening price"),
+        Column("highest_price", Numeric, comment="Highest price of the day"),
+        Column("lowest_price", Numeric, comment="Lowest price of the day"),
+        Column("previous_close", Numeric, comment="Previous closing price"),
+        Column("turnover_rate", Numeric, comment="Turnover rate (换手率)"),
+        Column("volume_ratio", Numeric, comment="Volume ratio (量比)"),
+        Column("order_ratio", Numeric, comment="Order ratio (委比)"),
+        Column("external_disc", Numeric, comment="External market volume (外盘)"),
+        Column("internal_disc", Numeric, comment="Internal market volume (内盘)"),
+        Column(
+            "circulating_market_value",
+            Numeric,
+            comment="Circulating market value (流通市值)",
+        ),
+        Column("total_market_value", Numeric, comment="Total market value (总市值)"),
+        Column("latest_shares", Numeric, comment="Latest number of shares (最新份额)"),
+        Column(
+            "main_force_net_inflow_amount",
+            Numeric,
+            comment="Net amount of main force inflow (主力净流入-净额)",
+        ),
+        Column(
+            "main_force_net_inflow_ratio",
+            Numeric,
+            comment="Net ratio of main force inflow (主力净流入-净占比)",
+        ),
+        Column(
+            "super_large_net_inflow_amount",
+            Numeric,
+            comment="Net amount of super large orders inflow (超大单净流入-净额)",
+        ),
+        Column(
+            "super_large_net_inflow_ratio",
+            Numeric,
+            comment="Net ratio of super large orders inflow (超大单净流入-净占比)",
+        ),
+        Column(
+            "large_net_inflow_amount",
+            Numeric,
+            comment="Net amount of large orders inflow (大单净流入-净额)",
+        ),
+        Column(
+            "large_net_inflow_ratio",
+            Numeric,
+            comment="Net ratio of large orders inflow (大单净流入-净占比)",
+        ),
+        Column(
+            "medium_net_inflow_amount",
+            Numeric,
+            comment="Net amount of medium orders inflow (中单净流入-净额)",
+        ),
+        Column(
+            "medium_net_inflow_ratio",
+            Numeric,
+            comment="Net ratio of medium orders inflow (中单净流入-净占比)",
+        ),
+        Column(
+            "small_net_inflow_amount",
+            Numeric,
+            comment="Net amount of small orders inflow (小单净流入-净额)",
+        ),
+        Column(
+            "small_net_inflow_ratio",
+            Numeric,
+            comment="Net ratio of small orders inflow (小单净流入-净占比)",
+        ),
+        Column(
+            "iopv",
+            Numeric,
+            comment="Indicative Optimized Portfolio Value (aka iNAV, 实时估值)",
+        ),
+        Column(
+            "fund_discount_rate", Numeric, comment="Fund discount rate (基金折价率)"
+        ),
+        Column(
+            "update_time",
+            DateTime,
+            comment="Data timestamp provided by the data source (更新时间)",
+        ),
+        PrimaryKeyConstraint("code", "date", name="fund_etf_spot_em_pk"),
+    )
+
+def table_def_index_spot_em():
+    return Table(
+        "index_spot_em",
+        MetaData(),
+        Column("seq", Integer),
+        Column("symbol", Text, nullable=False),
+        Column("name", Text, nullable=False),
+        Column("open", Numeric),
+        Column("close", Numeric),
+        Column("prev_close", Numeric),
+        Column("high", Numeric),
+        Column("low", Numeric),
+        Column("amplitude", Numeric),
+        Column("volume_ratio", Numeric),
+        Column("change_rate", Numeric),
+        Column("change_amount", Numeric),
+        Column("volume", Numeric),
+        Column("amount", Numeric),
+        Column(
+            "last_modified", DateTime, default=func.current_timestamp(), nullable=False
+        ),
+        Column("src", Text),
+        PrimaryKeyConstraint("symbol", name="index_spot_em_pkey"),
+    )
+
+def table_def_fund_etf_perf_em():
+    return Table(
+        "fund_etf_perf_em",
+        MetaData(),
+        Column(
+            "id",
+            Integer,
+            primary_key=True,
+            autoincrement=True,
+            comment="Identifier (序号)",
+        ),
+        Column(
+            "fundcode",
+            String(10),
+            nullable=False,
+            unique=True,
+            comment="Fund Code (基金代码)",
+        ),
+        Column("fundname", String(255), nullable=False, comment="Fund Name (基金简称)"),
+        Column("type", String(50), nullable=False, comment="Type (类型)"),
+        Column("date", Date, nullable=False, comment="Date (日期)"),
+        Column(
+            "unitnav",
+            Numeric(10, 4),
+            nullable=False,
+            comment="Unit Net Asset Value (单位净值)",
+        ),
+        Column(
+            "accumulatednav",
+            Numeric(10, 4),
+            nullable=False,
+            comment="Accumulated Net Asset Value (累计净值)",
+        ),
+        Column(
+            "pastweek", Numeric(5, 2), comment="Performance over the past week (近1周)"
+        ),
+        Column(
+            "pastmonth",
+            Numeric(5, 2),
+            comment="Performance over the past month (近1月)",
+        ),
+        Column(
+            "past3months",
+            Numeric(5, 2),
+            comment="Performance over the past three months (近3月)",
+        ),
+        Column(
+            "past6months",
+            Numeric(5, 2),
+            comment="Performance over the past six months (近6月)",
+        ),
+        Column(
+            "pastyear", Numeric(5, 2), comment="Performance over the past year (近1年)"
+        ),
+        Column(
+            "past2years",
+            Numeric(5, 2),
+            comment="Performance over the past two years (近2年)",
+        ),
+        Column(
+            "past3years",
+            Numeric(5, 2),
+            comment="Performance over the past three years (近3年)",
+        ),
+        Column("ytd", Numeric(5, 2), comment="Year To Date performance (今年来)"),
+        Column(
+            "sinceinception",
+            Numeric(10, 2),
+            comment="Performance since inception (成立来)",
+        ),
+        Column(
+            "inceptiondate", Date, nullable=False, comment="Inception Date (成立日期)"
+        ),
+        Column("sharperatio", Numeric, comment="Sharpe Ratio (夏普比率)"),
+        Column("sortinoratio", Numeric, comment="Sortino Ratio (索提诺比率)"),
+        Column("maxdrawdown", Numeric, comment="Maximum Drawdown (最大回撤)"),
+        Column(
+            "last_modified", DateTime, default=func.current_timestamp(), nullable=False
+        ),
+        PrimaryKeyConstraint("id", name="etf_perf_em_pkey"),
+    )
+
+def table_def_fund_etf_list_sina():
+    return Table(
+        "fund_etf_list_sina",
+        MetaData(),
+        Column("exch", String, nullable=False),
+        Column("symbol", String, nullable=False),
+        Column("name", String, nullable=False),
+        Column(
+            "last_modified", DateTime, default=func.current_timestamp(), nullable=False
+        ),
+        PrimaryKeyConstraint("exch", "symbol", name="fund_etf_list_sina_pk"),
+    )
+
+def table_def_fund_etf_daily_em():
+    return Table(
+        "fund_etf_daily_em",
+        MetaData(),
+        Column("symbol", Text, nullable=False, comment="ETF symbol (股票代码)"),
+        Column("date", Date, nullable=False, comment="Trade date (交易日期)"),
+        Column("open", Numeric, comment="Opening price (开盘价)"),
+        Column("close", Numeric, comment="Closing price (收盘价)"),
+        Column("high", Numeric, comment="Highest price (最高价)"),
+        Column("low", Numeric, comment="Lowest price (最低价)"),
+        Column("volume", Numeric, comment="Trade volume (成交量)"),
+        Column("turnover", Numeric, comment="Turnover (成交额)"),
+        Column("amplitude", Numeric, comment="Amplitude (振幅)"),
+        Column("change_rate", Numeric, comment="Change rate (涨跌幅)"),
+        Column("change_amount", Numeric, comment="Change amount (涨跌额)"),
+        Column("turnover_rate", Numeric, comment="Turnover rate (换手率)"),
+        Column(
+            "last_modified",
+            DateTime,
+            default=func.current_timestamp(),
+            nullable=False,
+            comment="Last modified timestamp (最后修改时间)",
+        ),
+        PrimaryKeyConstraint("symbol", "date", name="fund_etf_daily_em_pkey"),
+    )
+
+def table_def_bond_metrics_em():
+    return Table(
+        "bond_metrics_em",
+        MetaData(),
+        Column("date", Date, nullable=False, comment="Date of the metrics (数据日期)"),
+        Column(
+            "china_yield_2y",
+            Numeric,
+            comment="China 2-year government bond yield (中国国债收益率2年)",
+        ),
+        Column(
+            "china_yield_5y",
+            Numeric,
+            comment="China 5-year government bond yield (中国国债收益率5年)",
+        ),
+        Column(
+            "china_yield_10y",
+            Numeric,
+            comment="China 10-year government bond yield (中国国债收益率10年)",
+        ),
+        Column(
+            "china_yield_30y",
+            Numeric,
+            comment="China 30-year government bond yield (中国国债收益率30年)",
+        ),
+        Column(
+            "china_yield_spread_10y_2y",
+            Numeric,
+            comment="China 10-year to 2-year government bond yield spread (中国国债收益率10年-2年)",
+        ),
+        Column(
+            "china_gdp_growth",
+            Numeric,
+            comment="China annual GDP growth rate (中国GDP年增率)",
+        ),
+        Column(
+            "us_yield_2y",
+            Numeric,
+            comment="US 2-year government bond yield (美国国债收益率2年)",
+        ),
+        Column(
+            "us_yield_5y",
+            Numeric,
+            comment="US 5-year government bond yield (美国国债收益率5年)",
+        ),
+        Column(
+            "us_yield_10y",
+            Numeric,
+            comment="US 10-year government bond yield (美国国债收益率10年)",
+        ),
+        Column(
+            "us_yield_30y",
+            Numeric,
+            comment="US 30-year government bond yield (美国国债收益率30年)",
+        ),
+        Column(
+            "us_yield_spread_10y_2y",
+            Numeric,
+            comment="US 10-year to 2-year government bond yield spread (美国国债收益率10年-2年)",
+        ),
+        Column(
+            "us_gdp_growth",
+            Numeric,
+            comment="US annual GDP growth rate (美国GDP年增率)",
+        ),
+        Column(
+            "last_modified",
+            DateTime,
+            default=func.current_timestamp(),
+            nullable=False,
+            comment="Last modified timestamp (最后修改时间)",
+        ),
+        PrimaryKeyConstraint("date", name="bond_metrics_em_pk"),
+    )
+
 # %% [markdown]
 # # Helper functions
 
@@ -84,7 +490,7 @@ def update_on_conflict(table, conn, df: pd.DataFrame, primary_keys):
     Insert new records, update existing records without nullifying columns not included in the dataframe
     """
     # Load the table metadata
-    table = sqlalchemy.Table(table, sqlalchemy.MetaData(), autoload_with=conn)
+    # table = sqlalchemy.Table(table, sqlalchemy.MetaData(), autoload_with=conn)
     # Create an insert statement from the DataFrame records
     insert_stmt = insert(table).values(df.to_dict(orient="records"))
     # Build a dictionary of column values to be updated, excluding primary keys and non-existent columns
@@ -101,14 +507,28 @@ def update_on_conflict(table, conn, df: pd.DataFrame, primary_keys):
     conn.execute(on_conflict_stmt)
 
 
-def ignore_on_conflict(table, conn, df, primary_keys):
+def ignore_on_conflict(table_def, conn, df, primary_keys):
     """
     Insert new records, ignore existing records
     """
-    table = sqlalchemy.Table(table, sqlalchemy.MetaData(), autoload_with=conn)
-    insert_stmt = insert(table).values(df.to_dict(orient="records"))
+    # table = sqlalchemy.Table(table, sqlalchemy.MetaData(), autoload_with=conn)
+    insert_stmt = insert(table_def).values(df.to_dict(orient="records"))
     on_conflict_stmt = insert_stmt.on_conflict_do_nothing(index_elements=primary_keys)
     conn.execute(on_conflict_stmt)
+
+
+def get_latest_date(conn, symbol, table):
+    query = f"SELECT max(date) AS latest_date FROM {table}"
+    params = None
+    if symbol is not None:
+        query += " WHERE symbol = %s"
+        params = (symbol,)
+    result = conn.execute(
+        query,
+        params,
+    )
+    latest_date = result.fetchone()[0]
+    return latest_date
 
 
 def saveAsCsv(file_name_main: str, df):
@@ -234,7 +654,7 @@ def main():
     )
 
     with alchemyEngine.begin() as conn:
-        update_on_conflict("fund_etf_spot_em", conn, df, ["code", "date"])
+        update_on_conflict(table_def_fund_etf_spot_em(), conn, df, ["code", "date"])
 
     # %% [markdown]
     # # fund_etf_perf_em
@@ -268,7 +688,7 @@ def main():
 
     with alchemyEngine.begin() as conn:
         update_on_conflict(
-            "fund_etf_perf_em", conn, fund_exchange_rank_em_df, ["fundcode"]
+            table_def_fund_etf_perf_em(), conn, fund_exchange_rank_em_df, ["fundcode"]
         )
 
     # %% [markdown]
@@ -289,7 +709,7 @@ def main():
 
     # Now, use the update_on_conflict function to insert or update the data
     with alchemyEngine.begin() as conn:
-        update_on_conflict("fund_etf_list_sina", conn, df, ["exch", "symbol"])
+        update_on_conflict(table_def_fund_etf_list_sina(), conn, df, ["exch", "symbol"])
 
     # %% [markdown]
     # # Get historical trades
@@ -300,71 +720,64 @@ def main():
     def fetch_and_process_etf(symbol, url):
         try:
             logger.info(f"running fund_etf_hist_em({symbol})...")
-            alchemyEngine = create_engine(url, poolclass=NullPool)
-            # check latest date on fund_etf_daily_em
-            conn = alchemyEngine.connect()
-            latest_date_pd = pd.read_sql(
-                "SELECT max(date) latest_date FROM fund_etf_daily_em where symbol=%(symbol)s",
-                conn,
-                params={"symbol": symbol},
-                parse_dates=['latest_date'],
-            )
-            conn.close()
-
-            start_date = '19700101' # For entire history.
-            if not latest_date_pd['latest_date'].isnull().all():
-                start_date = (
-                    latest_date_pd.iloc[0]["latest_date"].date() - timedelta(days=10)
-                ).strftime("%Y%m%d")
-
-            end_date = datetime.now().strftime("%Y%m%d")
-
-            df = ak.fund_etf_hist_em(
-                symbol=symbol,
-                period="daily",
-                start_date=start_date,
-                end_date=end_date,
-                adjust="qfq",
-            )
-
-            # if df contains no row at all, return immediately
-            if df.empty:
-                return None
-
-            df["symbol"] = symbol
-            df = df.rename(
-                columns={
-                    "日期": "date",
-                    "开盘": "open",
-                    "收盘": "close",
-                    "最高": "high",
-                    "最低": "low",
-                    "成交量": "volume",
-                    "成交额": "turnover",
-                    "振幅": "amplitude",
-                    "涨跌幅": "change_rate",
-                    "涨跌额": "change_amount",
-                    "换手率": "turnover_rate",
-                }
-            )
-            df = df[
-                [
-                    "symbol",
-                    "date",
-                    "open",
-                    "close",
-                    "high",
-                    "low",
-                    "volume",
-                    "turnover",
-                    "amplitude",
-                    "change_rate",
-                    "change_amount",
-                    "turnover_rate",
-                ]
-            ]
             with alchemyEngine.begin() as conn:
-                ignore_on_conflict("fund_etf_daily_em", conn, df, ["symbol", "date"])
+                # check latest date on fund_etf_daily_em
+                latest_date = get_latest_date(conn, symbol, "fund_etf_daily_em")
+
+                start_date = "19700101"  # For entire history.
+                if latest_date is not None:
+                    start_date = (
+                            latest_date - timedelta(days=10)
+                        ).strftime("%Y%m%d")
+
+                end_date = datetime.now().strftime("%Y%m%d")
+
+                df = ak.fund_etf_hist_em(
+                        symbol=symbol,
+                        period="daily",
+                        start_date=start_date,
+                        end_date=end_date,
+                        adjust="qfq",
+                    )
+
+                # if df contains no row at all, return immediately
+                if df.empty:
+                    return None
+
+                df["symbol"] = symbol
+                df = df.rename(
+                        columns={
+                            "日期": "date",
+                            "开盘": "open",
+                            "收盘": "close",
+                            "最高": "high",
+                            "最低": "low",
+                            "成交量": "volume",
+                            "成交额": "turnover",
+                            "振幅": "amplitude",
+                            "涨跌幅": "change_rate",
+                            "涨跌额": "change_amount",
+                            "换手率": "turnover_rate",
+                        }
+                    )
+                df = df[
+                        [
+                            "symbol",
+                            "date",
+                            "open",
+                            "close",
+                            "high",
+                            "low",
+                            "volume",
+                            "turnover",
+                            "amplitude",
+                            "change_rate",
+                            "change_amount",
+                            "turnover_rate",
+                        ]
+                    ]
+
+                ignore_on_conflict(table_def_fund_etf_daily_em(), conn, df, ["symbol", "date"])
         except Exception:
             logging.error(
                 f"failed to get daily trade history data for {symbol}", exc_info=True
@@ -400,27 +813,31 @@ def main():
     # %%
     # start_date = (datetime.now() - timedelta(days=20)).strftime('%Y%m%d')
     start_date = None  # For entire history.
-    logger.info(f"running bond_zh_us_rate()...")
-    bzur = ak.bond_zh_us_rate(start_date)
-    bzur = bzur.rename(
-        columns={
-            "日期": "date",
-            "中国国债收益率2年": "china_yield_2y",
-            "中国国债收益率5年": "china_yield_5y",
-            "中国国债收益率10年": "china_yield_10y",
-            "中国国债收益率30年": "china_yield_30y",
-            "中国国债收益率10年-2年": "china_yield_spread_10y_2y",
-            "中国GDP年增率": "china_gdp_growth",
-            "美国国债收益率2年": "us_yield_2y",
-            "美国国债收益率5年": "us_yield_5y",
-            "美国国债收益率10年": "us_yield_10y",
-            "美国国债收益率30年": "us_yield_30y",
-            "美国国债收益率10年-2年": "us_yield_spread_10y_2y",
-            "美国GDP年增率": "us_gdp_growth",
-        }
-    )
     with alchemyEngine.begin() as conn:
-        ignore_on_conflict("bond_metrics_em", conn, bzur, ["date"])
+        latest_date = get_latest_date(conn, None, "bond_metrics_em")
+        if latest_date is not None:
+            start_date = latest_date.strftime("%Y%m%d")
+        logger.info(f"running bond_zh_us_rate()...")
+        bzur = ak.bond_zh_us_rate(start_date)
+        bzur = bzur.rename(
+            columns={
+                "日期": "date",
+                "中国国债收益率2年": "china_yield_2y",
+                "中国国债收益率5年": "china_yield_5y",
+                "中国国债收益率10年": "china_yield_10y",
+                "中国国债收益率30年": "china_yield_30y",
+                "中国国债收益率10年-2年": "china_yield_spread_10y_2y",
+                "中国GDP年增率": "china_gdp_growth",
+                "美国国债收益率2年": "us_yield_2y",
+                "美国国债收益率5年": "us_yield_5y",
+                "美国国债收益率10年": "us_yield_10y",
+                "美国国债收益率30年": "us_yield_30y",
+                "美国国债收益率10年-2年": "us_yield_spread_10y_2y",
+                "美国GDP年增率": "us_gdp_growth",
+            }
+        )
+
+        ignore_on_conflict(table_def_bond_metrics_em(), conn, bzur, ["date"])
 
     # %% [markdown]
     # ## Calc / Update metrics in fund_etf_perf_em table
@@ -572,7 +989,7 @@ def main():
             szise["src"] = src
             alchemyEngine = create_engine(url, poolclass=NullPool)
             with alchemyEngine.begin() as conn:
-                update_on_conflict("index_spot_em", conn, szise, ["symbol"])
+                update_on_conflict(table_def_index_spot_em(), conn, szise, ["symbol"])
 
         except Exception:
             logging.error(f"failed to update index_spot_em for {symbol}", exc_info=True)
@@ -603,33 +1020,29 @@ def main():
     def stock_zh_index_daily_em(symbol, src, url):
         try:
             alchemyEngine = create_engine(url, poolclass=NullPool)
-            conn = alchemyEngine.connect()
-            latest_date_pd = pd.read_sql(
-                "SELECT max(date) latest_date FROM index_daily_em where symbol=%(symbol)s",
-                conn,
-                params={"symbol": symbol},
-                parse_dates=["latest_date"],
-            )
-            conn.close()
-
-            start_date = "19900101"  # For entire history.
-            if not latest_date_pd['latest_date'].isnull().all():
-                start_date = (
-                    latest_date_pd.iloc[0]["latest_date"].date() - timedelta(days=10)
-                ).strftime("%Y%m%d")
-
-            end_date = datetime.now().strftime("%Y%m%d")
-
-            szide = ak.stock_zh_index_daily_em(f"{src}{symbol}", start_date, end_date)
-
-            # if shide is empty, return immediately
-            if szide.empty:
-                logger.warning("index data is empty: %s", symbol)
-                return None
-
-            szide["symbol"] = symbol
             with alchemyEngine.begin() as conn:
-                ignore_on_conflict("index_daily_em", conn, szide, ["symbol", "date"])
+                latest_date = get_latest_date(conn, symbol, "index_daily_em")
+
+                start_date = "19900101"  # For entire history.
+                if latest_date is not None:
+                    start_date = (latest_date - timedelta(days=10)).strftime("%Y%m%d")
+
+                end_date = datetime.now().strftime("%Y%m%d")
+
+                szide = ak.stock_zh_index_daily_em(
+                    f"{src}{symbol}", start_date, end_date
+                )
+
+                # if shide is empty, return immediately
+                if szide.empty:
+                    logger.warning("index data is empty: %s", symbol)
+                    return None
+
+                szide["symbol"] = symbol
+
+                ignore_on_conflict(
+                    table_def_index_daily_em(), conn, szide, ["symbol", "date"]
+                )
 
         except Exception:
             logging.error(
@@ -643,9 +1056,9 @@ def main():
     conn.close()
 
     # get the number of CPU cores
-    num_proc = int((multiprocessing.cpu_count() + 1) / 2.0)
+    # num_proc = int((multiprocessing.cpu_count() + 1) / 2.0)
     logger.info("starting joblib on function stock_zh_index_daily_em()...")
-    Parallel(n_jobs=num_proc)(
+    Parallel(n_jobs=-1)(
         delayed(stock_zh_index_daily_em)(symbol, src, alchemyEngine.url)
         for symbol, src in zip(cn_index_fulllist["symbol"], cn_index_fulllist["src"])
     )
@@ -686,7 +1099,7 @@ def main():
     # saveAsCsv("hk_index_spot_em", df)
 
     with alchemyEngine.begin() as conn:
-        update_on_conflict("hk_index_spot_em", conn, hk_index_list_df, ["symbol"])
+        update_on_conflict(table_def_hk_index_spot_em(), conn, hk_index_list_df, ["symbol"])
 
     # %%
     # get daily historical data
@@ -705,22 +1118,17 @@ def main():
                 }
             )
             # Convert the 'date' column to datetime
-            shide['date'] = pd.to_datetime(shide['date']).dt.date
+            shide["date"] = pd.to_datetime(shide["date"]).dt.date
             alchemyEngine = create_engine(url, poolclass=NullPool)
             with alchemyEngine.begin() as conn:
-                latest_date_pd = pd.read_sql(
-                    "SELECT max(date) latest_date FROM hk_index_daily_em where symbol=%(symbol)s",
-                    conn,
-                    params={"symbol": symbol},
-                    parse_dates=["latest_date"],
-                )
-                if not latest_date_pd["latest_date"].isnull().all():
+                latest_date = get_latest_date(conn, symbol, "hk_index_daily_em")
+
+                if latest_date is not None:
                     ## keep rows only with `date` later than the latest record in database.
-                    shide = shide[
-                        shide["date"]
-                        > (latest_date_pd.iloc[0]["latest_date"].date() - timedelta(days=10))
-                    ]
-                update_on_conflict("hk_index_daily_em", conn, shide, ["symbol", "date"])
+                    shide = shide[shide["date"] > (latest_date - timedelta(days=10))]
+                update_on_conflict(
+                    table_def_hk_index_daily_em, conn, shide, ["symbol", "date"]
+                )
 
         except Exception:
             logging.error(
@@ -730,9 +1138,9 @@ def main():
         return shide
 
     # get the number of CPU cores
-    num_proc = int((multiprocessing.cpu_count() + 1) / 2.0)
+    # num_proc = int((multiprocessing.cpu_count() + 1) / 2.0)
     logger.info("starting joblib on function update_hk_indices()...")
-    Parallel(n_jobs=num_proc)(
+    Parallel(n_jobs=-1)(
         delayed(update_hk_indices)(
             symbol,
             alchemyEngine.url,
@@ -761,18 +1169,12 @@ def main():
             iuss["date"] = pd.to_datetime(iuss["date"]).dt.date
             alchemyEngine = create_engine(url, poolclass=NullPool)
             with alchemyEngine.begin() as conn:
-                latest_date_pd = pd.read_sql(
-                    "SELECT max(date) latest_date FROM us_index_daily_sina where symbol=%(symbol)s",
-                    conn,
-                    params={"symbol": symbol},
-                    parse_dates=["latest_date"],
-                )
-                if not latest_date_pd["latest_date"].isnull().all():
-                    iuss = iuss[iuss["date"] > (latest_date_pd.iloc[0]["latest_date"].date()-timedelta(days=10))]
+                latest_date = get_latest_date(conn, symbol, "us_index_daily_sina")
+                if latest_date is not None:
+                    iuss = iuss[iuss["date"] > (latest_date - timedelta(days=10))]
                 update_on_conflict(
-                    "us_index_daily_sina", conn, iuss, ["symbol", "date"]
+                    table_def_us_index_daily_sina, conn, iuss, ["symbol", "date"]
                 )
-
         except Exception:
             logging.error(
                 f"failed to update us_index_daily_sina for {symbol}", exc_info=True
@@ -807,7 +1209,7 @@ if __name__ == "__main__":
         main()
 
         profiler.disable()
-        stats = pstats.Stats(profiler).sort_stats('cumtime')
+        stats = pstats.Stats(profiler).sort_stats("cumtime")
         stats.print_stats()
     except Exception as e:
         logger.exception("main process terminated")
