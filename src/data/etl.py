@@ -14,6 +14,9 @@ import sqlalchemy
 import exchange_calendars as xcals
 from dotenv import load_dotenv
 
+import cProfile
+import pstats
+
 # import exchange_calendars as xcals
 from datetime import datetime, timedelta
 
@@ -798,6 +801,13 @@ def main():
 
 if __name__ == "__main__":
     try:
+        profiler = cProfile.Profile()
+        profiler.enable()
+
         main()
+
+        profiler.disable()
+        stats = pstats.Stats(profiler).sort_stats('cumtime')
+        stats.print_stats()
     except Exception as e:
         logger.exception("main process terminated")
