@@ -308,11 +308,10 @@ def main():
             )
             conn.close()
 
-            if latest_date_pd.empty:
-                start_date = '19700101' # For entire history.
-            else:
+            start_date = '19700101' # For entire history.
+            if not latest_date_pd['latest_date'].isnull().all():
                 start_date = (
-                    latest_date_pd.iloc[0]["latest_date"] - timedelta(days=10)
+                    latest_date_pd.iloc[0]["latest_date"].date() - timedelta(days=10)
                 ).strftime("%Y%m%d")
 
             end_date = datetime.now().strftime("%Y%m%d")
@@ -611,9 +610,9 @@ def main():
             conn.close()
 
             start_date = "19900101"  # For entire history.
-            if not latest_date_pd.empty:
+            if not latest_date_pd['latest_date'].isnull().all():
                 start_date = (
-                    latest_date_pd.iloc[0]["latest_date"] - timedelta(days=10)
+                    latest_date_pd.iloc[0]["latest_date"].date() - timedelta(days=10)
                 ).strftime("%Y%m%d")
 
             end_date = datetime.now().strftime("%Y%m%d")
@@ -702,6 +701,8 @@ def main():
                     "latest": "close",
                 }
             )
+            # Convert the 'date' column to datetime
+            shide['date'] = pd.to_datetime(shide['date']).dt.date
             alchemyEngine = create_engine(url, poolclass=NullPool)
             with alchemyEngine.begin() as conn:
                 latest_date_pd = pd.read_sql(
@@ -710,11 +711,11 @@ def main():
                     params={"symbol": symbol},
                     parse_dates=["latest_date"],
                 )
-                if not latest_date_pd.empty:
+                if not latest_date_pd["latest_date"].isnull().all():
                     ## keep rows only with `date` later than the latest record in database.
                     shide = shide[
                         shide["date"]
-                        > (latest_date_pd.iloc[0]["latest_date"] - timedelta(days=10))
+                        > (latest_date_pd.iloc[0]["latest_date"].date() - timedelta(days=10))
                     ]
                 update_on_conflict("hk_index_daily_em", conn, shide, ["symbol", "date"])
 
@@ -753,6 +754,8 @@ def main():
         try:
             iuss = ak.index_us_stock_sina(symbol=symbol)
             iuss["symbol"] = symbol
+            # Convert iuss["date"] to datetime and normalize to date only
+            iuss["date"] = pd.to_datetime(iuss["date"]).dt.date
             alchemyEngine = create_engine(url, poolclass=NullPool)
             with alchemyEngine.begin() as conn:
                 latest_date_pd = pd.read_sql(
@@ -761,8 +764,8 @@ def main():
                     params={"symbol": symbol},
                     parse_dates=["latest_date"],
                 )
-                if not latest_date_pd.empty:
-                    iuss = iuss[iuss["date"] > (latest_date_pd.iloc[0]["latest_date"]-timedelta(days=10))]
+                if not latest_date_pd["latest_date"].isnull().all():
+                    iuss = iuss[iuss["date"] > (latest_date_pd.iloc[0]["latest_date"].date()-timedelta(days=10))]
                 update_on_conflict(
                     "us_index_daily_sina", conn, iuss, ["symbol", "date"]
                 )
