@@ -519,14 +519,16 @@ def ignore_on_conflict(table_def, conn, df, primary_keys):
 
 def get_latest_date(conn, symbol, table):
     query = f"SELECT max(date) AS latest_date FROM {table}"
-    params = {}
     if symbol is not None:
         query += " WHERE symbol = %s"
-        params = (symbol,)
-    result = conn.execute(
-        query,
-        params,
-    )
+        result = conn.execute(
+            text(query),
+            (symbol,),
+        )
+    else:
+        result = conn.execute(
+            text(query),
+        )
     latest_date = result.fetchone()[0]
     return latest_date
 
