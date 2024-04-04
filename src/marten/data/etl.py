@@ -121,6 +121,7 @@ def table_def_hk_index_daily_em():
         PrimaryKeyConstraint("symbol", "date", name="hk_index_daily_em_pkey"),
     )
 
+
 def table_def_us_index_daily_sina():
     return Table(
         "us_index_daily_sina",
@@ -162,6 +163,7 @@ def table_def_hk_index_spot_em():
         ),
         PrimaryKeyConstraint("symbol", name="hk_index_spot_em_pkey"),
     )
+
 
 def table_def_fund_etf_spot_em():
     return Table(
@@ -259,6 +261,7 @@ def table_def_fund_etf_spot_em():
         PrimaryKeyConstraint("code", "date", name="fund_etf_spot_em_pk"),
     )
 
+
 def table_def_index_spot_em():
     return Table(
         "index_spot_em",
@@ -283,6 +286,7 @@ def table_def_index_spot_em():
         Column("src", Text),
         PrimaryKeyConstraint("symbol", name="index_spot_em_pkey"),
     )
+
 
 def table_def_fund_etf_perf_em():
     return Table(
@@ -366,6 +370,7 @@ def table_def_fund_etf_perf_em():
         PrimaryKeyConstraint("id", name="etf_perf_em_pkey"),
     )
 
+
 def table_def_fund_etf_list_sina():
     return Table(
         "fund_etf_list_sina",
@@ -378,6 +383,7 @@ def table_def_fund_etf_list_sina():
         ),
         PrimaryKeyConstraint("exch", "symbol", name="fund_etf_list_sina_pk"),
     )
+
 
 def table_def_fund_etf_daily_em():
     return Table(
@@ -404,6 +410,7 @@ def table_def_fund_etf_daily_em():
         ),
         PrimaryKeyConstraint("symbol", "date", name="fund_etf_daily_em_pkey"),
     )
+
 
 def table_def_bond_metrics_em():
     return Table(
@@ -480,6 +487,7 @@ def table_def_bond_metrics_em():
         PrimaryKeyConstraint("date", name="bond_metrics_em_pk"),
     )
 
+
 # %% [markdown]
 # # Helper functions
 
@@ -518,19 +526,13 @@ def ignore_on_conflict(table_def, conn, df, primary_keys):
 
 
 def get_latest_date(conn, symbol, table):
-    query = f"SELECT max(date) AS latest_date FROM {table}"
+    query = f"SELECT max(date) FROM {table}"
     if symbol is not None:
         query += " WHERE symbol = :symbol"
-        result = conn.execute(
-            text(query),
-            {"symbol":symbol}
-        )
+        result = conn.execute(text(query), {"symbol": symbol})
     else:
-        result = conn.execute(
-            text(query),
-        )
-    latest_date = result.fetchone()[0]
-    return latest_date
+        result = conn.execute(text(query))
+    return result.fetchone()[0]
 
 
 def saveAsCsv(file_name_main: str, df):
@@ -729,19 +731,17 @@ def main():
 
                 start_date = "19700101"  # For entire history.
                 if latest_date is not None:
-                    start_date = (
-                            latest_date - timedelta(days=10)
-                        ).strftime("%Y%m%d")
+                    start_date = (latest_date - timedelta(days=10)).strftime("%Y%m%d")
 
                 end_date = datetime.now().strftime("%Y%m%d")
 
                 df = ak.fund_etf_hist_em(
-                        symbol=symbol,
-                        period="daily",
-                        start_date=start_date,
-                        end_date=end_date,
-                        adjust="qfq",
-                    )
+                    symbol=symbol,
+                    period="daily",
+                    start_date=start_date,
+                    end_date=end_date,
+                    adjust="qfq",
+                )
 
                 # if df contains no row at all, return immediately
                 if df.empty:
@@ -749,38 +749,40 @@ def main():
 
                 df["symbol"] = symbol
                 df = df.rename(
-                        columns={
-                            "日期": "date",
-                            "开盘": "open",
-                            "收盘": "close",
-                            "最高": "high",
-                            "最低": "low",
-                            "成交量": "volume",
-                            "成交额": "turnover",
-                            "振幅": "amplitude",
-                            "涨跌幅": "change_rate",
-                            "涨跌额": "change_amount",
-                            "换手率": "turnover_rate",
-                        }
-                    )
+                    columns={
+                        "日期": "date",
+                        "开盘": "open",
+                        "收盘": "close",
+                        "最高": "high",
+                        "最低": "low",
+                        "成交量": "volume",
+                        "成交额": "turnover",
+                        "振幅": "amplitude",
+                        "涨跌幅": "change_rate",
+                        "涨跌额": "change_amount",
+                        "换手率": "turnover_rate",
+                    }
+                )
                 df = df[
-                        [
-                            "symbol",
-                            "date",
-                            "open",
-                            "close",
-                            "high",
-                            "low",
-                            "volume",
-                            "turnover",
-                            "amplitude",
-                            "change_rate",
-                            "change_amount",
-                            "turnover_rate",
-                        ]
+                    [
+                        "symbol",
+                        "date",
+                        "open",
+                        "close",
+                        "high",
+                        "low",
+                        "volume",
+                        "turnover",
+                        "amplitude",
+                        "change_rate",
+                        "change_amount",
+                        "turnover_rate",
                     ]
+                ]
 
-                ignore_on_conflict(table_def_fund_etf_daily_em(), conn, df, ["symbol", "date"])
+                ignore_on_conflict(
+                    table_def_fund_etf_daily_em(), conn, df, ["symbol", "date"]
+                )
         except Exception:
             logging.error(
                 f"failed to get daily trade history data for {symbol}", exc_info=True
@@ -1102,7 +1104,9 @@ def main():
     # saveAsCsv("hk_index_spot_em", df)
 
     with alchemyEngine.begin() as conn:
-        update_on_conflict(table_def_hk_index_spot_em(), conn, hk_index_list_df, ["symbol"])
+        update_on_conflict(
+            table_def_hk_index_spot_em(), conn, hk_index_list_df, ["symbol"]
+        )
 
     # %%
     # get daily historical data
