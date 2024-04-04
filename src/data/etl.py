@@ -485,18 +485,18 @@ def table_def_bond_metrics_em():
 
 
 # %%
-def update_on_conflict(table, conn, df: pd.DataFrame, primary_keys):
+def update_on_conflict(table_def, conn, df: pd.DataFrame, primary_keys):
     """
     Insert new records, update existing records without nullifying columns not included in the dataframe
     """
     # Load the table metadata
     # table = sqlalchemy.Table(table, sqlalchemy.MetaData(), autoload_with=conn)
     # Create an insert statement from the DataFrame records
-    insert_stmt = insert(table).values(df.to_dict(orient="records"))
+    insert_stmt = insert(table_def).values(df.to_dict(orient="records"))
     # Build a dictionary of column values to be updated, excluding primary keys and non-existent columns
     update_dict = {
         c.name: insert_stmt.excluded[c.name]
-        for c in table.columns
+        for c in table_def.columns
         if c.name in df.columns and c.name not in primary_keys
     }
     # Construct the on_conflict_do_update statement
@@ -720,6 +720,7 @@ def main():
     def fetch_and_process_etf(symbol, url):
         try:
             logger.info(f"running fund_etf_hist_em({symbol})...")
+            alchemyEngine = create_engine(url, poolclass=NullPool)
             with alchemyEngine.begin() as conn:
                 # check latest date on fund_etf_daily_em
                 latest_date = get_latest_date(conn, symbol, "fund_etf_daily_em")
