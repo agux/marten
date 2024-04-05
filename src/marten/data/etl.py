@@ -7,6 +7,7 @@ import sys
 import logging
 import time
 import math
+import asyncio
 import multiprocessing
 import pandas as pd
 import numpy as np
@@ -83,8 +84,6 @@ console_handler.setFormatter(formatter)
 # Step 6: Add the handlers to the logger
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
-
-logger.info("akshare version: %s", ak.__version__)
 
 xshg = xcals.get_calendar("XSHG")
 
@@ -497,6 +496,7 @@ def update_on_conflict(table_def, conn, df: pd.DataFrame, primary_keys):
     """
     Insert new records, update existing records without nullifying columns not included in the dataframe
     """
+    start = time.time()
     # Load the table metadata
     # table = sqlalchemy.Table(table, sqlalchemy.MetaData(), autoload_with=conn)
     # Create an insert statement from the DataFrame records
@@ -513,16 +513,19 @@ def update_on_conflict(table_def, conn, df: pd.DataFrame, primary_keys):
     )
     # Execute the on_conflict_do_update statement
     conn.execute(on_conflict_stmt)
+    print(f"{time.time()-start} update_on_conflict({table_def.name})")
 
 
 def ignore_on_conflict(table_def, conn, df, primary_keys):
     """
     Insert new records, ignore existing records
     """
+    start = time.time()
     # table = sqlalchemy.Table(table, sqlalchemy.MetaData(), autoload_with=conn)
     insert_stmt = insert(table_def).values(df.to_dict(orient="records"))
     on_conflict_stmt = insert_stmt.on_conflict_do_nothing(index_elements=primary_keys)
     conn.execute(on_conflict_stmt)
+    print(f"{time.time()-start} ignore_on_conflict({table_def.name})")
 
 
 def get_latest_date(conn, symbol, table):
@@ -556,13 +559,8 @@ def last_trade_date():
     return last_session
 
 
-# Use ThreadPoolExecutor to calculate metrics in parallel
-# with ThreadPoolExecutor(max_workers=num_proc) as executor:
-#     futures = [executor.submit(update_us_indices, symbol) for symbol in idx_symbol_list]
-#     results = [future.result() for future in futures]
-
-
 def main():
+    logger.info("Using akshare version: %s", ak.__version__)
     # Create an engine instance
     # Define your database engine outside of the parallel function
     # Using NullPool disables the connection pooling
@@ -798,17 +796,6 @@ def main():
         for symbol in etf_list_df["symbol"]
     )
 
-    # get the number of CPU cores
-    # num_cores = multiprocessing.cpu_count()
-
-    # Use ThreadPoolExecutor to fetch data in parallel
-    # with ThreadPoolExecutor(max_workers=num_cores) as executor:
-    #     futures = [
-    #         executor.submit(fetch_and_process_etf, symbol)
-    #         for symbol in etf_list_df["symbol"]
-    #     ]
-    #     results = [future.result() for future in futures]
-
     # %% [markdown]
     # # Calculate ETF Performance Metrics
 
@@ -952,12 +939,6 @@ def main():
         for symbol in etf_list_df["symbol"]
     )
 
-    # Use ThreadPoolExecutor to calculate metrics in parallel
-    # with ThreadPoolExecutor(max_workers=num_proc) as executor:
-    #     futures = [
-    #         executor.submit(update_etf_metrics, symbol) for symbol in etf_list_df["symbol"]
-    #     ]
-    #     results = [future.result() for future in futures]
 
     # %% [markdown]
     # # China Market Indices
@@ -1013,13 +994,6 @@ def main():
         for symbol, src in cn_index_list
     )
 
-    # Use ThreadPoolExecutor to calculate metrics in parallel
-    # with ThreadPoolExecutor(max_workers=num_proc) as executor:
-    #     futures = [
-    #         executor.submit(update_cn_indices_em, symbol, src) for symbol, src in cn_index_list
-    #     ]
-    #     results = [future.result() for future in futures]
-
     # %%
     # get daily historical data
     def stock_zh_index_daily_em(symbol, src, url):
@@ -1067,14 +1041,6 @@ def main():
         delayed(stock_zh_index_daily_em)(symbol, src, alchemyEngine.url)
         for symbol, src in zip(cn_index_fulllist["symbol"], cn_index_fulllist["src"])
     )
-
-    # Use ThreadPoolExecutor to calculate metrics in parallel
-    # with ThreadPoolExecutor(max_workers=num_proc) as executor:
-    #     futures = [
-    #         executor.submit(update_cn_indices, symbol, src)
-    #         for symbol, src in zip(cn_index_fulllist["symbol"], cn_index_fulllist["src"])
-    #     ]
-    #     results = [future.result() for future in futures]
 
     # %% [markdown]
     # # Get HK Market Indices
@@ -1134,7 +1100,7 @@ def main():
                     ## keep rows only with `date` later than the latest record in database.
                     shide = shide[shide["date"] > (latest_date - timedelta(days=10))]
                 update_on_conflict(
-                    table_def_hk_index_daily_em, conn, shide, ["symbol", "date"]
+                    table_def_hk_index_daily_em(), conn, shide, ["symbol", "date"]
                 )
 
         except Exception:
@@ -1155,13 +1121,6 @@ def main():
         for symbol in hk_index_list_df["symbol"]
     )
 
-    # Use ThreadPoolExecutor to calculate metrics in parallel
-    # with ThreadPoolExecutor(max_workers=num_proc) as executor:
-    #     futures = [
-    #         executor.submit(update_hk_indices, symbol) for symbol in hk_index_list_df["symbol"]
-    #     ]
-    #     results = [future.result() for future in futures]
-
     # %% [markdown]
     # # Get US market indices
 
@@ -1180,7 +1139,7 @@ def main():
                 if latest_date is not None:
                     iuss = iuss[iuss["date"] > (latest_date - timedelta(days=10))]
                 update_on_conflict(
-                    table_def_us_index_daily_sina, conn, iuss, ["symbol", "date"]
+                    table_def_us_index_daily_sina(), conn, iuss, ["symbol", "date"]
                 )
         except Exception:
             logging.error(
@@ -1210,13 +1169,13 @@ def main():
 
 if __name__ == "__main__":
     try:
-        profiler = cProfile.Profile()
-        profiler.enable()
+        # profiler = cProfile.Profile()
+        # profiler.enable()
 
         main()
 
-        profiler.disable()
-        stats = pstats.Stats(profiler).sort_stats("cumtime")
-        stats.print_stats()
+        # profiler.disable()
+        # stats = pstats.Stats(profiler).sort_stats("cumtime")
+        # stats.print_stats()
     except Exception as e:
         logger.exception("main process terminated")

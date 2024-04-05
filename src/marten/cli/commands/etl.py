@@ -1,6 +1,5 @@
 from marten.data.etl import main
 from marten.utils.logger import get_logger
-# from ...utils.logger import get_logger
 
 import cProfile
 import pstats
