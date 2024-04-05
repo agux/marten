@@ -47,6 +47,9 @@ from sqlalchemy.dialects.postgresql import insert
 from joblib import Parallel, delayed
 from functools import lru_cache
 
+from marten.utils.logger import get_logger
+from marten.utils.database import get_database_engine
+
 # %% [markdown]
 # # Init
 
@@ -66,24 +69,7 @@ DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT")
 DB_NAME = os.getenv("DB_NAME")
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-file_handler = logging.FileHandler("etl.log")
-console_handler = logging.StreamHandler()
-
-# Step 4: Create a formatter
-formatter = logging.Formatter(
-    "%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-)
-
-# Step 5: Attach the formatter to the handlers
-file_handler.setFormatter(formatter)
-console_handler.setFormatter(formatter)
-
-# Step 6: Add the handlers to the logger
-logger.addHandler(file_handler)
-logger.addHandler(console_handler)
+logger = get_logger(__name__)
 
 xshg = xcals.get_calendar("XSHG")
 
@@ -496,7 +482,6 @@ def update_on_conflict(table_def, conn, df: pd.DataFrame, primary_keys):
     """
     Insert new records, update existing records without nullifying columns not included in the dataframe
     """
-    start = time.time()
     # Load the table metadata
     # table = sqlalchemy.Table(table, sqlalchemy.MetaData(), autoload_with=conn)
     # Create an insert statement from the DataFrame records
@@ -513,19 +498,16 @@ def update_on_conflict(table_def, conn, df: pd.DataFrame, primary_keys):
     )
     # Execute the on_conflict_do_update statement
     conn.execute(on_conflict_stmt)
-    print(f"{time.time()-start} update_on_conflict({table_def.name})")
 
 
 def ignore_on_conflict(table_def, conn, df, primary_keys):
     """
     Insert new records, ignore existing records
     """
-    start = time.time()
     # table = sqlalchemy.Table(table, sqlalchemy.MetaData(), autoload_with=conn)
     insert_stmt = insert(table_def).values(df.to_dict(orient="records"))
     on_conflict_stmt = insert_stmt.on_conflict_do_nothing(index_elements=primary_keys)
     conn.execute(on_conflict_stmt)
-    print(f"{time.time()-start} ignore_on_conflict({table_def.name})")
 
 
 def get_latest_date(conn, symbol, table):
@@ -559,494 +541,419 @@ def last_trade_date():
     return last_session
 
 
-def main():
-    logger.info("Using akshare version: %s", ak.__version__)
-    # Create an engine instance
-    # Define your database engine outside of the parallel function
-    # Using NullPool disables the connection pooling
-    alchemyEngine = create_engine(
-        f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}",
-        pool_recycle=3600,
-        # pool_size=1,
-        poolclass=NullPool,
-    )
-    SessionLocal = sessionmaker(bind=alchemyEngine)
-
-    # %%
-    # Get latest fund / ETF data set for today (or latest trading date), and persists into database.
+def etf_spot(db_url):
     logger.info("running fund_etf_spot_em()...")
-    df = ak.fund_etf_spot_em()
-    df = df[
-        [
-            "代码",
-            "名称",
-            "最新价",
-            "IOPV实时估值",
-            "基金折价率",
-            "涨跌额",
-            "涨跌幅",
-            "成交量",
-            "成交额",
-            "开盘价",
-            "最高价",
-            "最低价",
-            "昨收",
-            "换手率",
-            "量比",
-            "委比",
-            "外盘",
-            "内盘",
-            "主力净流入-净额",
-            "主力净流入-净占比",
-            "超大单净流入-净额",
-            "超大单净流入-净占比",
-            "大单净流入-净额",
-            "大单净流入-净占比",
-            "中单净流入-净额",
-            "中单净流入-净占比",
-            "小单净流入-净额",
-            "小单净流入-净占比",
-            "流通市值",
-            "总市值",
-            "最新份额",
-            "数据日期",
-            "更新时间",
+    logger = get_logger(__name__)
+    alchemyEngine = get_database_engine(db_url)
+    try:
+        df = ak.fund_etf_spot_em()
+        df = df[
+            [
+                "代码",
+                "名称",
+                "最新价",
+                "IOPV实时估值",
+                "基金折价率",
+                "涨跌额",
+                "涨跌幅",
+                "成交量",
+                "成交额",
+                "开盘价",
+                "最高价",
+                "最低价",
+                "昨收",
+                "换手率",
+                "量比",
+                "委比",
+                "外盘",
+                "内盘",
+                "主力净流入-净额",
+                "主力净流入-净占比",
+                "超大单净流入-净额",
+                "超大单净流入-净占比",
+                "大单净流入-净额",
+                "大单净流入-净占比",
+                "中单净流入-净额",
+                "中单净流入-净占比",
+                "小单净流入-净额",
+                "小单净流入-净占比",
+                "流通市值",
+                "总市值",
+                "最新份额",
+                "数据日期",
+                "更新时间",
+            ]
         ]
-    ]
-
-    saveAsCsv("fund_etf_spot_em", df)
-
-    # Rename the columns of df to match the table's column names
-    df = df.rename(
-        columns={
-            "数据日期": "date",
-            "更新时间": "update_time",
-            "代码": "code",
-            "名称": "name",
-            "最新价": "latest_price",
-            "IOPV实时估值": "iopv",
-            "基金折价率": "fund_discount_rate",
-            "涨跌额": "change_amount",
-            "涨跌幅": "change_rate",
-            "成交量": "volume",
-            "成交额": "turnover",
-            "开盘价": "opening_price",
-            "最高价": "highest_price",
-            "最低价": "lowest_price",
-            "昨收": "previous_close",
-            "换手率": "turnover_rate",
-            "量比": "volume_ratio",
-            "委比": "order_ratio",
-            "外盘": "external_disc",
-            "内盘": "internal_disc",
-            "主力净流入-净额": "main_force_net_inflow_amount",
-            "主力净流入-净占比": "main_force_net_inflow_ratio",
-            "超大单净流入-净额": "super_large_net_inflow_amount",
-            "超大单净流入-净占比": "super_large_net_inflow_ratio",
-            "大单净流入-净额": "large_net_inflow_amount",
-            "大单净流入-净占比": "large_net_inflow_ratio",
-            "中单净流入-净额": "medium_net_inflow_amount",
-            "中单净流入-净占比": "medium_net_inflow_ratio",
-            "小单净流入-净额": "small_net_inflow_amount",
-            "小单净流入-净占比": "small_net_inflow_ratio",
-            "流通市值": "circulating_market_value",
-            "总市值": "total_market_value",
-            "最新份额": "latest_shares",
-        }
-    )
-
-    with alchemyEngine.begin() as conn:
-        update_on_conflict(table_def_fund_etf_spot_em(), conn, df, ["code", "date"])
-
-    # %% [markdown]
-    # # fund_etf_perf_em
-
-    # %%
-    logger.info("running fund_exchange_rank_em()...")
-    fund_exchange_rank_em_df = ak.fund_exchange_rank_em()
-
-    saveAsCsv("fund_exchange_rank_em", fund_exchange_rank_em_df)
-
-    column_mapping = {
-        "序号": "id",
-        "基金代码": "fundcode",
-        "基金简称": "fundname",
-        "类型": "type",
-        "日期": "date",
-        "单位净值": "unitnav",
-        "累计净值": "accumulatednav",
-        "近1周": "pastweek",
-        "近1月": "pastmonth",
-        "近3月": "past3months",
-        "近6月": "past6months",
-        "近1年": "pastyear",
-        "近2年": "past2years",
-        "近3年": "past3years",
-        "今年来": "ytd",
-        "成立来": "sinceinception",
-        "成立日期": "inceptiondate",
-    }
-    fund_exchange_rank_em_df.rename(columns=column_mapping, inplace=True)
-
-    with alchemyEngine.begin() as conn:
-        update_on_conflict(
-            table_def_fund_etf_perf_em(), conn, fund_exchange_rank_em_df, ["fundcode"]
-        )
-
-    # %% [markdown]
-    # # Get a full list of ETF fund
-
-    # %%
-    # retrieve list from Sina
-    logger.info("running fund_etf_category_sina()...")
-    fund_etf_category_sina_df = ak.fund_etf_category_sina(symbol="ETF基金")
-
-    # keep only 2 columns from `fund_etf_category_sina_df`: 代码, 名称.
-    # split `代码` values by `exchange code` and `symbol` and store into 2 columns. No need to keep the `代码` column.
-    # for example: 代码=sz159998, split into `exch=sz`, `symbol=159998`.
-    df = fund_etf_category_sina_df[["代码", "名称"]].copy()
-    df.columns = ["code", "name"]
-    df[["exch", "symbol"]] = df["code"].str.extract(r"([a-z]+)(\d+)")
-    df.drop(columns=["code"], inplace=True)
-
-    # Now, use the update_on_conflict function to insert or update the data
-    with alchemyEngine.begin() as conn:
-        update_on_conflict(table_def_fund_etf_list_sina(), conn, df, ["exch", "symbol"])
-
-    # %% [markdown]
-    # # Get historical trades
-
-    # %%
-
-    # Function to fetch and process ETF data
-    def fetch_and_process_etf(symbol, url):
-        try:
-            logger.info(f"running fund_etf_hist_em({symbol})...")
-            alchemyEngine = create_engine(url, poolclass=NullPool)
-            with alchemyEngine.begin() as conn:
-                # check latest date on fund_etf_daily_em
-                latest_date = get_latest_date(conn, symbol, "fund_etf_daily_em")
-
-                start_date = "19700101"  # For entire history.
-                if latest_date is not None:
-                    start_date = (latest_date - timedelta(days=10)).strftime("%Y%m%d")
-
-                end_date = datetime.now().strftime("%Y%m%d")
-
-                df = ak.fund_etf_hist_em(
-                    symbol=symbol,
-                    period="daily",
-                    start_date=start_date,
-                    end_date=end_date,
-                    adjust="qfq",
-                )
-
-                # if df contains no row at all, return immediately
-                if df.empty:
-                    return None
-
-                df["symbol"] = symbol
-                df = df.rename(
-                    columns={
-                        "日期": "date",
-                        "开盘": "open",
-                        "收盘": "close",
-                        "最高": "high",
-                        "最低": "low",
-                        "成交量": "volume",
-                        "成交额": "turnover",
-                        "振幅": "amplitude",
-                        "涨跌幅": "change_rate",
-                        "涨跌额": "change_amount",
-                        "换手率": "turnover_rate",
-                    }
-                )
-                df = df[
-                    [
-                        "symbol",
-                        "date",
-                        "open",
-                        "close",
-                        "high",
-                        "low",
-                        "volume",
-                        "turnover",
-                        "amplitude",
-                        "change_rate",
-                        "change_amount",
-                        "turnover_rate",
-                    ]
-                ]
-
-                ignore_on_conflict(
-                    table_def_fund_etf_daily_em(), conn, df, ["symbol", "date"]
-                )
-        except Exception:
-            logging.error(
-                f"failed to get daily trade history data for {symbol}", exc_info=True
-            )
-            return None
-        return df
-
-    # Fetch the ETF list
-    etf_list_df = pd.read_sql("SELECT symbol FROM fund_etf_list_sina", alchemyEngine)
-    logger.info(f"starting joblib on function fetch_and_process_etf()...")
-    Parallel(n_jobs=-1)(
-        delayed(fetch_and_process_etf)(symbol, alchemyEngine.url)
-        for symbol in etf_list_df["symbol"]
-    )
-
-    # %% [markdown]
-    # # Calculate ETF Performance Metrics
-
-    # %% [markdown]
-    # ## Get historical bond rate (risk-free interest rate)
-
-    # %%
-    # start_date = (datetime.now() - timedelta(days=20)).strftime('%Y%m%d')
-    start_date = None  # For entire history.
-    with alchemyEngine.begin() as conn:
-        latest_date = get_latest_date(conn, None, "bond_metrics_em")
-        if latest_date is not None:
-            start_date = latest_date.strftime("%Y%m%d")
-        logger.info(f"running bond_zh_us_rate()...")
-        bzur = ak.bond_zh_us_rate(start_date)
-        bzur = bzur.rename(
+        saveAsCsv("fund_etf_spot_em", df)
+        # Rename the columns of df to match the table's column names
+        df = df.rename(
             columns={
-                "日期": "date",
-                "中国国债收益率2年": "china_yield_2y",
-                "中国国债收益率5年": "china_yield_5y",
-                "中国国债收益率10年": "china_yield_10y",
-                "中国国债收益率30年": "china_yield_30y",
-                "中国国债收益率10年-2年": "china_yield_spread_10y_2y",
-                "中国GDP年增率": "china_gdp_growth",
-                "美国国债收益率2年": "us_yield_2y",
-                "美国国债收益率5年": "us_yield_5y",
-                "美国国债收益率10年": "us_yield_10y",
-                "美国国债收益率30年": "us_yield_30y",
-                "美国国债收益率10年-2年": "us_yield_spread_10y_2y",
-                "美国GDP年增率": "us_gdp_growth",
+                "数据日期": "date",
+                "更新时间": "update_time",
+                "代码": "code",
+                "名称": "name",
+                "最新价": "latest_price",
+                "IOPV实时估值": "iopv",
+                "基金折价率": "fund_discount_rate",
+                "涨跌额": "change_amount",
+                "涨跌幅": "change_rate",
+                "成交量": "volume",
+                "成交额": "turnover",
+                "开盘价": "opening_price",
+                "最高价": "highest_price",
+                "最低价": "lowest_price",
+                "昨收": "previous_close",
+                "换手率": "turnover_rate",
+                "量比": "volume_ratio",
+                "委比": "order_ratio",
+                "外盘": "external_disc",
+                "内盘": "internal_disc",
+                "主力净流入-净额": "main_force_net_inflow_amount",
+                "主力净流入-净占比": "main_force_net_inflow_ratio",
+                "超大单净流入-净额": "super_large_net_inflow_amount",
+                "超大单净流入-净占比": "super_large_net_inflow_ratio",
+                "大单净流入-净额": "large_net_inflow_amount",
+                "大单净流入-净占比": "large_net_inflow_ratio",
+                "中单净流入-净额": "medium_net_inflow_amount",
+                "中单净流入-净占比": "medium_net_inflow_ratio",
+                "小单净流入-净额": "small_net_inflow_amount",
+                "小单净流入-净占比": "small_net_inflow_ratio",
+                "流通市值": "circulating_market_value",
+                "总市值": "total_market_value",
+                "最新份额": "latest_shares",
             }
         )
-
-        ignore_on_conflict(table_def_bond_metrics_em(), conn, bzur, ["date"])
-
-    # %% [markdown]
-    # ## Calc / Update metrics in fund_etf_perf_em table
-
-    # %%
-    end_date = last_trade_date()
-    # start_date = (end_date - timedelta(days=interval)).strftime('%Y%m%d')
-    # start_date = '19700101' # For entire history.
-
-    # load historical data from daily table and calc metrics, then update perf table
-    def update_etf_metrics(symbol, url, end_date):
-        interval = 250  # assume 250 trading days annualy
-        alchemyEngine = create_engine(url, poolclass=NullPool)
-        try:
-            with alchemyEngine.begin() as conn:
-                # load the latest (top) `interval` records of historical market data records from `fund_etf_daily_em` table for `symbol`, order by `date`.
-                # select columns: date, change_rate
-                query = """SELECT date, change_rate FROM fund_etf_daily_em WHERE symbol = '{}' ORDER BY date DESC LIMIT {}""".format(
-                    symbol, interval
-                )
-                df = pd.read_sql(query, conn, parse_dates=["date"])
-
-                # get oldest df['date'] as state_date
-                start_date = df["date"].iloc[-1]
-                # get 2-years CN bond IR as risk-free IR from bond_metrics_em table. 1-year series (natural dates).
-                # select date, china_yield_2y from table `bond_metrics_em`, where date is between start_date and end_date (inclusive). Load into a dataframe.
-                query = """SELECT date, china_yield_2y FROM bond_metrics_em WHERE date BETWEEN '{}' AND '{}' and china_yield_2y <> 'nan'""".format(
-                    start_date, end_date
-                )
-                bme_df = pd.read_sql(query, conn, parse_dates=["date"])
-                # Convert annualized rate to a daily rate
-                bme_df["china_yield_2y_daily"] = bme_df["china_yield_2y"] / 365.25
-
-                # merge df with bme_df by matching dates.
-                df = pd.merge_asof(
-                    df.sort_values("date"),
-                    bme_df.sort_values("date"),
-                    on="date",
-                    direction="backward",
-                ).dropna(subset=["change_rate"])
-
-                # calculate the Sharpe ratio, Sortino ratio, and max drawdown with the time series data inside df.
-                df["excess_return"] = df["change_rate"] - df["china_yield_2y_daily"]
-                # Annualize the excess return
-                annualized_excess_return = np.mean(df["excess_return"])
-
-                # Calculate the standard deviation of the excess returns
-                std_dev = df["excess_return"].std()
-
-                # Sharpe ratio
-                sharpe_ratio = annualized_excess_return / std_dev
-
-                # Calculate the downside deviation (Sortino ratio denominator)
-                downside_dev = df[df["excess_return"] < 0]["excess_return"].std()
-
-                # Sortino ratio
-                sortino_ratio = (
-                    annualized_excess_return / downside_dev
-                    if downside_dev > 0
-                    else None
-                )
-
-                # To calculate max drawdown, get the cummulative_returns
-                df["cumulative_returns"] = np.cumprod(1 + df["change_rate"] / 100.0) - 1
-                # Calculate the maximum cumulative return up to each point
-                peak = np.maximum.accumulate(df["cumulative_returns"])
-                # Calculate drawdown as the difference between the current value and the peak
-                drawdown = (df["cumulative_returns"] - peak) / (1 + peak) * 100
-                # Calculate max drawdown
-                max_drawdown = np.min(drawdown)  # This is a negative number
-
-                # update the `sharperatio, sortinoratio, maxdrawdown` columns for `symbol` in the table `fund_etf_perf_em` using the calculated metrics.
-                update_query = text(
-                    "UPDATE fund_etf_perf_em SET sharperatio = :sharperatio, sortinoratio = :sortinoratio, maxdrawdown = :maxdrawdown WHERE fundcode = :fundcode"
-                )
-                params = {
-                    "sharperatio": (
-                        round(sharpe_ratio, 2)
-                        if sharpe_ratio is not None and math.isfinite(sharpe_ratio)
-                        else None
-                    ),
-                    "sortinoratio": (
-                        round(sortino_ratio, 2)
-                        if sortino_ratio is not None and math.isfinite(sortino_ratio)
-                        else None
-                    ),
-                    "maxdrawdown": (
-                        round(max_drawdown, 2) if math.isfinite(max_drawdown) else None
-                    ),
-                    "fundcode": symbol,
-                }
-                conn.execute(update_query, params)
-
-        except Exception:
-            logging.error(f"failed to update ETF metrics for {symbol}", exc_info=True)
-            return None
-        return df
-
-    # Fetch the ETF list
-    etf_list_df = pd.read_sql("SELECT symbol FROM fund_etf_list_sina", alchemyEngine)
-
-    # get the number of CPU cores
-    num_proc = int((multiprocessing.cpu_count() + 1) / 2.0)
-    logger.info(f"starting joblib on function update_etf_metrics()...")
-    Parallel(n_jobs=num_proc)(
-        delayed(update_etf_metrics)(symbol, alchemyEngine.url, end_date)
-        for symbol in etf_list_df["symbol"]
-    )
+        with alchemyEngine.begin() as conn:
+            update_on_conflict(table_def_fund_etf_spot_em(), conn, df, ["code", "date"])
+    except Exception as e:
+        logger.exception("failed to get ETF spot data")
 
 
-    # %% [markdown]
-    # # China Market Indices
+def etf_perf(db_url):
+    logger = get_logger(__name__)
+    alchemyEngine = get_database_engine(db_url)
+    try:
+        logger.info("running fund_exchange_rank_em()...")
+        fund_exchange_rank_em_df = ak.fund_exchange_rank_em()
+        saveAsCsv("fund_exchange_rank_em", fund_exchange_rank_em_df)
+        column_mapping = {
+            "序号": "id",
+            "基金代码": "fundcode",
+            "基金简称": "fundname",
+            "类型": "type",
+            "日期": "date",
+            "单位净值": "unitnav",
+            "累计净值": "accumulatednav",
+            "近1周": "pastweek",
+            "近1月": "pastmonth",
+            "近3月": "past3months",
+            "近6月": "past6months",
+            "近1年": "pastyear",
+            "近2年": "past2years",
+            "近3年": "past3years",
+            "今年来": "ytd",
+            "成立来": "sinceinception",
+            "成立日期": "inceptiondate",
+        }
+        fund_exchange_rank_em_df.rename(columns=column_mapping, inplace=True)
+        with alchemyEngine.begin() as conn:
+            update_on_conflict(
+                table_def_fund_etf_perf_em(),
+                conn,
+                fund_exchange_rank_em_df,
+                ["fundcode"],
+            )
+    except Exception as e:
+        logger.exception("failed to get ETF performance data")
 
-    # %%
-    cn_index_list = [
-        ("上证系列指数", "sh"),
-        ("深证系列指数", "sz"),
-        # ("指数成份", ""),
-        ("中证系列指数", "csi"),
-    ]
 
-    def stock_zh_index_spot_em(symbol, src, url):
-        try:
-            szise = ak.stock_zh_index_spot_em(symbol)
-            szise = szise.rename(
+def etf_list(db_url):
+    logger = get_logger(__name__)
+    alchemyEngine = get_database_engine(db_url)
+    try:
+        logger.info("running fund_etf_category_sina()...")
+        fund_etf_category_sina_df = ak.fund_etf_category_sina(symbol="ETF基金")
+
+        # keep only 2 columns from `fund_etf_category_sina_df`: 代码, 名称.
+        # split `代码` values by `exchange code` and `symbol` and store into 2 columns. No need to keep the `代码` column.
+        # for example: 代码=sz159998, split into `exch=sz`, `symbol=159998`.
+        df = fund_etf_category_sina_df[["代码", "名称"]].copy()
+        df.columns = ["code", "name"]
+        df[["exch", "symbol"]] = df["code"].str.extract(r"([a-z]+)(\d+)")
+        df.drop(columns=["code"], inplace=True)
+
+        # Now, use the update_on_conflict function to insert or update the data
+        with alchemyEngine.begin() as conn:
+            update_on_conflict(
+                table_def_fund_etf_list_sina(), conn, df, ["exch", "symbol"]
+            )
+
+        return len(df)
+    except Exception as e:
+        logger.exception("failed to get ETF list")
+
+
+# Function to fetch and process ETF data
+def get_etf_daily(symbol, url):
+    logger = get_logger(__name__)
+    try:
+        logger.info(f"running fund_etf_hist_em({symbol})...")
+        alchemyEngine = get_database_engine(url)
+        with alchemyEngine.begin() as conn:
+            # check latest date on fund_etf_daily_em
+            latest_date = get_latest_date(conn, symbol, "fund_etf_daily_em")
+
+            start_date = "19700101"  # For entire history.
+            if latest_date is not None:
+                start_date = (latest_date - timedelta(days=10)).strftime("%Y%m%d")
+
+            end_date = datetime.now().strftime("%Y%m%d")
+
+            df = ak.fund_etf_hist_em(
+                symbol=symbol,
+                period="daily",
+                start_date=start_date,
+                end_date=end_date,
+                adjust="qfq",
+            )
+
+            # if df contains no row at all, return immediately
+            if df.empty:
+                return None
+
+            df["symbol"] = symbol
+            df = df.rename(
                 columns={
-                    "序号": "seq",
-                    "代码": "symbol",
-                    "名称": "name",
-                    "最新价": "close",
-                    "涨跌幅": "change_rate",
-                    "涨跌额": "change_amount",
-                    "成交量": "volume",
-                    "成交额": "amount",
-                    "振幅": "amplitude",
+                    "日期": "date",
+                    "开盘": "open",
+                    "收盘": "close",
                     "最高": "high",
                     "最低": "low",
-                    "今开": "open",
-                    "昨收": "prev_close",
-                    "量比": "volume_ratio",
+                    "成交量": "volume",
+                    "成交额": "turnover",
+                    "振幅": "amplitude",
+                    "涨跌幅": "change_rate",
+                    "涨跌额": "change_amount",
+                    "换手率": "turnover_rate",
                 }
             )
-            szise["src"] = src
-            alchemyEngine = create_engine(url, poolclass=NullPool)
-            with alchemyEngine.begin() as conn:
-                update_on_conflict(table_def_index_spot_em(), conn, szise, ["symbol"])
+            df = df[
+                [
+                    "symbol",
+                    "date",
+                    "open",
+                    "close",
+                    "high",
+                    "low",
+                    "volume",
+                    "turnover",
+                    "amplitude",
+                    "change_rate",
+                    "change_amount",
+                    "turnover_rate",
+                ]
+            ]
 
-        except Exception:
-            logging.error(f"failed to update index_spot_em for {symbol}", exc_info=True)
-            return None
-        return szise
-
-    # get the number of CPU cores
-    num_proc = int((multiprocessing.cpu_count() + 1) / 2.0)
-    logger.info("starting joblib on function stock_zh_index_spot_em()...")
-    Parallel(n_jobs=num_proc)(
-        delayed(stock_zh_index_spot_em)(
-            symbol,
-            src,
-            alchemyEngine.url,
-        )
-        for symbol, src in cn_index_list
-    )
-
-    # %%
-    # get daily historical data
-    def stock_zh_index_daily_em(symbol, src, url):
-        try:
-            alchemyEngine = create_engine(url, poolclass=NullPool)
-            with alchemyEngine.begin() as conn:
-                latest_date = get_latest_date(conn, symbol, "index_daily_em")
-
-                start_date = "19900101"  # For entire history.
-                if latest_date is not None:
-                    start_date = (latest_date - timedelta(days=10)).strftime("%Y%m%d")
-
-                end_date = datetime.now().strftime("%Y%m%d")
-
-                szide = ak.stock_zh_index_daily_em(
-                    f"{src}{symbol}", start_date, end_date
-                )
-
-                # if shide is empty, return immediately
-                if szide.empty:
-                    logger.warning("index data is empty: %s", symbol)
-                    return None
-
-                szide["symbol"] = symbol
-
-                ignore_on_conflict(
-                    table_def_index_daily_em(), conn, szide, ["symbol", "date"]
-                )
-
-        except Exception:
-            logging.error(
-                f"failed to update index_daily_em for {symbol}", exc_info=True
+            ignore_on_conflict(
+                table_def_fund_etf_daily_em(), conn, df, ["symbol", "date"]
             )
-            return None
+
+            return len(df)
+    except Exception:
+        logging.error(
+            f"failed to get daily trade history data for {symbol}", exc_info=True
+        )
+        return None
+
+
+def bond_ir(db_url):
+    logger = get_logger(__name__)
+    try:
+        start_date = None  # For entire history.
+        alchemyEngine = get_database_engine(db_url)
+        with alchemyEngine.begin() as conn:
+            latest_date = get_latest_date(conn, None, "bond_metrics_em")
+            if latest_date is not None:
+                start_date = latest_date.strftime("%Y%m%d")
+            logger.info(f"running bond_zh_us_rate()...")
+            bzur = ak.bond_zh_us_rate(start_date)
+            bzur = bzur.rename(
+                columns={
+                    "日期": "date",
+                    "中国国债收益率2年": "china_yield_2y",
+                    "中国国债收益率5年": "china_yield_5y",
+                    "中国国债收益率10年": "china_yield_10y",
+                    "中国国债收益率30年": "china_yield_30y",
+                    "中国国债收益率10年-2年": "china_yield_spread_10y_2y",
+                    "中国GDP年增率": "china_gdp_growth",
+                    "美国国债收益率2年": "us_yield_2y",
+                    "美国国债收益率5年": "us_yield_5y",
+                    "美国国债收益率10年": "us_yield_10y",
+                    "美国国债收益率30年": "us_yield_30y",
+                    "美国国债收益率10年-2年": "us_yield_spread_10y_2y",
+                    "美国GDP年增率": "us_gdp_growth",
+                }
+            )
+            ignore_on_conflict(table_def_bond_metrics_em(), conn, bzur, ["date"])
+            return len(bzur)
+    except Exception as e:
+        logger.exception("failed to get bond interest rate")
+
+
+# load historical data from daily table and calc metrics, then update perf table
+def update_etf_metrics(symbol, url, end_date):
+    logger = get_logger(__name__)
+    interval = 250  # assume 250 trading days annualy
+    alchemyEngine = get_database_engine(url)
+    try:
+        with alchemyEngine.begin() as conn:
+            # load the latest (top) `interval` records of historical market data records from `fund_etf_daily_em` table for `symbol`, order by `date`.
+            # select columns: date, change_rate
+            query = """SELECT date, change_rate FROM fund_etf_daily_em WHERE symbol = '{}' ORDER BY date DESC LIMIT {}""".format(
+                symbol, interval
+            )
+            df = pd.read_sql(query, conn, parse_dates=["date"])
+
+            # get oldest df['date'] as state_date
+            start_date = df["date"].iloc[-1]
+            # get 2-years CN bond IR as risk-free IR from bond_metrics_em table. 1-year series (natural dates).
+            # select date, china_yield_2y from table `bond_metrics_em`, where date is between start_date and end_date (inclusive). Load into a dataframe.
+            query = """SELECT date, china_yield_2y FROM bond_metrics_em WHERE date BETWEEN '{}' AND '{}' and china_yield_2y <> 'nan'""".format(
+                start_date, end_date
+            )
+            bme_df = pd.read_sql(query, conn, parse_dates=["date"])
+            # Convert annualized rate to a daily rate
+            bme_df["china_yield_2y_daily"] = bme_df["china_yield_2y"] / 365.25
+
+            # merge df with bme_df by matching dates.
+            df = pd.merge_asof(
+                df.sort_values("date"),
+                bme_df.sort_values("date"),
+                on="date",
+                direction="backward",
+            ).dropna(subset=["change_rate"])
+
+            # calculate the Sharpe ratio, Sortino ratio, and max drawdown with the time series data inside df.
+            df["excess_return"] = df["change_rate"] - df["china_yield_2y_daily"]
+            # Annualize the excess return
+            annualized_excess_return = np.mean(df["excess_return"])
+
+            # Calculate the standard deviation of the excess returns
+            std_dev = df["excess_return"].std()
+
+            # Sharpe ratio
+            sharpe_ratio = annualized_excess_return / std_dev
+
+            # Calculate the downside deviation (Sortino ratio denominator)
+            downside_dev = df[df["excess_return"] < 0]["excess_return"].std()
+
+            # Sortino ratio
+            sortino_ratio = (
+                annualized_excess_return / downside_dev if downside_dev > 0 else None
+            )
+
+            # To calculate max drawdown, get the cummulative_returns
+            df["cumulative_returns"] = np.cumprod(1 + df["change_rate"] / 100.0) - 1
+            # Calculate the maximum cumulative return up to each point
+            peak = np.maximum.accumulate(df["cumulative_returns"])
+            # Calculate drawdown as the difference between the current value and the peak
+            drawdown = (df["cumulative_returns"] - peak) / (1 + peak) * 100
+            # Calculate max drawdown
+            max_drawdown = np.min(drawdown)  # This is a negative number
+
+            # update the `sharperatio, sortinoratio, maxdrawdown` columns for `symbol` in the table `fund_etf_perf_em` using the calculated metrics.
+            update_query = text(
+                "UPDATE fund_etf_perf_em SET sharperatio = :sharperatio, sortinoratio = :sortinoratio, maxdrawdown = :maxdrawdown WHERE fundcode = :fundcode"
+            )
+            params = {
+                "sharperatio": (
+                    round(sharpe_ratio, 2)
+                    if sharpe_ratio is not None and math.isfinite(sharpe_ratio)
+                    else None
+                ),
+                "sortinoratio": (
+                    round(sortino_ratio, 2)
+                    if sortino_ratio is not None and math.isfinite(sortino_ratio)
+                    else None
+                ),
+                "maxdrawdown": (
+                    round(max_drawdown, 2) if math.isfinite(max_drawdown) else None
+                ),
+                "fundcode": symbol,
+            }
+            conn.execute(update_query, params)
+
+        return len(df)
+    except Exception:
+        logger.error(f"failed to update ETF metrics for {symbol}", exc_info=True)
+        return None
+
+
+def stock_zh_index_spot_em(symbol, src, url):
+    logger = get_logger(__name__)
+    try:
+        szise = ak.stock_zh_index_spot_em(symbol)
+        szise = szise.rename(
+            columns={
+                "序号": "seq",
+                "代码": "symbol",
+                "名称": "name",
+                "最新价": "close",
+                "涨跌幅": "change_rate",
+                "涨跌额": "change_amount",
+                "成交量": "volume",
+                "成交额": "amount",
+                "振幅": "amplitude",
+                "最高": "high",
+                "最低": "low",
+                "今开": "open",
+                "昨收": "prev_close",
+                "量比": "volume_ratio",
+            }
+        )
+        szise["src"] = src
+        alchemyEngine = get_database_engine(url)
+        with alchemyEngine.begin() as conn:
+            update_on_conflict(table_def_index_spot_em(), conn, szise, ["symbol"])
+        return szise
+    except Exception:
+        logger.error(f"failed to update index_spot_em for {symbol}", exc_info=True)
+        return None
+
+
+def stock_zh_index_daily_em(symbol, src, url):
+    logger = get_logger(__name__)
+    try:
+        alchemyEngine = get_database_engine(url)
+        with alchemyEngine.begin() as conn:
+            latest_date = get_latest_date(conn, symbol, "index_daily_em")
+
+            start_date = "19900101"  # For entire history.
+            if latest_date is not None:
+                start_date = (latest_date - timedelta(days=10)).strftime("%Y%m%d")
+
+            end_date = datetime.now().strftime("%Y%m%d")
+
+            szide = ak.stock_zh_index_daily_em(f"{src}{symbol}", start_date, end_date)
+
+            # if shide is empty, return immediately
+            if szide.empty:
+                logger.warning("index data is empty: %s", symbol)
+                return None
+
+            szide["symbol"] = symbol
+
+            ignore_on_conflict(
+                table_def_index_daily_em(), conn, szide, ["symbol", "date"]
+            )
         return szide
+    except Exception:
+        logger.error(f"failed to update index_daily_em for {symbol}", exc_info=True)
+        return None
 
-    conn = alchemyEngine.connect()
-    cn_index_fulllist = pd.read_sql("SELECT src, symbol FROM index_spot_em", conn)
-    conn.close()
 
-    # get the number of CPU cores
-    # num_proc = int((multiprocessing.cpu_count() + 1) / 2.0)
-    logger.info("starting joblib on function stock_zh_index_daily_em()...")
-    Parallel(n_jobs=-1)(
-        delayed(stock_zh_index_daily_em)(symbol, src, alchemyEngine.url)
-        for symbol, src in zip(cn_index_fulllist["symbol"], cn_index_fulllist["src"])
-    )
-
-    # %% [markdown]
-    # # Get HK Market Indices
-
-    # %%
-    # refresh the list
+def hk_index_spot(alchemyEngine):
+    global logger
     logger.info("running stock_hk_index_spot_em()...")
     hk_index_list_df = ak.stock_hk_index_spot_em()
     hk_index_list_df = hk_index_list_df.rename(
@@ -1067,103 +974,173 @@ def main():
         }
     )
 
-    # saveAsCsv("hk_index_spot_em", df)
-
     with alchemyEngine.begin() as conn:
         update_on_conflict(
             table_def_hk_index_spot_em(), conn, hk_index_list_df, ["symbol"]
         )
+    return hk_index_list_df
 
-    # %%
-    # get daily historical data
-    def update_hk_indices(symbol, url):
-        try:
-            shide = ak.stock_hk_index_daily_em(symbol=symbol)
 
-            # if shide is empty, return immediately
-            if shide.empty:
-                return None
+def update_hk_indices(symbol, url):
+    logger = get_logger(__name__)
+    try:
+        shide = ak.stock_hk_index_daily_em(symbol=symbol)
 
-            shide["symbol"] = symbol
-            shide = shide.rename(
-                columns={
-                    "latest": "close",
-                }
-            )
-            # Convert the 'date' column to datetime
-            shide["date"] = pd.to_datetime(shide["date"]).dt.date
-            alchemyEngine = create_engine(url, poolclass=NullPool)
-            with alchemyEngine.begin() as conn:
-                latest_date = get_latest_date(conn, symbol, "hk_index_daily_em")
-
-                if latest_date is not None:
-                    ## keep rows only with `date` later than the latest record in database.
-                    shide = shide[shide["date"] > (latest_date - timedelta(days=10))]
-                update_on_conflict(
-                    table_def_hk_index_daily_em(), conn, shide, ["symbol", "date"]
-                )
-
-        except Exception:
-            logging.error(
-                f"failed to update hk_index_daily_em for {symbol}", exc_info=True
-            )
+        # if shide is empty, return immediately
+        if shide.empty:
             return None
+
+        shide["symbol"] = symbol
+        shide = shide.rename(
+            columns={
+                "latest": "close",
+            }
+        )
+        # Convert the 'date' column to datetime
+        shide["date"] = pd.to_datetime(shide["date"]).dt.date
+        alchemyEngine = get_database_engine(url)
+        with alchemyEngine.begin() as conn:
+            latest_date = get_latest_date(conn, symbol, "hk_index_daily_em")
+
+            if latest_date is not None:
+                ## keep rows only with `date` later than the latest record in database.
+                shide = shide[shide["date"] > (latest_date - timedelta(days=10))]
+            update_on_conflict(
+                table_def_hk_index_daily_em(), conn, shide, ["symbol", "date"]
+            )
+
         return shide
+    except Exception:
+        logger.error(f"failed to update hk_index_daily_em for {symbol}", exc_info=True)
+        return None
 
-    # get the number of CPU cores
-    # num_proc = int((multiprocessing.cpu_count() + 1) / 2.0)
-    logger.info("starting joblib on function update_hk_indices()...")
-    Parallel(n_jobs=-1)(
-        delayed(update_hk_indices)(
-            symbol,
-            alchemyEngine.url,
-        )
-        for symbol in hk_index_list_df["symbol"]
-    )
 
-    # %% [markdown]
-    # # Get US market indices
-
-    # %%
-    idx_symbol_list = [".IXIC", ".DJI", ".INX", ".NDX"]
-
-    def update_us_indices(symbol, url):
-        try:
-            iuss = ak.index_us_stock_sina(symbol=symbol)
-            iuss["symbol"] = symbol
-            # Convert iuss["date"] to datetime and normalize to date only
-            iuss["date"] = pd.to_datetime(iuss["date"]).dt.date
-            alchemyEngine = create_engine(url, poolclass=NullPool)
-            with alchemyEngine.begin() as conn:
-                latest_date = get_latest_date(conn, symbol, "us_index_daily_sina")
-                if latest_date is not None:
-                    iuss = iuss[iuss["date"] > (latest_date - timedelta(days=10))]
-                update_on_conflict(
-                    table_def_us_index_daily_sina(), conn, iuss, ["symbol", "date"]
-                )
-        except Exception:
-            logging.error(
-                f"failed to update us_index_daily_sina for {symbol}", exc_info=True
+def update_us_indices(symbol, url):
+    logger = get_logger(__name__)
+    try:
+        iuss = ak.index_us_stock_sina(symbol=symbol)
+        iuss["symbol"] = symbol
+        # Convert iuss["date"] to datetime and normalize to date only
+        iuss["date"] = pd.to_datetime(iuss["date"]).dt.date
+        alchemyEngine = get_database_engine(url)
+        with alchemyEngine.begin() as conn:
+            latest_date = get_latest_date(conn, symbol, "us_index_daily_sina")
+            if latest_date is not None:
+                iuss = iuss[iuss["date"] > (latest_date - timedelta(days=10))]
+            update_on_conflict(
+                table_def_us_index_daily_sina(), conn, iuss, ["symbol", "date"]
             )
-            return None
         return iuss
-
-    # get the number of CPU cores
-    num_proc = int((multiprocessing.cpu_count() + 1) / 2.0)
-    logger.info("starting joblib on function update_us_indices()...")
-    Parallel(n_jobs=num_proc)(
-        delayed(update_us_indices)(
-            symbol,
-            alchemyEngine.url,
+    except Exception:
+        logger.error(
+            f"failed to update us_index_daily_sina for {symbol}", exc_info=True
         )
-        for symbol in idx_symbol_list
+        return None
+
+
+def main():
+    logger.info("Using akshare version: %s", ak.__version__)
+    # Create an engine instance
+    # Define your database engine outside of the parallel function
+    # Using NullPool disables the connection pooling
+    db_url = (
+        f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    )
+    alchemyEngine = get_database_engine(db_url, pool_size=1)
+
+    parallel_runner = Parallel(n_jobs=-1)
+    # List to store the results of the asynchronous tasks
+    results = []
+
+    results.extend(parallel_runner(delayed(etf_spot)(db_url)))
+    results.extend(parallel_runner(delayed(etf_perf)(db_url)))
+
+    runner = parallel_runner(delayed(etf_list)(db_url))
+    task_result = runner  # to await for the async job done?
+    # Fetch the ETF list
+    etf_list_df = pd.read_sql("SELECT symbol FROM fund_etf_list_sina", alchemyEngine)
+    logger.info(f"starting joblib on function get_etf_daily()...")
+    results.extend(
+        parallel_runner(
+            delayed(get_etf_daily)(symbol, db_url) for symbol in etf_list_df["symbol"]
+        )
     )
 
-    # %% [markdown]
-    # # Finally
+    runner = parallel_runner(delayed(bond_ir)(db_url))
+    task_result = runner  # to await for the async job done?
+
+    end_date = last_trade_date()
+    logger.info(
+        "starting joblib on function update_etf_metrics(), last trade date: ", end_date
+    )
+    results.extend(
+        parallel_runner(
+            delayed(update_etf_metrics)(symbol, db_url, end_date)
+            for symbol in etf_list_df["symbol"]
+        )
+    )
 
     # %%
-    # calculate and print outthe time taken to execute all the codes above
+    cn_index_list = [
+        ("上证系列指数", "sh"),
+        ("深证系列指数", "sz"),
+        # ("指数成份", ""),
+        ("中证系列指数", "csi"),
+    ]
+    must_wait_results = []
+    logger.info("starting joblib on function stock_zh_index_spot_em()...")
+    must_wait_results.extend(
+        parallel_runner(
+            delayed(stock_zh_index_spot_em)(
+                symbol,
+                src,
+                db_url,
+            )
+            for symbol, src in cn_index_list
+        )
+    )
+    task_result = must_wait_results
+
+    cn_index_fulllist = pd.read_sql(
+        "SELECT src, symbol FROM index_spot_em", alchemyEngine
+    )
+    logger.info("starting joblib on function stock_zh_index_daily_em()...")
+    results.extend(
+        parallel_runner(
+            delayed(stock_zh_index_daily_em)(symbol, src, db_url)
+            for symbol, src in zip(
+                cn_index_fulllist["symbol"], cn_index_fulllist["src"]
+            )
+        )
+    )
+
+    hk_index_list_df = hk_index_spot(alchemyEngine)
+
+    logger.info("starting joblib on function update_hk_indices()...")
+    results.extend(
+        parallel_runner(
+            delayed(update_hk_indices)(
+                symbol,
+                db_url,
+            )
+            for symbol in hk_index_list_df["symbol"]
+        )
+    )
+
+    idx_symbol_list = [".IXIC", ".DJI", ".INX", ".NDX"]
+    logger.info("starting joblib on function update_us_indices()...")
+    results.extend(
+        parallel_runner(
+            delayed(update_us_indices)(
+                symbol,
+                db_url,
+            )
+            for symbol in idx_symbol_list
+        )
+    )
+
+    wait_results = results
+
     logger.info("Time taken: %s seconds", time.time() - t_start)
 
 
