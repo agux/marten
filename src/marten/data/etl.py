@@ -168,7 +168,7 @@ def table_def_fund_etf_spot_em():
     return Table(
         "fund_etf_spot_em",
         MetaData(),
-        Column("date", DateTime, nullable=False, comment="Date of the record"),
+        Column("date", Date, nullable=False, comment="Date of the record"),
         Column("code", String(10), nullable=False, comment="Stock code"),
         Column("name", String(100), comment="Stock name"),
         Column("latest_price", Numeric, comment="Latest trading price"),
