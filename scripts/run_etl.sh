@@ -7,7 +7,7 @@ if command -v pyenv 1>/dev/null 2>&1; then
   eval "$(pyenv init -)"
 fi
 
-COMMAND="marten etl --profile"
+COMMAND="$(pyenv which marten) etl --profile"
 # script=etl.py
 # PYENV_PYTHON=$(pyenv which python)
 

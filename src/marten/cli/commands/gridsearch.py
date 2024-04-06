@@ -42,21 +42,27 @@ def configure_parser(parser):
         action="store",
         type=int,
         default=500,
-        help="Epochs for training the model",
+        help="Epochs for training the model. Defaults to 500",
     )
     parser.add_argument(
         "--worker",
         action="store",
         type=int,
         default=-1,
-        help="Number or parallel workers (python processes) for training the model",
+        help=("Number or parallel workers (python processes) for training the model. "
+              "Defaults to using all CPU cores available."
+        )
     )
     parser.add_argument(
         "--timestep_limit",
         action="store",
         type=int,
         default=1200,
-        help="Limit the time steps of anchor symbol to the most recent N data points. Specify -1 to utilize all time steps available.",
+        help=(
+            "Limit the time steps of anchor symbol to the most recent N data points. "
+            "Specify -1 to utilize all time steps available. "
+            "Defaults to 1200"
+        ),
     )
     parser.add_argument(
         "--accelerator", action="store_true", help="Use accelerator automatically"
