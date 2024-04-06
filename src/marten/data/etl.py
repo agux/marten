@@ -539,8 +539,8 @@ def last_trade_date():
 
 
 def etf_spot(db_url):
-    logger.info("running fund_etf_spot_em()...")
     logger = get_logger(__name__)
+    logger.info("running fund_etf_spot_em()...")
     alchemyEngine = get_database_engine(db_url)
     try:
         df = ak.fund_etf_spot_em()
