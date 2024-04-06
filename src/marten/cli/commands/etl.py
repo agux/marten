@@ -1,4 +1,4 @@
-from marten.data.etl import main
+from marten.data.etl import main, run_main_with_profiling
 from marten.utils.logger import get_logger
 
 import cProfile
@@ -15,12 +15,7 @@ def handle_etl(args):
 
     try:
         if args.profile:
-            profiler = cProfile.Profile()
-            profiler.enable()
-            main()
-            profiler.disable()
-            stats = pstats.Stats(profiler).sort_stats("cumtime")
-            stats.print_stats()
+            run_main_with_profiling()
         else:
             main()
 

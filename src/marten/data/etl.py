@@ -18,6 +18,8 @@ from dotenv import load_dotenv
 import cProfile
 import pstats
 
+import yappi
+
 # import exchange_calendars as xcals
 from datetime import datetime, timedelta
 
@@ -473,11 +475,6 @@ def table_def_bond_metrics_em():
     )
 
 
-# %% [markdown]
-# # Helper functions
-
-
-# %%
 def update_on_conflict(table_def, conn, df: pd.DataFrame, primary_keys):
     """
     Insert new records, update existing records without nullifying columns not included in the dataframe
@@ -1142,6 +1139,27 @@ def main():
     wait_results = results
 
     logger.info("Time taken: %s seconds", time.time() - t_start)
+
+def run_main_with_profiling():
+    yappi.set_clock_type("wall")  # Use wall time (real time) instead of CPU time
+    yappi.start()
+
+    main()
+
+    yappi.stop()
+
+    func_stats = yappi.get_func_stats()
+    func_stats.sort("cumtime")
+    with open('func_stats_sorted.txt', 'w') as file:
+        # Redirect stdout to the file
+        sys.stdout = file
+        # Print all function stats to the file
+        func_stats.print_all()
+        # Reset stdout to its original value
+        sys.stdout = sys.__stdout__
+
+    # thread_stats = yappi.get_thread_stats()
+    # thread_stats.save("thread_stats.prof", type="pstat")
 
 
 if __name__ == "__main__":

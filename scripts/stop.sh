@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Name of the Python script without the .py extension
-SCRIPT_NAME="etl.py"
+# Name of the Python program
+SCRIPT_NAME="marten"
 
 # Use pgrep to find the PID of the main script based on its name
 MAIN_PID=$(pgrep -f $SCRIPT_NAME)

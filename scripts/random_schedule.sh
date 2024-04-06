@@ -4,7 +4,7 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # Your actual script you want to run at a random time
-ACTUAL_SCRIPT="run.sh"
+ACTUAL_SCRIPT="run_etl.sh"
 
 # Calculate random hour and minute, 16:15 - 16:59
 HOUR=16
