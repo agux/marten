@@ -385,61 +385,6 @@ def _pair_covar_metrics(
     )
 
 
-# def pair_covar_metrics_index(
-#     anchor_symbol, anchor_df, covar_symbols, batch_size=None, accelerator=None
-# ):
-#     global alchemyEngine, logger, random_seed
-
-#     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
-#     cov_table = "index_daily_em_view"
-#     feature = "change_rate"
-
-#     def load_train(cov_symbol):
-#         query = f"""
-#             select date ds, {feature} y_{cov_symbol}
-#             from {cov_table}
-#             where symbol = '{cov_symbol}'
-#             and date >= '{min_date}'
-#             order by date
-#         """
-#         cov_symbol_df = pd.read_sql(query, alchemyEngine)
-#         if cov_symbol_df.empty:
-#             return None
-#         merged_df = pd.merge(anchor_df, cov_symbol_df, on="ds", how="left")
-#         output = _train(
-#             merged_df,
-#             random_seed=random_seed,
-#             batch_size=batch_size,
-#             weekly_seasonality=False,
-#             daily_seasonality=False,
-#             impute_missing=True,
-#             accelerator=accelerator,
-#         )
-#         # extract the last row of output, add symbol column, and consolidate to another dataframe
-#         last_row = output.iloc[[-1]]
-#         _save_covar_metrics(
-#             anchor_symbol, cov_table, cov_symbol, feature, last_row, alchemyEngine
-#         )
-#         return last_row
-
-#     # get the number of CPU cores
-#     num_proc = int((multiprocessing.cpu_count() + 1) / 1.5)
-
-#     results = []
-#     # Use ThreadPoolExecutor to calculate metrics in parallel
-#     with ThreadPoolExecutor(max_workers=num_proc) as executor:
-#         futures = [
-#             executor.submit(load_train, symbol) for symbol in covar_symbols["symbol"]
-#         ]
-#         for f in futures:
-#             try:
-#                 results.append(f.result())
-#             except Exception as e:
-#                 logger.exception(e)
-
-#     return results
-
-
 def _load_covar_set(covar_set_id):
     global alchemyEngine
     query = """
@@ -782,7 +727,7 @@ def _remove_measured_features(anchor_symbol, cov_table, features):
     return features
 
 
-def _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date):
+def _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args):
 
     for feature in features:
         if cov_table != "bond_metrics_em":
@@ -824,12 +769,12 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     # prep CN index covariates
     features = ["change_rate", "amt_change_rate"]
     cov_table = "index_daily_em_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date)
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
     # prep ETF covariates  fund_etf_daily_em_view
     features = ["change_rate", "amt_change_rate"]
     cov_table = "fund_etf_daily_em_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date)
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
     # prep bond covariates bond_metrics_em
     features = [
@@ -843,17 +788,17 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "us_yield_spread_10y_2y",
     ]
     cov_table = "bond_metrics_em"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date)
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
     # prep US index covariates us_index_daily_sina
     features = ["change_rate", "amt_change_rate"]
     cov_table = "us_index_daily_sina_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date)
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
     # prep HK index covariates hk_index_daily_sina
     features = ["change_rate"]
     cov_table = "hk_index_daily_em_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date)
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
     # TODO: prep stock features
 
