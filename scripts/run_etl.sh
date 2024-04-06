@@ -7,7 +7,7 @@ if command -v pyenv 1>/dev/null 2>&1; then
   eval "$(pyenv init -)"
 fi
 
-COMMAND="$(pyenv which marten) etl --profile"
+COMMAND="$(pyenv which marten)"
 # script=etl.py
 # PYENV_PYTHON=$(pyenv which python)
 
@@ -17,4 +17,4 @@ COMMAND="$(pyenv which marten) etl --profile"
 
 # Run the script with nohup
 # nohup "$PYENV_PYTHON" "$script" "$@" > >(tee -a output.log) 2>&1 &
-nohup "$COMMAND" "$@" > >(tee -a output.log) 2>&1 &
+nohup "$COMMAND" "etl" " --profile" "$@" > >(tee -a output.log) 2>&1 &

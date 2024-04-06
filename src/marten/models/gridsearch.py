@@ -93,7 +93,7 @@ def _init_worker_resource():
     return alchemyEngine, logger
 
 
-def _train(df, epochs=None, random_seed=7, **kwargs):
+def _train(df, epochs=None, random_seed=7, early_stopping=True, **kwargs):
     set_random_seed(random_seed)
     m = NeuralProphet(**kwargs)
     covars = [col for col in df.columns if col not in ("ds", "y")]
@@ -103,7 +103,13 @@ def _train(df, epochs=None, random_seed=7, **kwargs):
         valid_p=1.0 / 10,
     )
     try:
-        metrics = m.fit(train_df, validation_df=test_df, progress=None, epochs=epochs)
+        metrics = m.fit(
+            train_df,
+            validation_df=test_df,
+            progress=None,
+            epochs=epochs,
+            early_stopping=early_stopping,
+        )
         return metrics
     except ValueError as e:
         # check if the message `Inputs/targets with missing values detected` was inside the error
@@ -292,11 +298,11 @@ def _fit_with_covar(
             df=merged_df,
             epochs=None,
             random_seed=random_seed,
+            early_stopping=True,
             batch_size=None,
             weekly_seasonality=False,
             daily_seasonality=False,
             impute_missing=True,
-            early_stopping=True,
             accelerator=accelerator,
         )
     except ValueError as e:
@@ -698,6 +704,7 @@ def _log_metrics_for_hyper_params(
             df,
             epochs=epochs,
             random_seed=random_seed,
+            early_stopping=True,
             batch_size=params["batch_size"],
             n_lags=params["n_lags"],
             yearly_seasonality=params["yearly_seasonality"],
@@ -706,7 +713,6 @@ def _log_metrics_for_hyper_params(
             weekly_seasonality=False,
             daily_seasonality=False,
             impute_missing=True,
-            early_stopping=True,
             accelerator=accelerator,
         )
     except ValueError as e:
