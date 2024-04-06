@@ -1,6 +1,7 @@
 from marten.models.gridsearch import main
 from marten.utils.logger import get_logger
 
+
 def configure_parser(parser):
     # Create a mutually exclusive group
     group1 = parser.add_mutually_exclusive_group(required=False)
@@ -30,9 +31,9 @@ def configure_parser(parser):
         type=int,
         default=None,
         help=(
-            "Covariate set ID corresponding to the covar_set table. ",
-            "If not set, the grid search will look for latest top_n covariates ",
-            "as found in the neuralprophet_corel table, which could be non-static.",
+            "Covariate set ID corresponding to the covar_set table. "
+            "If not set, the grid search will look for latest top_n covariates "
+            "as found in the neuralprophet_corel table, which could be non-static."
         ),
     )
 
