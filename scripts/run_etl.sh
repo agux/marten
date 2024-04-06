@@ -8,13 +8,14 @@ if command -v pyenv 1>/dev/null 2>&1; then
 fi
 
 COMMAND="$(pyenv which marten)"
+OUTPUT_LOG=output_etl.log
 # script=etl.py
 # PYENV_PYTHON=$(pyenv which python)
 
 # Clear the logs
 >etl.log
->output.log
+>$OUTPUT_LOG
 
 # Run the script with nohup
 # nohup "$PYENV_PYTHON" "$script" "$@" > >(tee -a output.log) 2>&1 &
-nohup "$COMMAND" "etl" " --profile" "$@" > >(tee -a output.log) 2>&1 &
+nohup "$COMMAND" "etl" " --profile" "$@" > >(tee -a $OUTPUT_LOG) 2>&1 &

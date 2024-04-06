@@ -1049,21 +1049,21 @@ def main():
     # List to store the results of the asynchronous tasks
     results = []
 
-    results.extend(parallel_runner(delayed(etf_spot)(db_url)))
-    results.extend(parallel_runner(delayed(etf_perf)(db_url)))
+    results.extend(parallel_runner([delayed(etf_spot)(db_url)]))
+    results.extend(parallel_runner([delayed(etf_perf)(db_url)]))
 
-    runner = parallel_runner(delayed(etf_list)(db_url))
+    runner = parallel_runner([delayed(etf_list)(db_url)])
     task_result = runner  # to await for the async job done?
     # Fetch the ETF list
     etf_list_df = pd.read_sql("SELECT symbol FROM fund_etf_list_sina", alchemyEngine)
     logger.info(f"starting joblib on function get_etf_daily()...")
     results.extend(
         parallel_runner(
-            delayed(get_etf_daily)(symbol, db_url) for symbol in etf_list_df["symbol"]
+            [delayed(get_etf_daily)(symbol, db_url) for symbol in etf_list_df["symbol"]]
         )
     )
 
-    runner = parallel_runner(delayed(bond_ir)(db_url))
+    runner = parallel_runner([delayed(bond_ir)(db_url)])
     task_result = runner  # to await for the async job done?
 
     end_date = last_trade_date()
@@ -1072,12 +1072,13 @@ def main():
     )
     results.extend(
         parallel_runner(
-            delayed(update_etf_metrics)(symbol, db_url, end_date)
-            for symbol in etf_list_df["symbol"]
+            [
+                delayed(update_etf_metrics)(symbol, db_url, end_date)
+                for symbol in etf_list_df["symbol"]
+            ]
         )
     )
 
-    # %%
     cn_index_list = [
         ("上证系列指数", "sh"),
         ("深证系列指数", "sz"),
@@ -1088,12 +1089,14 @@ def main():
     logger.info("starting joblib on function stock_zh_index_spot_em()...")
     must_wait_results.extend(
         parallel_runner(
-            delayed(stock_zh_index_spot_em)(
-                symbol,
-                src,
-                db_url,
-            )
-            for symbol, src in cn_index_list
+            [
+                delayed(stock_zh_index_spot_em)(
+                    symbol,
+                    src,
+                    db_url,
+                )
+                for symbol, src in cn_index_list
+            ]
         )
     )
     task_result = must_wait_results
@@ -1104,10 +1107,12 @@ def main():
     logger.info("starting joblib on function stock_zh_index_daily_em()...")
     results.extend(
         parallel_runner(
-            delayed(stock_zh_index_daily_em)(symbol, src, db_url)
-            for symbol, src in zip(
-                cn_index_fulllist["symbol"], cn_index_fulllist["src"]
-            )
+            [
+                delayed(stock_zh_index_daily_em)(symbol, src, db_url)
+                for symbol, src in zip(
+                    cn_index_fulllist["symbol"], cn_index_fulllist["src"]
+                )
+            ]
         )
     )
 
@@ -1116,11 +1121,13 @@ def main():
     logger.info("starting joblib on function update_hk_indices()...")
     results.extend(
         parallel_runner(
-            delayed(update_hk_indices)(
-                symbol,
-                db_url,
-            )
-            for symbol in hk_index_list_df["symbol"]
+            [
+                delayed(update_hk_indices)(
+                    symbol,
+                    db_url,
+                )
+                for symbol in hk_index_list_df["symbol"]
+            ]
         )
     )
 
@@ -1128,17 +1135,20 @@ def main():
     logger.info("starting joblib on function update_us_indices()...")
     results.extend(
         parallel_runner(
-            delayed(update_us_indices)(
-                symbol,
-                db_url,
-            )
-            for symbol in idx_symbol_list
+            [
+                delayed(update_us_indices)(
+                    symbol,
+                    db_url,
+                )
+                for symbol in idx_symbol_list
+            ]
         )
     )
 
     wait_results = results
 
     logger.info("Time taken: %s seconds", time.time() - t_start)
+
 
 def run_main_with_profiling():
     yappi.set_clock_type("wall")  # Use wall time (real time) instead of CPU time
@@ -1150,7 +1160,7 @@ def run_main_with_profiling():
 
     func_stats = yappi.get_func_stats()
     func_stats.sort("cumtime")
-    with open('func_stats_sorted.txt', 'w') as file:
+    with open("func_stats_sorted.txt", "w") as file:
         # Redirect stdout to the file
         sys.stdout = file
         # Print all function stats to the file
