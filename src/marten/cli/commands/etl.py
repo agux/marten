@@ -1,9 +1,6 @@
 from marten.data.etl import main, run_main_with_profiling
 from marten.utils.logger import get_logger
 
-import cProfile
-import pstats
-
 def configure_parser(etl_parser):
     etl_parser.add_argument("--profile", action="store_true", help="Profile the ETL process e.g. to troubleshoot bottlenecks")
     # etl_parser.add_argument("--dest", help="Destination to load data into")

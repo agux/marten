@@ -1,5 +1,5 @@
 import argparse
-from marten.cli.commands import etl
+from marten.cli.commands import etl, gridsearch
 
 
 def main():
@@ -13,6 +13,9 @@ def main():
     # ETL Sub-command
     etl_parser = subparsers.add_parser("etl", help="Extract, transform, and load data")
     etl.configure_parser(etl_parser)
+
+    gs_parser = subparsers.add_parser("gs", help="Perform grid-search to find the best-possible hyperparameters.")
+    gridsearch.configure_parser(gs_parser)
 
     # # Training Sub-command
     # train_parser = subparsers.add_parser("train", help="Train models on financial data")

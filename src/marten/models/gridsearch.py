@@ -37,9 +37,6 @@ from neuralprophet import NeuralProphet, set_log_level, set_random_seed
 
 from sklearn.model_selection import ParameterGrid
 
-# Disable logging messages unless there is an error
-set_log_level("ERROR")
-
 random_seed = 7
 logger = None
 alchemyEngine = None
