@@ -10,10 +10,10 @@ def get_logger(name) -> Logger:
 
     level = os.getenv("LOG_LEVEL")
 
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger(name if name is not None else __name__)
     logger.setLevel(logging.INFO if level is None else level)
 
-    file_handler = logging.FileHandler("etl.log")
+    file_handler = logging.FileHandler(f"{logger.name}.log")
     console_handler = logging.StreamHandler()
 
     # Step 4: Create a formatter

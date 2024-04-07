@@ -728,7 +728,7 @@ def _remove_measured_features(anchor_symbol, cov_table, features):
 
 
 def _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args):
-
+    features = _remove_measured_features(anchor_symbol, cov_table, features)
     for feature in features:
         if cov_table != "bond_metrics_em":
             cov_symbols = _covar_symbols_from_table(
@@ -739,7 +739,6 @@ def _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
         else:
             # construct a dummy cov_symbols dataframe with `symbol` column and the value 'bond'.
             cov_symbols = pd.DataFrame({"symbol": ["bond"]})
-            features = _remove_measured_features(anchor_symbol, cov_table, features)
         if not cov_symbols.empty and features:
             _pair_covar_metrics(
                 anchor_symbol,

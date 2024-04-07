@@ -694,7 +694,7 @@ def etf_list(db_url):
 def get_etf_daily(symbol, url):
     logger = get_logger(__name__)
     try:
-        logger.info(f"running fund_etf_hist_em({symbol})...")
+        logger.debug(f"running fund_etf_hist_em({symbol})...")
         alchemyEngine = get_database_engine(url)
         with alchemyEngine.begin() as conn:
             # check latest date on fund_etf_daily_em
@@ -765,6 +765,7 @@ def get_etf_daily(symbol, url):
 
 def bond_ir(db_url):
     logger = get_logger(__name__)
+    logger.info(f"running bond_zh_us_rate()...")
     try:
         start_date = None  # For entire history.
         alchemyEngine = get_database_engine(db_url)
@@ -772,7 +773,6 @@ def bond_ir(db_url):
             latest_date = get_latest_date(conn, None, "bond_metrics_em")
             if latest_date is not None:
                 start_date = latest_date.strftime("%Y%m%d")
-            logger.info(f"running bond_zh_us_rate()...")
             bzur = ak.bond_zh_us_rate(start_date)
             bzur = bzur.rename(
                 columns={
@@ -1159,7 +1159,7 @@ def run_main_with_profiling():
     yappi.stop()
 
     func_stats = yappi.get_func_stats()
-    func_stats.sort("cumtime")
+    func_stats.sort("cumulative")
     with open("func_stats_sorted.txt", "w") as file:
         # Redirect stdout to the file
         sys.stdout = file
