@@ -457,11 +457,14 @@ def augment_anchor_df_with_covars(df, args):
 
     # covars_df contain these columns: cov_symbol, cov_table, feature
     by_table_feature = covars_df.groupby(["cov_table", "feature"])
-    for group, sdf in by_table_feature:
+    for group1, _ in by_table_feature:
         ## TODO need to load covariate time series from different tables and/or features
+        cov_table = group1[0]
+        feature = group1[1]
+
         query = f"""
-            SELECT symbol ID, date DS, {group[1]} y
-            FROM {group[0]}
+            SELECT symbol ID, date DS, {feature} y
+            FROM {cov_table}
             where symbol in %(symbols)s
             order by ID, DS asc
         """
@@ -475,8 +478,8 @@ def augment_anchor_df_with_covars(df, args):
         # merge and append the feature column of cov_daily_df to merged_df, by matching dates
         # split cov_daily_df by symbol column
         grouped = cov_daily_df.groupby("id")
-        for group, sdf in grouped:
-            col_name = f"{sdf['feature']}_{group}"
+        for group2, sdf in grouped:
+            col_name = f"{feature}_{group2}"
             sdf = sdf.rename(
                 columns={
                     "y": col_name,
