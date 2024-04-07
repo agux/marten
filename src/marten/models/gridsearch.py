@@ -511,24 +511,24 @@ def _init_search_grid():
     layers = _get_layers()
 
     # Define your hyperparameters grid
-    param_grid = [
+    param_grid = {
+        "batch_size": [None, 50, 100, 200],
+        "n_lags": list(range(1, 31)),
+        "yearly_seasonality": list(range(5, 30)),
+        "ar_layers": layers,
+        "lagged_reg_layers": layers,
+    }
+    grid = ParameterGrid(param_grid)
+    grid = [
         {
             # default hyperparameters
-            "batch_size": [None],
-            "n_lags": [0],
-            "yearly_seasonality": ["auto"],
-            "ar_layers": [[]],
-            "lagged_reg_layers": [[]],
-        },
-        {
-            "batch_size": [None, 50, 100, 200],
-            "n_lags": list(range(1, 31)),
-            "yearly_seasonality": list(range(5, 30)),
-            "ar_layers": layers,
-            "lagged_reg_layers": layers,
-        },
-    ]
-    grid = ParameterGrid(param_grid)
+            "batch_size": None,
+            "n_lags": 0,
+            "yearly_seasonality": "auto",
+            "ar_layers": [],
+            "lagged_reg_layers": [],
+        }
+    ].append(grid)
     logger.info("size of grid: %d", len(grid))
     return grid
 
@@ -676,7 +676,13 @@ def _log_metrics_for_hyper_params(
     logger.info("%s\nparams:%s\n#covars:%s", last_metric, params, len(covars))
 
     _update_metrics_table(
-        alchemyEngine, params, anchor_symbol, hpid, last_metric['epoch']+1, last_metric, fit_time
+        alchemyEngine,
+        params,
+        anchor_symbol,
+        hpid,
+        last_metric["epoch"] + 1,
+        last_metric,
+        fit_time,
     )
 
     return last_metric
