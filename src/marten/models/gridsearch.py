@@ -506,12 +506,12 @@ def _get_layers():
 
 
 def _init_search_grid():
-    global alchemyEngine, logger, random_seed
+    global logger
 
     layers = _get_layers()
 
     # Define your hyperparameters grid
-    param_grid = {
+    param_grid = [
         {
             # default hyperparameters
             "batch_size": None,
@@ -527,7 +527,7 @@ def _init_search_grid():
             "ar_layers": layers,
             "lagged_reg_layers": layers,
         },
-    }
+    ]
     grid = ParameterGrid(param_grid)
     logger.info("size of grid: %d", len(grid))
     return grid
