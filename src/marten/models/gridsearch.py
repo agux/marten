@@ -514,9 +514,9 @@ def _init_search_grid():
     param_grid = [
         {
             # default hyperparameters
-            "batch_size": None,
-            "n_lags": 0,
-            "yearly_seasonality": "auto",
+            "batch_size": [None],
+            "n_lags": [0],
+            "yearly_seasonality": ["auto"],
             "ar_layers": [],
             "lagged_reg_layers": [],
         },
