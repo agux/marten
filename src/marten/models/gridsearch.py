@@ -518,17 +518,16 @@ def _init_search_grid():
         "ar_layers": layers,
         "lagged_reg_layers": layers,
     }
-    grid = ParameterGrid(param_grid)
-    grid = [
-        {
-            # default hyperparameters
-            "batch_size": None,
-            "n_lags": 0,
-            "yearly_seasonality": "auto",
-            "ar_layers": [],
-            "lagged_reg_layers": [],
-        }
-    ].append(grid)
+    grid = list(ParameterGrid(param_grid))
+    default_params = {
+        # default hyperparameters
+        "batch_size": None,
+        "n_lags": 0,
+        "yearly_seasonality": "auto",
+        "ar_layers": [],
+        "lagged_reg_layers": [],
+    }
+    grid = [default_params] + grid
     logger.info("size of grid: %d", len(grid))
     return grid
 
