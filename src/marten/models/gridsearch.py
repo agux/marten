@@ -517,8 +517,8 @@ def _init_search_grid():
             "batch_size": [None],
             "n_lags": [0],
             "yearly_seasonality": ["auto"],
-            "ar_layers": [],
-            "lagged_reg_layers": [],
+            "ar_layers": [[]],
+            "lagged_reg_layers": [[]],
         },
         {
             "batch_size": [None, 50, 100, 200],
