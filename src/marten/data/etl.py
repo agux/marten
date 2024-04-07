@@ -530,6 +530,7 @@ def saveAsCsv(file_name_main: str, df):
 
 @lru_cache()
 def last_trade_date():
+    global xshg
     current_date = datetime.now().date()
     # Iterate backwards from current_date until a valid session is found
     last_session = current_date
@@ -1063,8 +1064,9 @@ def main():
         )
     )
 
-    runner = parallel_runner([delayed(bond_ir)(db_url)])
-    task_result = runner  # to await for the async job done?
+    # runner = parallel_runner([delayed(bond_ir)(db_url)])
+    # task_result = runner  # to await for the async job done?
+    bond_ir(db_url)
 
     end_date = last_trade_date()
     logger.info(
@@ -1159,7 +1161,8 @@ def run_main_with_profiling():
     yappi.stop()
 
     func_stats = yappi.get_func_stats()
-    func_stats.sort("cumulative")
+    # Assuming "ttot" is the correct parameter for sorting by total execution time including sub-functions
+    func_stats.sort("ttot", "desc")
     with open("func_stats_sorted.txt", "w") as file:
         # Redirect stdout to the file
         sys.stdout = file

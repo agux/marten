@@ -10,3 +10,4 @@ neuralprophet>=0.8.0
 scikit-learn>=1.4.1
 joblib>=1.3.2
 yappi>=1.6.0
+dask[distributed]>=2024.4.1

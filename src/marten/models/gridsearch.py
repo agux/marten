@@ -1,39 +1,18 @@
 import os
-import sys
-import time
-import logging
-import json
 import argparse
-import hashlib
-import multiprocessing
 import pandas as pd
-import numpy as np
 import exchange_calendars as xcals
 from dotenv import load_dotenv
-from joblib import Parallel, delayed
+from dask.distributed import Client, as_completed
 
-# import exchange_calendars as xcals
-from datetime import datetime, timedelta
+from marten.utils.database import get_database_engine
+from marten.utils.logger import get_logger
+from marten.models.worker import LocalWorkerPlugin
+from marten.models.worker_func import fit_with_covar, log_metrics_for_hyper_params
 
-from tenacity import (
-    # retry,
-    stop_after_attempt,
-    wait_exponential,
-    # retry_if_exception_type,
-    Retrying,
-)
+from sqlalchemy import text
 
-# import pytz
-# import pandas as pd
-# from IPython.display import display, HTML
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
-from sqlalchemy.dialects.postgresql import insert
-from concurrent.futures import ThreadPoolExecutor
-from functools import lru_cache
-
-from neuralprophet import NeuralProphet, set_log_level, set_random_seed
+from neuralprophet import set_log_level
 
 from sklearn.model_selection import ParameterGrid
 
@@ -41,13 +20,20 @@ random_seed = 7
 logger = None
 alchemyEngine = None
 args = None
+client = None
 
 
-def init():
-    global alchemyEngine, logger, random_seed
+def init(args):
+    global alchemyEngine, logger, random_seed, client
 
     alchemyEngine, logger = _init_worker_resource()
     xshg = xcals.get_calendar("XSHG")
+
+    client = Client(
+        n_workers=args.worker,
+        threads_per_worker=1,
+    )
+    client.register_plugin(LocalWorkerPlugin(__name__))
 
 
 def _init_worker_resource():
@@ -62,65 +48,13 @@ def _init_worker_resource():
     DB_PORT = os.getenv("DB_PORT")
     DB_NAME = os.getenv("DB_NAME")
 
-    # Create an engine instance
-    alchemyEngine = create_engine(
-        f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}",
-        # pool_recycle=3600,
-        # pool_size=1,
-        poolclass=NullPool,
+    db_url = (
+        f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     )
-    sessionmaker(alchemyEngine)
-
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
-
-    file_handler = logging.FileHandler("grid_search.log")
-    console_handler = logging.StreamHandler()
-
-    # Step 4: Create a formatter
-    formatter = logging.Formatter(
-        "%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-    )
-
-    # Step 5: Attach the formatter to the handlers
-    file_handler.setFormatter(formatter)
-    console_handler.setFormatter(formatter)
-
-    # Step 6: Add the handlers to the logger
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
+    alchemyEngine = get_database_engine(db_url)
+    logger = get_logger(__name__)
 
     return alchemyEngine, logger
-
-
-def _train(df, epochs=None, random_seed=7, early_stopping=True, **kwargs):
-    set_random_seed(random_seed)
-    m = NeuralProphet(**kwargs)
-    covars = [col for col in df.columns if col not in ("ds", "y")]
-    m.add_lagged_regressor(covars)
-    train_df, test_df = m.split_df(
-        df,
-        valid_p=1.0 / 10,
-    )
-    try:
-        metrics = m.fit(
-            train_df,
-            validation_df=test_df,
-            progress=None,
-            epochs=epochs,
-            early_stopping=early_stopping,
-        )
-        return metrics
-    except ValueError as e:
-        # check if the message `Inputs/targets with missing values detected` was inside the error
-        if "Inputs/targets with missing values detected" in str(e):
-            # count how many 'nan' values in the `covars` columns respectively
-            nan_counts = df[covars].isna().sum().to_dict()
-            raise ValueError(
-                f"Skipping: too much missing values in the covariates: {nan_counts}"
-            ) from e
-        else:
-            raise e
 
 
 def load_anchor_ts(symbol, limit):
@@ -196,141 +130,8 @@ def _covar_symbols_from_table(anchor_symbol, min_date, table, feature):
     return cov_symbols
 
 
-def _save_covar_metrics(
-    anchor_symbol,
-    cov_table,
-    cov_symbol,
-    feature,
-    cov_metrics,
-    fit_time,
-    timesteps,
-    alchemyEngine,
-):
-    # Insert data into the table
-    with alchemyEngine.begin() as conn:
-        # Inserting DataFrame into the database table
-        for index, row in cov_metrics.iterrows():
-            conn.execute(
-                text(
-                    """
-                    INSERT INTO neuralprophet_corel 
-                    (symbol, cov_table, cov_symbol, feature, mae_val, rmse_val, loss_val, fit_time, timesteps) 
-                    VALUES (:symbol, :cov_table, :cov_symbol, :feature, :mae_val, :rmse_val, :loss_val, :fit_time, :timesteps) 
-                    ON CONFLICT (symbol, cov_symbol, feature, cov_table) 
-                    DO UPDATE SET 
-                        mae_val = EXCLUDED.mae_val, 
-                        rmse_val = EXCLUDED.rmse_val, 
-                        loss_val = EXCLUDED.loss_val,
-                        fit_time = EXCLUDED.fit_time,
-                        timesteps = EXCLUDED.timesteps
-                """
-                ),
-                {
-                    "symbol": anchor_symbol,
-                    "cov_table": cov_table,
-                    "cov_symbol": cov_symbol,
-                    "feature": feature,
-                    "mae_val": row["MAE_val"],
-                    "rmse_val": row["RMSE_val"],
-                    "loss_val": row["Loss_val"],
-                    "fit_time": (str(fit_time) + " seconds"),
-                    "timesteps": timesteps,
-                },
-            )
-
-
-def _fit_with_covar(
-    anchor_symbol,
-    anchor_df,
-    cov_table,
-    cov_symbol,
-    min_date,
-    random_seed,
-    feature,
-    accelerator,
-):
-    alchemyEngine, logger = _init_worker_resource()
-    if anchor_symbol == cov_symbol:
-        if feature == "y":
-            # no covariate is needed. this is a baseline metric
-            merged_df = anchor_df[["ds", "y"]]
-        else:
-            # using endogenous features as covariate
-            merged_df = anchor_df[["ds", "y", feature]]
-    else:
-        # `cov_symbol` may contain special characters such as `.IXIC`, or `H-FIN`. The dot and hyphen is not allowed in column alias.
-        # Convert common special characters often seen in stock / index symbols to valid replacements as PostgreSQL table column alias.
-        cov_symbol_sanitized = cov_symbol.replace(".", "_").replace("-", "_")
-        cov_symbol_sanitized = f"{feature}_{cov_symbol_sanitized}"
-        if cov_table != "bond_metrics_em":
-            query = f"""
-                    select date ds, {feature} {cov_symbol_sanitized}
-                    from {cov_table}
-                    where symbol = %(cov_symbol)s
-                    and date >= %(min_date)s
-                    order by date
-                """
-            params = {
-                "cov_symbol": cov_symbol,
-                "min_date": min_date,
-            }
-        else:
-            query = f"""
-                    select date ds, {feature} {cov_symbol_sanitized}
-                    from {cov_table}
-                    where date >= %(min_date)s
-                    order by date
-                """
-            params = {
-                "min_date": min_date,
-            }
-        cov_symbol_df = pd.read_sql(
-            query, alchemyEngine, params=params, parse_dates=["ds"]
-        )
-        if cov_symbol_df.empty:
-            return None
-        merged_df = pd.merge(anchor_df, cov_symbol_df, on="ds", how="left")
-
-    start_time = time.time()
-    metrics = None
-    try:
-        metrics = _train(
-            df=merged_df,
-            epochs=None,
-            random_seed=random_seed,
-            early_stopping=True,
-            batch_size=None,
-            weekly_seasonality=False,
-            daily_seasonality=False,
-            impute_missing=True,
-            accelerator=accelerator,
-        )
-    except ValueError as e:
-        logger.warning(str(e))
-        return None
-    except Exception as e:
-        logger.exception(e)
-        return None
-    fit_time = time.time() - start_time
-    # extract the last row of output, add symbol column, and consolidate to another dataframe
-    last_row = metrics.iloc[[-1]]
-    # get the row count in merged_df as timesteps
-    timesteps = len(merged_df)
-    _save_covar_metrics(
-        anchor_symbol,
-        cov_table,
-        cov_symbol,
-        feature,
-        last_row,
-        fit_time,
-        timesteps,
-        alchemyEngine,
-    )
-    return last_row
-
-
 def _pair_endogenous_covar_metrics(anchor_symbol, anchor_df, cov_table, features, args):
-    global random_seed
+    global random_seed, client
 
     # remove feature elements already exists in the neuralprophet_corel table.
     features = _remove_measured_features(anchor_symbol, cov_table, features)
@@ -338,14 +139,10 @@ def _pair_endogenous_covar_metrics(anchor_symbol, anchor_df, cov_table, features
     if not features:
         return
 
-    # get the number of CPU cores
-    n_jobs = (
-        args.worker
-        if args.worker is not None
-        else int((multiprocessing.cpu_count()) / 1.5)
-    )
-    Parallel(n_jobs=n_jobs)(
-        delayed(_fit_with_covar)(
+    futures = []
+    for feature in features:
+        future = client.submit(
+            fit_with_covar,
             anchor_symbol,
             anchor_df,
             cov_table,
@@ -354,24 +151,24 @@ def _pair_endogenous_covar_metrics(anchor_symbol, anchor_df, cov_table, features
             random_seed,
             feature,
             "auto" if args.accelerator else None,
+            args.early_stopping,
         )
-        for feature in features
-    )
+        futures.append(future)
+
+    # Wait for all futures to complete
+    for future in as_completed(futures):
+        future.result()  # We call result() to potentially raise exceptions
 
 
 def _pair_covar_metrics(
     anchor_symbol, anchor_df, cov_table, cov_symbols, feature, args
 ):
-    global random_seed
-    # get the number of CPU cores
-    n_jobs = (
-        args.worker
-        if args.worker is not None
-        else int((multiprocessing.cpu_count()) / 1.5)
-    )
+    global random_seed, client
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
-    Parallel(n_jobs=n_jobs)(
-        delayed(_fit_with_covar)(
+    futures = []
+    for symbol in cov_symbols["symbol"]:
+        future = client.submit(
+            fit_with_covar,
             anchor_symbol,
             anchor_df,
             cov_table,
@@ -380,9 +177,13 @@ def _pair_covar_metrics(
             random_seed,
             feature,
             "auto" if args.accelerator else None,
+            args.early_stopping,
         )
-        for symbol in cov_symbols["symbol"]
-    )
+        futures.append(future)
+
+    # Wait for all futures to complete
+    for future in as_completed(futures):
+        future.result()  # Call result() to potentially raise exceptions from the tasks
 
 
 def _load_covar_set(covar_set_id):
@@ -434,11 +235,40 @@ def _load_topn_covars(n, anchor_symbol, cov_table=None, feature=None):
         params=params,
     )
 
-    # get next sequence value from covar_set_sequence.
     with alchemyEngine.begin() as conn:
-        covar_set_id = conn.execute(
-            text("SELECT nextval('covar_set_sequence')")
-        ).scalar()
+        # check if the same set of covar features exists in `covar_set` table. If so, reuse the same set_id.
+        query = text(
+            """
+            select id, count(1) num
+            from covar_set
+            where 
+                symbol = :symbol
+                and (cov_symbol, cov_table, cov_feature) IN :values
+            group by id
+            having count(1) = :num
+            order by id
+        """
+        )
+        params = {
+            "symbol": anchor_symbol,
+            "values": tuple(df.itertuples(index=False, name=None)),
+            "num": len(df),
+        }
+        result = conn.execute(query, params)
+        first_row = result.first()
+        covar_set_id = None
+        if first_row is not None:
+            covar_set_id = first_row[0]
+        else:
+            # no existing set. get next sequence value from covar_set_sequence and save the set to covar_set.
+            covar_set_id = conn.execute(
+                text("SELECT nextval('covar_set_sequence')")
+            ).scalar()
+            ## insert df into covar_set table
+            table_df = df.rename(columns={"feature": "cov_feature"})
+            table_df["symbol"] = anchor_symbol
+            table_df["id"] = covar_set_id
+            table_df.to_sql("covar_set", con=conn, if_exists="append", index=False)
 
     return df, covar_set_id
 
@@ -453,12 +283,14 @@ def augment_anchor_df_with_covars(df, args):
     else:
         covars_df, covar_set_id = _load_topn_covars(args.top_n, args.symbol)
 
-    logger.info("loaded top %s covariates", len(covars_df))
+    logger.info(
+        "loaded top %s covariates. covar_set id: %s", len(covars_df), covar_set_id
+    )
 
     # covars_df contain these columns: cov_symbol, cov_table, feature
     by_table_feature = covars_df.groupby(["cov_table", "feature"])
-    for group1, _ in by_table_feature:
-        ## TODO need to load covariate time series from different tables and/or features
+    for group1, sdf1 in by_table_feature:
+        ## load covariate time series from different tables and/or features
         cov_table = group1[0]
         feature = group1[1]
 
@@ -469,24 +301,25 @@ def augment_anchor_df_with_covars(df, args):
             order by ID, DS asc
         """
         params = {
-            "symbols": tuple(covars_df["cov_symbol"]),
+            "symbols": tuple(sdf1["cov_symbol"]),
         }
-        cov_daily_df = pd.read_sql(
+        table_feature_df = pd.read_sql(
             query, alchemyEngine, params=params, parse_dates=["ds"]
         )
 
-        # merge and append the feature column of cov_daily_df to merged_df, by matching dates
-        # split cov_daily_df by symbol column
-        grouped = cov_daily_df.groupby("id")
-        for group2, sdf in grouped:
+        # merge and append the feature column of table_feature_df to merged_df, by matching dates
+        # split table_feature_df by symbol column
+        grouped = table_feature_df.groupby("id")
+        for group2, sdf2 in grouped:
             col_name = f"{feature}_{group2}"
-            sdf = sdf.rename(
+            sdf2.rename(
                 columns={
                     "y": col_name,
-                }
+                },
+                inplace=True,
             )
-            sdf = sdf[["ds", col_name]]
-            merged_df = pd.merge(merged_df, sdf, on="ds", how="left")
+            sdf2 = sdf2[["ds", col_name]]
+            merged_df = pd.merge(merged_df, sdf2, on="ds", how="left")
 
     return merged_df, covar_set_id
 
@@ -511,196 +344,53 @@ def _init_search_grid():
     layers = _get_layers()
 
     # Define your hyperparameters grid
-    param_grid = {
-        "batch_size": [None, 50, 100, 200],
-        "n_lags": list(range(1, 31)),
-        "yearly_seasonality": list(range(5, 30)),
-        "ar_layers": layers,
-        "lagged_reg_layers": layers,
-    }
-    grid = list(ParameterGrid(param_grid))
-    default_params = {
-        # default hyperparameters
-        "batch_size": None,
-        "n_lags": 0,
-        "yearly_seasonality": "auto",
-        "ar_layers": [],
-        "lagged_reg_layers": [],
-    }
-    grid = [default_params] + grid
+    param_grid = [
+        {
+            # default hyperparameters
+            "batch_size": [None],
+            "n_lags": [0],
+            "yearly_seasonality": ["auto"],
+            "ar_layers": [[]],
+            "lagged_reg_layers": [[]],
+        },
+        {
+            "batch_size": [None, 50, 100, 200],
+            "n_lags": list(range(1, 31)),
+            "yearly_seasonality": list(range(5, 30)),
+            "ar_layers": layers,
+            "lagged_reg_layers": layers,
+        },
+    ]
+    grid = ParameterGrid(param_grid)
     logger.info("size of grid: %d", len(grid))
     return grid
 
 
-# @retry(
-#     stop=stop_after_attempt(3),
-#     wait=wait_exponential(multiplier=1, max=5),
-# )
-def _new_metric_keys(anchor_symbol, hpid, hyper_params, covar_set_id, alchemyEngine):
-    def action():
-        try:
-            with alchemyEngine.begin() as conn:
-                conn.execute(
-                    text(
-                        """
-                        INSERT INTO grid_search_metrics (model, anchor_symbol, hpid, hyper_params, covar_set_id) 
-                        VALUES (:model, :anchor_symbol, :hpid, :hyper_params, :covar_set_id)
-                        """
-                    ),
-                    {
-                        "model": "NeuralProphet",
-                        "anchor_symbol": anchor_symbol,
-                        "hpid": hpid,
-                        "hyper_params": hyper_params,
-                        "covar_set_id": covar_set_id,
-                    },
-                )
-                return True
-        except Exception as e:
-            if "duplicate key value violates unique constraint" in str(e):
-                return False
-            else:
-                raise
-
-    for attempt in Retrying(
-        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=5)
-    ):
-        with attempt:
-            return action()
-
-
-def _update_metrics_table(
-    alchemyEngine, params, anchor_symbol, hpid, epochs, last_metric, fit_time
-):
-    def action():
-        with alchemyEngine.begin() as conn:
-            tag = (
-                "baseline,multivariate"
-                if (
-                    params["batch_size"] is None
-                    and params["n_lags"] == 0
-                    and params["yearly_seasonality"] == "auto"
-                    and params["ar_layers"] == []
-                    and params["lagged_reg_layers"] == []
-                )
-                else None
-            )
-            conn.execute(
-                text(
-                    """
-                    UPDATE grid_search_metrics
-                    SET 
-                        mae_val = :mae_val, 
-                        rmse_val = :rmse_val, 
-                        loss_val = :loss_val, 
-                        mae = :mae,
-                        rmse = :rmse,
-                        loss = :loss,
-                        fit_time = :fit_time,
-                        epochs = :epochs,
-                        tag = :tag
-                    WHERE
-                        model = :model
-                        AND anchor_symbol = :anchor_symbol
-                        AND hpid = :hpid
+def _cleanup_stale_keys():
+    global alchemyEngine, logger
+    with alchemyEngine.begin() as conn:
+        conn.execute(
+            text(
                 """
-                ),
-                {
-                    "model": "NeuralProphet",
-                    "anchor_symbol": anchor_symbol,
-                    "hpid": hpid,
-                    "tag": tag,
-                    "mae_val": last_metric["MAE_val"],
-                    "rmse_val": last_metric["RMSE_val"],
-                    "loss_val": last_metric["Loss_val"],
-                    "mae": last_metric["MAE"],
-                    "rmse": last_metric["RMSE"],
-                    "loss": last_metric["Loss"],
-                    "fit_time": (str(fit_time) + " seconds"),
-                    "epochs": epochs,
-                },
+                delete from grid_search_metrics
+                where loss_val is null 
+                    and last_modified <= NOW() - INTERVAL '1 hour'
+                """
             )
-
-    for attempt in Retrying(
-        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=5)
-    ):
-        with attempt:
-            action()
-
-
-def _log_metrics_for_hyper_params(
-    anchor_symbol, df, params, epochs, random_seed, accelerator, covar_set_id
-):
-    alchemyEngine, logger = _init_worker_resource()
-
-    # to support distributed processing, we try to insert a new record (with primary keys only)
-    # into grid_search_metrics first. If we hit duplicated key error, return None.
-    # Otherwise we could proceed further code execution.
-    param_str = json.dumps(params)
-    hpid = hashlib.md5(param_str.encode("utf-8")).hexdigest()
-    if not _new_metric_keys(
-        anchor_symbol, hpid, param_str, covar_set_id, alchemyEngine
-    ):
-        logger.debug("Skip re-entry for %s: %s", anchor_symbol, param_str)
-        return None
-
-    start_time = time.time()
-    metrics = None
-    try:
-        metrics = _train(
-            df,
-            epochs=epochs,
-            random_seed=random_seed,
-            early_stopping=True,
-            batch_size=params["batch_size"],
-            n_lags=params["n_lags"],
-            yearly_seasonality=params["yearly_seasonality"],
-            ar_layers=params["ar_layers"],
-            lagged_reg_layers=params["lagged_reg_layers"],
-            weekly_seasonality=False,
-            daily_seasonality=False,
-            impute_missing=True,
-            accelerator=accelerator,
         )
-    except ValueError as e:
-        logger.warning(str(e))
-        return None
-    except Exception as e:
-        logger.exception(e)
-        return None
-
-    fit_time = time.time() - start_time
-    last_metric = metrics.iloc[-1]
-    covars = [col for col in df.columns if col not in ("ds", "y")]
-    logger.info("%s\nparams:%s\n#covars:%s", last_metric, params, len(covars))
-
-    _update_metrics_table(
-        alchemyEngine,
-        params,
-        anchor_symbol,
-        hpid,
-        last_metric["epoch"] + 1,
-        last_metric,
-        fit_time,
-    )
-
-    return last_metric
 
 
 def grid_search(df, covar_set_id, args):
-    global alchemyEngine, logger, random_seed
+    global alchemyEngine, logger, random_seed, client
+
+    _cleanup_stale_keys()
 
     grid = _init_search_grid()
 
-    # get the number of CPU cores
-    n_jobs = (
-        args.worker
-        if args.worker is not None
-        else int((multiprocessing.cpu_count()) / 1.2)
-    )
-
-    Parallel(n_jobs=n_jobs)(
-        delayed(_log_metrics_for_hyper_params)(
+    futures = []
+    for params in grid:
+        future = client.submit(
+            log_metrics_for_hyper_params,
             args.symbol,
             df,
             params,
@@ -708,9 +398,13 @@ def grid_search(df, covar_set_id, args):
             random_seed,
             "auto" if args.accelerator else None,
             covar_set_id,
+            args.early_stopping,
         )
-        for params in grid
-    )
+        futures.append(future)
+
+    # Wait for all futures to complete
+    for future in as_completed(futures):
+        future.result()  # Call result() to potentially raise exceptions from the tasks
 
 
 def _remove_measured_features(anchor_symbol, cov_table, features):
@@ -819,17 +513,49 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     # TODO cash inflow
 
 
+def univariate_baseline(anchor_df, args):
+    global random_seed, client
+    df = anchor_df[["ds", "y"]]
+    default_params = {
+        # default hyperparameters. the order of keys MATTER (which affects the PK in table)
+        "ar_layers": [],
+        "batch_size": None,
+        "lagged_reg_layers": [],
+        "n_lags": 0,
+        "yearly_seasonality": "auto",
+    }
+    client.submit(
+        log_metrics_for_hyper_params,
+        args.symbol,
+        df,
+        default_params,
+        args.epochs,
+        random_seed,
+        "auto" if args.accelerator else None,
+        0,
+        args.early_stopping,
+    ).result()
+
+
 def main(args):
-    init()
+    global client
+    try:
+        init(args)
 
-    anchor_df, anchor_table = load_anchor_ts(args.symbol, args.timestep_limit)
+        anchor_df, anchor_table = load_anchor_ts(args.symbol, args.timestep_limit)
 
-    if not args.grid_search_only:
-        prep_covar_baseline_metrics(anchor_df, anchor_table, args)
+        univariate_baseline(anchor_df, args)
 
-    if not args.covar_only:
-        df, covar_set_id = augment_anchor_df_with_covars(anchor_df, args)
-        grid_search(df, covar_set_id, args)
+        if not args.grid_search_only:
+            prep_covar_baseline_metrics(anchor_df, anchor_table, args)
+
+        if not args.covar_only:
+            df, covar_set_id = augment_anchor_df_with_covars(anchor_df, args)
+            grid_search(df, covar_set_id, args)
+    finally:
+        if client is not None:
+            # Remember to close the client if your program is done with all computations
+            client.close()
 
 
 # Command-line argument parsing
@@ -895,6 +621,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--accelerator", action="store_true", help="Use accelerator automatically"
+    )
+    parser.add_argument(
+        "--early_stopping",
+        action="store_true",
+        help="Use early stopping during model fitting",
     )
 
     parser.add_argument(

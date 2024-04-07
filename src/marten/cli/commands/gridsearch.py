@@ -67,6 +67,11 @@ def configure_parser(parser):
     parser.add_argument(
         "--accelerator", action="store_true", help="Use accelerator automatically"
     )
+    parser.add_argument(
+        "--early_stopping",
+        action="store_true",
+        help="Use early stopping during model fitting",
+    )
 
     parser.add_argument(
         "symbol", type=str, help="The asset symbol as anchor to be analyzed."
