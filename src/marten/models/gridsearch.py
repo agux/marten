@@ -460,8 +460,8 @@ def augment_anchor_df_with_covars(df, args):
     for group, sdf in by_table_feature:
         ## TODO need to load covariate time series from different tables and/or features
         query = f"""
-            SELECT symbol ID, date DS, {sdf["feature"]} y
-            FROM {sdf['cov_table']}
+            SELECT symbol ID, date DS, {group[1]} y
+            FROM {group[0]}
             where symbol in %(symbols)s
             order by ID, DS asc
         """
