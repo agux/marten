@@ -316,19 +316,28 @@ def augment_anchor_df_with_covars(df, args):
         ## load covariate time series from different tables and/or features
         cov_table = group1[0]
         feature = group1[1]
-
-        query = f"""
-            SELECT symbol ID, date DS, {feature} y
-            FROM {cov_table}
-            where symbol in %(symbols)s
-            order by ID, DS asc
-        """
-        params = {
-            "symbols": tuple(sdf1["cov_symbol"]),
-        }
-        table_feature_df = pd.read_sql(
-            query, alchemyEngine, params=params, parse_dates=["ds"]
-        )
+        if cov_table != "bond_metrics_em":
+            query = f"""
+                SELECT symbol ID, date DS, {feature} y
+                FROM {cov_table}
+                where symbol in %(symbols)s
+                order by ID, DS asc
+            """
+            params = {
+                "symbols": tuple(sdf1["cov_symbol"]),
+            }
+            table_feature_df = pd.read_sql(
+                query, alchemyEngine, params=params, parse_dates=["ds"]
+            )
+        else:
+            query = f"""
+                SELECT 'bond' ID, date DS, {feature} y
+                FROM {cov_table}
+                order by DS asc
+            """
+            table_feature_df = pd.read_sql(
+                query, alchemyEngine, parse_dates=["ds"]
+            )
 
         # merge and append the feature column of table_feature_df to merged_df, by matching dates
         # split table_feature_df by symbol column
