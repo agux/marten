@@ -1,4 +1,5 @@
 import os
+import time
 import argparse
 import pandas as pd
 import exchange_calendars as xcals
@@ -100,7 +101,7 @@ def load_anchor_ts(symbol, limit):
 
 def _covar_symbols_from_table(anchor_symbol, min_date, table, feature):
     global alchemyEngine, logger, random_seed
-    # get a list of other China indices, and not yet have metrics recorded
+    # get a list of symbols from the given table, of which metrics are not recorded yet
     query = f"""
         select
             distinct t.symbol
@@ -207,15 +208,26 @@ def _load_covar_set(covar_set_id):
     return df
 
 
-def _load_topn_covars(n, anchor_symbol, cov_table=None, feature=None):
+def _load_topn_covars(n, anchor_symbol, nan_threshold=None, cov_table=None, feature=None):
     global alchemyEngine
-    query = """
+    sub_query = """
+		select
+			loss_val
+		from
+			neuralprophet_corel
+		where
+			symbol = %(anchor_symbol)s
+			and cov_symbol = %(anchor_symbol)s
+			and feature = 'y'
+    """
+    query = f"""
         select
             cov_symbol, cov_table, feature
         from
             neuralprophet_corel
         where
             symbol = %(anchor_symbol)s
+            and loss_val < ({sub_query})
     """
     params = {
         "anchor_symbol": anchor_symbol,
@@ -227,6 +239,9 @@ def _load_topn_covars(n, anchor_symbol, cov_table=None, feature=None):
     if feature is not None:
         query += " and feature = %(feature)s"
         params["feature"] = feature
+    if nan_threshold is not None:
+        query += " and nan_count < %(nan_threshold)s"
+        params["nan_threshold"] = nan_threshold
 
     query += " order by loss_val asc limit %(limit)s"
     df = pd.read_sql(
@@ -234,6 +249,9 @@ def _load_topn_covars(n, anchor_symbol, cov_table=None, feature=None):
         alchemyEngine,
         params=params,
     )
+
+    if df.empty:
+        return df, -1
 
     with alchemyEngine.begin() as conn:
         # check if the same set of covar features exists in `covar_set` table. If so, reuse the same set_id.
@@ -281,10 +299,14 @@ def augment_anchor_df_with_covars(df, args):
         covar_set_id = args.covar_set_id
         covars_df = _load_covar_set(covar_set_id)
     else:
-        covars_df, covar_set_id = _load_topn_covars(args.top_n, args.symbol)
+        nan_threshold = round(len(df) * args.nan_limit, 0)
+        covars_df, covar_set_id = _load_topn_covars(args.top_n, args.symbol, nan_threshold)
+
+    if covars_df.empty:
+        raise Exception(f"No qualified covariates can be found for {args.symbol}. Please check the data in table neuralprophet_corel")
 
     logger.info(
-        "loaded top %s covariates. covar_set id: %s", len(covars_df), covar_set_id
+        "loaded top %s qualified covariates. covar_set id: %s", len(covars_df), covar_set_id
     )
 
     # covars_df contain these columns: cov_symbol, cov_table, feature
@@ -320,6 +342,10 @@ def augment_anchor_df_with_covars(df, args):
             )
             sdf2 = sdf2[["ds", col_name]]
             merged_df = pd.merge(merged_df, sdf2, on="ds", how="left")
+
+    missing_values = merged_df.isnull().sum()
+    missing_values = missing_values[missing_values > 0]
+    logger.info("count of missing values:\n%s", missing_values)
 
     return merged_df, covar_set_id
 
@@ -538,7 +564,8 @@ def univariate_baseline(anchor_df, args):
 
 
 def main(args):
-    global client
+    global client, logger
+    t_start = time.time()
     try:
         init(args)
 
@@ -547,15 +574,24 @@ def main(args):
         univariate_baseline(anchor_df, args)
 
         if not args.grid_search_only:
+            t1_start = time.time()
             prep_covar_baseline_metrics(anchor_df, anchor_table, args)
+            logger.info("%s covariate baseline metric computation completed. Time taken: %s seconds", args.symbol, time.time() - t1_start)
 
         if not args.covar_only:
+            t2_start = time.time()
             df, covar_set_id = augment_anchor_df_with_covars(anchor_df, args)
             grid_search(df, covar_set_id, args)
+            logger.info(
+                "%s grid-search completed. Time taken: %s seconds",
+                args.symbol,
+                time.time() - t2_start,
+            )
     finally:
         if client is not None:
             # Remember to close the client if your program is done with all computations
             client.close()
+        logger.info("All task completed. Time taken: %s seconds", time.time() - t_start)
 
 
 # Command-line argument parsing
@@ -618,6 +654,16 @@ if __name__ == "__main__":
         type=int,
         default=1200,
         help="Limit the time steps of anchor symbol to the most recent N data points. Specify -1 to utilize all time steps available.",
+    )
+    parser.add_argument(
+        "--nan_limit",
+        action="store",
+        type=float,
+        default=0.05,
+        help=("Limit the ratio of NaN (missing data) in covariates. "
+              "Only those with NaN rate lower than the limit ratio can be selected during multivariate grid searching."
+              "Defaults to 5%."
+        )
     )
     parser.add_argument(
         "--accelerator", action="store_true", help="Use accelerator automatically"

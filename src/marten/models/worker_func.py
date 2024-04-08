@@ -28,7 +28,7 @@ def fit_with_covar(
     from dask.distributed import get_worker
 
     worker = get_worker()
-    alchemyEngine, logger = worker.alchenmyEngine, worker.logger
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
     if anchor_symbol == cov_symbol:
         if feature == "y":
             # no covariate is needed. this is a baseline metric
@@ -95,6 +95,10 @@ def fit_with_covar(
     last_row = metrics.iloc[[-1]]
     # get the row count in merged_df as timesteps
     timesteps = len(merged_df)
+    # get merged_df's right-most column's nan count.
+    nan_count = merged_df.iloc[:, -1].isna().sum()
+    # Assuming `nan_count` is a numpy.int64 value
+    nan_count = int(nan_count)  # Convert to Python's native int type
     save_covar_metrics(
         anchor_symbol,
         cov_table,
@@ -103,6 +107,7 @@ def fit_with_covar(
         last_row,
         fit_time,
         timesteps,
+        nan_count,
         alchemyEngine,
     )
     return last_row
@@ -116,6 +121,7 @@ def save_covar_metrics(
     cov_metrics,
     fit_time,
     timesteps,
+    nan_count,
     alchemyEngine,
 ):
     # Insert data into the table
@@ -126,15 +132,16 @@ def save_covar_metrics(
                 text(
                     """
                     INSERT INTO neuralprophet_corel 
-                    (symbol, cov_table, cov_symbol, feature, mae_val, rmse_val, loss_val, fit_time, timesteps) 
-                    VALUES (:symbol, :cov_table, :cov_symbol, :feature, :mae_val, :rmse_val, :loss_val, :fit_time, :timesteps) 
+                    (symbol, cov_table, cov_symbol, feature, mae_val, rmse_val, loss_val, fit_time, timesteps, nan_count) 
+                    VALUES (:symbol, :cov_table, :cov_symbol, :feature, :mae_val, :rmse_val, :loss_val, :fit_time, :timesteps, :nan_count) 
                     ON CONFLICT (symbol, cov_symbol, feature, cov_table) 
                     DO UPDATE SET 
                         mae_val = EXCLUDED.mae_val, 
                         rmse_val = EXCLUDED.rmse_val, 
                         loss_val = EXCLUDED.loss_val,
                         fit_time = EXCLUDED.fit_time,
-                        timesteps = EXCLUDED.timesteps
+                        timesteps = EXCLUDED.timesteps,
+                        nan_count = EXCLUDED.nan_count
                 """
                 ),
                 {
@@ -147,6 +154,7 @@ def save_covar_metrics(
                     "loss_val": row["Loss_val"],
                     "fit_time": (str(fit_time) + " seconds"),
                     "timesteps": timesteps,
+                    "nan_count": nan_count,
                 },
             )
 
