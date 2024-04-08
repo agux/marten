@@ -2,6 +2,7 @@ import time
 import pandas as pd
 import json
 import hashlib
+import warnings
 
 from sqlalchemy import text
 
@@ -162,34 +163,43 @@ def save_covar_metrics(
 def train(df, epochs=None, random_seed=7, early_stopping=True, **kwargs):
     set_log_level("ERROR")
     set_random_seed(random_seed)
-    m = NeuralProphet(**kwargs)
-    covars = [col for col in df.columns if col not in ("ds", "y")]
-    m.add_lagged_regressor(covars)
-    train_df, test_df = m.split_df(
-        df,
-        valid_p=1.0 / 10,
-        freq="D",
-    )
-    try:
-        metrics = m.fit(
-            train_df,
-            validation_df=test_df,
-            progress=None,
-            epochs=epochs,
-            early_stopping=early_stopping,
+
+    with warnings.catch_warnings():
+        # suppress swarming warning:
+        # WARNING - (py.warnings._showwarnmsg) - 
+        # ....../.pyenv/versions/3.12.2/envs/venv_3.12.2/lib/python3.12/site-packages/neuralprophet/df_utils.py:1152: 
+        # FutureWarning: Series.view is deprecated and will be removed in a future version. Use ``astype`` as an alternative to change the dtype.
+        # converted_ds = pd.to_datetime(ds_col, utc=True).view(dtype=np.int64)
+        warnings.simplefilter("ignore", FutureWarning)
+
+        m = NeuralProphet(**kwargs)
+        covars = [col for col in df.columns if col not in ("ds", "y")]
+        m.add_lagged_regressor(covars)
+        train_df, test_df = m.split_df(
+            df,
+            valid_p=1.0 / 10,
             freq="D",
         )
-        return metrics
-    except ValueError as e:
-        # check if the message `Inputs/targets with missing values detected` was inside the error
-        if "Inputs/targets with missing values detected" in str(e):
-            # count how many 'nan' values in the `covars` columns respectively
-            nan_counts = df[covars].isna().sum().to_dict()
-            raise ValueError(
-                f"Skipping: too much missing values in the covariates: {nan_counts}"
-            ) from e
-        else:
-            raise e
+        try:
+            metrics = m.fit(
+                train_df,
+                validation_df=test_df,
+                progress=None,
+                epochs=epochs,
+                early_stopping=early_stopping,
+                freq="D",
+            )
+            return metrics
+        except ValueError as e:
+            # check if the message `Inputs/targets with missing values detected` was inside the error
+            if "Inputs/targets with missing values detected" in str(e):
+                # count how many 'nan' values in the `covars` columns respectively
+                nan_counts = df[covars].isna().sum().to_dict()
+                raise ValueError(
+                    f"Skipping: too much missing values in the covariates: {nan_counts}"
+                ) from e
+            else:
+                raise e
 
 
 def log_metrics_for_hyper_params(
