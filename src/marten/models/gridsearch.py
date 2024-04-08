@@ -2,6 +2,7 @@ import os
 import time
 import argparse
 import pandas as pd
+import multiprocessing
 import exchange_calendars as xcals
 from dotenv import load_dotenv
 from dask.distributed import Client, as_completed
@@ -31,7 +32,7 @@ def init(args):
     xshg = xcals.get_calendar("XSHG")
 
     client = Client(
-        n_workers=args.worker,
+        n_workers=args.worker if args.worker > 0 else multiprocessing.cpu_count(),
         threads_per_worker=1,
     )
     client.register_plugin(LocalWorkerPlugin(__name__))
