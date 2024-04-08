@@ -1,6 +1,6 @@
 import os
 
-from dask.distributed import Client, as_completed, WorkerPlugin, get_worker
+from dask.distributed import WorkerPlugin
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
 from dotenv import load_dotenv

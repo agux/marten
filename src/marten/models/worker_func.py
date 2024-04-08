@@ -5,7 +5,7 @@ import hashlib
 
 from sqlalchemy import text
 
-from neuralprophet import NeuralProphet, set_random_seed
+from neuralprophet import NeuralProphet, set_random_seed, set_log_level
 
 from tenacity import (
     stop_after_attempt,
@@ -160,6 +160,7 @@ def save_covar_metrics(
 
 
 def train(df, epochs=None, random_seed=7, early_stopping=True, **kwargs):
+    set_log_level("ERROR")
     set_random_seed(random_seed)
     m = NeuralProphet(**kwargs)
     covars = [col for col in df.columns if col not in ("ds", "y")]
@@ -167,6 +168,7 @@ def train(df, epochs=None, random_seed=7, early_stopping=True, **kwargs):
     train_df, test_df = m.split_df(
         df,
         valid_p=1.0 / 10,
+        freq="D",
     )
     try:
         metrics = m.fit(
@@ -175,6 +177,7 @@ def train(df, epochs=None, random_seed=7, early_stopping=True, **kwargs):
             progress=None,
             epochs=epochs,
             early_stopping=early_stopping,
+            freq="D",
         )
         return metrics
     except ValueError as e:
@@ -216,9 +219,6 @@ def log_metrics_for_hyper_params(
         logger.debug("Skip re-entry for %s: %s", anchor_symbol, param_str)
         return None
 
-    # FIXME: error inside `_handle_missing_data`
-    # df["ID"] = anchor_symbol  ## Name 'ID' is reserved.
-
     start_time = time.time()
     metrics = None
     try:
@@ -242,6 +242,7 @@ def log_metrics_for_hyper_params(
         return None
     except Exception as e:
         logger.exception(e)
+        logger.error("params: %s", params)
         return None
 
     fit_time = time.time() - start_time

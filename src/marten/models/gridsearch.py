@@ -669,10 +669,10 @@ if __name__ == "__main__":
         "--nan_limit",
         action="store",
         type=float,
-        default=0.05,
+        default=0.005,
         help=("Limit the ratio of NaN (missing data) in covariates. "
               "Only those with NaN rate lower than the limit ratio can be selected during multivariate grid searching."
-              "Defaults to 5%."
+              "Defaults to 0.5%."
         )
     )
     parser.add_argument(
