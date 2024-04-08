@@ -13,6 +13,7 @@ OUTPUT_LOG=output_etl.log
 # PYENV_PYTHON=$(pyenv which python)
 
 # Clear the logs
+>marten.data.etl.log
 >etl.log
 >$OUTPUT_LOG
 
