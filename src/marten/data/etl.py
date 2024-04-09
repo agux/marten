@@ -1070,7 +1070,7 @@ def main():
 
     end_date = last_trade_date()
     logger.info(
-        "starting joblib on function update_etf_metrics(), last trade date: ", end_date
+        "starting joblib on function update_etf_metrics(), last trade date: %s", end_date
     )
     results.extend(
         parallel_runner(
