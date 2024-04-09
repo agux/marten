@@ -143,12 +143,14 @@ def _pair_endogenous_covar_metrics(anchor_symbol, anchor_df, cov_table, features
     if not features:
         return
 
+    anchor_df_future = client.scatter(anchor_df)
+
     for feature in features:
         fire_and_forget(
             client.submit(
                 fit_with_covar,
                 anchor_symbol,
-                anchor_df,
+                anchor_df_future,
                 cov_table,
                 anchor_symbol,
                 None,
@@ -171,12 +173,13 @@ def _pair_covar_metrics(
 ):
     global random_seed, client
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
+    anchor_df_future = client.scatter(anchor_df)
     for symbol in cov_symbols["symbol"]:
         fire_and_forget(
             client.submit(
                 fit_with_covar,
                 anchor_symbol,
-                anchor_df,
+                anchor_df_future,
                 cov_table,
                 symbol,
                 min_date,
@@ -434,12 +437,14 @@ def grid_search(df, covar_set_id, args):
 
     grid = _init_search_grid()
 
+    df_future = client.scatter(df)
+
     for params in grid:
         fire_and_forget(
             client.submit(
                 log_metrics_for_hyper_params,
                 args.symbol,
-                df,
+                df_future,
                 params,
                 args.epochs,
                 random_seed,
@@ -572,10 +577,11 @@ def univariate_baseline(anchor_df, args):
         "n_lags": 0,
         "yearly_seasonality": "auto",
     }
+    df_future = client.scatter(df)
     client.submit(
         log_metrics_for_hyper_params,
         args.symbol,
-        df,
+        df_future,
         default_params,
         args.epochs,
         random_seed,
