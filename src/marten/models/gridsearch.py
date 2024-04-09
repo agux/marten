@@ -5,7 +5,7 @@ import pandas as pd
 import multiprocessing
 import exchange_calendars as xcals
 from dotenv import load_dotenv
-from dask.distributed import Client, as_completed
+from dask.distributed import LocalCluster, Client, as_completed, fire_and_forget
 
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
@@ -31,10 +31,12 @@ def init(args):
     alchemyEngine, logger = _init_worker_resource()
     xshg = xcals.get_calendar("XSHG")
 
-    client = Client(
+    cluster = LocalCluster(
         n_workers=args.worker if args.worker > 0 else multiprocessing.cpu_count(),
         threads_per_worker=1,
+        memory_limit="1GB",
     )
+    client = Client(cluster)
     client.register_plugin(LocalWorkerPlugin(__name__))
 
 
@@ -141,25 +143,27 @@ def _pair_endogenous_covar_metrics(anchor_symbol, anchor_df, cov_table, features
     if not features:
         return
 
-    futures = []
     for feature in features:
-        future = client.submit(
-            fit_with_covar,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            anchor_symbol,
-            None,
-            random_seed,
-            feature,
-            "auto" if args.accelerator else None,
-            args.early_stopping,
+        fire_and_forget(
+            client.submit(
+                fit_with_covar,
+                anchor_symbol,
+                anchor_df,
+                cov_table,
+                anchor_symbol,
+                None,
+                random_seed,
+                feature,
+                "auto" if args.accelerator else None,
+                args.early_stopping,
+            )
         )
-        futures.append(future)
 
-    # Wait for all futures to complete
-    for future in as_completed(futures):
-        future.result()  # We call result() to potentially raise exceptions
+    pending_tasks = client.scheduler_info()["tasks"]
+    while pending_tasks:
+        time.sleep(2)  # Sleep for a short period before checking again
+        pending_tasks = client.scheduler_info()["tasks"]
+    # All tasks have completed at this point
 
 
 def _pair_covar_metrics(
@@ -167,25 +171,26 @@ def _pair_covar_metrics(
 ):
     global random_seed, client
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
-    futures = []
     for symbol in cov_symbols["symbol"]:
-        future = client.submit(
-            fit_with_covar,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            symbol,
-            min_date,
-            random_seed,
-            feature,
-            "auto" if args.accelerator else None,
-            args.early_stopping,
+        fire_and_forget(
+            client.submit(
+                fit_with_covar,
+                anchor_symbol,
+                anchor_df,
+                cov_table,
+                symbol,
+                min_date,
+                random_seed,
+                feature,
+                "auto" if args.accelerator else None,
+                args.early_stopping,
+            )
         )
-        futures.append(future)
-
-    # Wait for all futures to complete
-    for future in as_completed(futures):
-        future.result()  # Call result() to potentially raise exceptions from the tasks
+    pending_tasks = client.scheduler_info()["tasks"]
+    while pending_tasks:
+        time.sleep(2)  # Sleep for a short period before checking again
+        pending_tasks = client.scheduler_info()["tasks"]
+    # All tasks have completed at this point
 
 
 def _load_covar_set(covar_set_id):
@@ -209,7 +214,9 @@ def _load_covar_set(covar_set_id):
     return df
 
 
-def _load_topn_covars(n, anchor_symbol, nan_threshold=None, cov_table=None, feature=None):
+def _load_topn_covars(
+    n, anchor_symbol, nan_threshold=None, cov_table=None, feature=None
+):
     global alchemyEngine
     sub_query = """
 		select
@@ -301,13 +308,19 @@ def augment_anchor_df_with_covars(df, args):
         covars_df = _load_covar_set(covar_set_id)
     else:
         nan_threshold = round(len(df) * args.nan_limit, 0)
-        covars_df, covar_set_id = _load_topn_covars(args.top_n, args.symbol, nan_threshold)
+        covars_df, covar_set_id = _load_topn_covars(
+            args.top_n, args.symbol, nan_threshold
+        )
 
     if covars_df.empty:
-        raise Exception(f"No qualified covariates can be found for {args.symbol}. Please check the data in table neuralprophet_corel")
+        raise Exception(
+            f"No qualified covariates can be found for {args.symbol}. Please check the data in table neuralprophet_corel"
+        )
 
     logger.info(
-        "loaded top %s qualified covariates. covar_set id: %s", len(covars_df), covar_set_id
+        "loaded top %s qualified covariates. covar_set id: %s",
+        len(covars_df),
+        covar_set_id,
     )
 
     # covars_df contain these columns: cov_symbol, cov_table, feature
@@ -335,9 +348,7 @@ def augment_anchor_df_with_covars(df, args):
                 FROM {cov_table}
                 order by DS asc
             """
-            table_feature_df = pd.read_sql(
-                query, alchemyEngine, parse_dates=["ds"]
-            )
+            table_feature_df = pd.read_sql(query, alchemyEngine, parse_dates=["ds"])
 
         # merge and append the feature column of table_feature_df to merged_df, by matching dates
         # split table_feature_df by symbol column
@@ -423,24 +434,25 @@ def grid_search(df, covar_set_id, args):
 
     grid = _init_search_grid()
 
-    futures = []
     for params in grid:
-        future = client.submit(
-            log_metrics_for_hyper_params,
-            args.symbol,
-            df,
-            params,
-            args.epochs,
-            random_seed,
-            "auto" if args.accelerator else None,
-            covar_set_id,
-            args.early_stopping,
+        fire_and_forget(
+            client.submit(
+                log_metrics_for_hyper_params,
+                args.symbol,
+                df,
+                params,
+                args.epochs,
+                random_seed,
+                "auto" if args.accelerator else None,
+                covar_set_id,
+                args.early_stopping,
+            )
         )
-        futures.append(future)
-
-    # Wait for all futures to complete
-    for future in as_completed(futures):
-        future.result()  # Call result() to potentially raise exceptions from the tasks
+    pending_tasks = client.scheduler_info()["tasks"]
+    while pending_tasks:
+        time.sleep(2)  # Sleep for a short period before checking again
+        pending_tasks = client.scheduler_info()["tasks"]
+    # All tasks have completed at this point
 
 
 def _remove_measured_features(anchor_symbol, cov_table, features):
@@ -586,7 +598,12 @@ def main(args):
         if not args.grid_search_only:
             t1_start = time.time()
             prep_covar_baseline_metrics(anchor_df, anchor_table, args)
-            logger.info("%s covariate baseline metric computation completed. Time taken: %s seconds", args.symbol, time.time() - t1_start)
+            logger.info(
+                "%s covariate baseline metric computation completed. Time taken: %s seconds",
+                args.symbol,
+                time.time() - t1_start,
+            )
+            client.restart()
 
         if not args.covar_only:
             t2_start = time.time()
@@ -670,10 +687,11 @@ if __name__ == "__main__":
         action="store",
         type=float,
         default=0.005,
-        help=("Limit the ratio of NaN (missing data) in covariates. "
-              "Only those with NaN rate lower than the limit ratio can be selected during multivariate grid searching."
-              "Defaults to 0.5%."
-        )
+        help=(
+            "Limit the ratio of NaN (missing data) in covariates. "
+            "Only those with NaN rate lower than the limit ratio can be selected during multivariate grid searching."
+            "Defaults to 0.5%."
+        ),
     )
     parser.add_argument(
         "--accelerator", action="store_true", help="Use accelerator automatically"
