@@ -36,7 +36,7 @@ def init(args):
         n_workers=args.worker if args.worker > 0 else multiprocessing.cpu_count(),
         threads_per_worker=1,
         processes=True,
-        memory_limit="2GB",
+        # memory_limit="2GB",
     )
     client = Client(cluster)
     client.register_plugin(LocalWorkerPlugin(__name__))
