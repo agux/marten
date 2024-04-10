@@ -6,6 +6,7 @@ import multiprocessing
 import exchange_calendars as xcals
 from dotenv import load_dotenv
 from dask.distributed import LocalCluster, Client, as_completed, fire_and_forget
+import dask.distributed as dd
 
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
@@ -23,7 +24,7 @@ logger = None
 alchemyEngine = None
 args = None
 client = None
-
+futures = []
 
 def init(args):
     global alchemyEngine, logger, random_seed, client
@@ -34,10 +35,12 @@ def init(args):
     cluster = LocalCluster(
         n_workers=args.worker if args.worker > 0 else multiprocessing.cpu_count(),
         threads_per_worker=1,
-        memory_limit="1GB",
+        processes=True,
+        memory_limit="2GB",
     )
     client = Client(cluster)
     client.register_plugin(LocalWorkerPlugin(__name__))
+    logger.info("dask dashboard can be accessed at: %s", cluster.dashboard_link)
 
 
 def _init_worker_resource():
@@ -135,7 +138,7 @@ def _covar_symbols_from_table(anchor_symbol, min_date, table, feature):
 
 
 def _pair_endogenous_covar_metrics(anchor_symbol, anchor_df, cov_table, features, args):
-    global random_seed, client
+    global random_seed, client, futures
 
     # remove feature elements already exists in the neuralprophet_corel table.
     features = _remove_measured_features(anchor_symbol, cov_table, features)
@@ -146,54 +149,56 @@ def _pair_endogenous_covar_metrics(anchor_symbol, anchor_df, cov_table, features
     anchor_df_future = client.scatter(anchor_df)
 
     for feature in features:
-        fire_and_forget(
-            client.submit(
-                fit_with_covar,
-                anchor_symbol,
-                anchor_df_future,
-                cov_table,
-                anchor_symbol,
-                None,
-                random_seed,
-                feature,
-                "auto" if args.accelerator else None,
-                args.early_stopping,
-            )
+        future = client.submit(
+            fit_with_covar,
+            anchor_symbol,
+            anchor_df_future,
+            cov_table,
+            anchor_symbol,
+            None,
+            random_seed,
+            feature,
+            "auto" if args.accelerator else None,
+            args.early_stopping,
         )
+        futures.append(future)
+        # fire_and_forget(
+            
+        # )
 
-    pending_tasks = client.scheduler_info()["tasks"]
-    while pending_tasks:
-        time.sleep(2)  # Sleep for a short period before checking again
-        pending_tasks = client.scheduler_info()["tasks"]
+    # pending_tasks = check_pending_tasks(client)
+    # while pending_tasks > 0:
+    #     time.sleep(2)  # Sleep for a short period before checking again
+    #     pending_tasks = check_pending_tasks(client)
     # All tasks have completed at this point
 
 
 def _pair_covar_metrics(
     anchor_symbol, anchor_df, cov_table, cov_symbols, feature, args
 ):
-    global random_seed, client
+    global random_seed, client, futures
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
     anchor_df_future = client.scatter(anchor_df)
     for symbol in cov_symbols["symbol"]:
-        fire_and_forget(
-            client.submit(
-                fit_with_covar,
-                anchor_symbol,
-                anchor_df_future,
-                cov_table,
-                symbol,
-                min_date,
-                random_seed,
-                feature,
-                "auto" if args.accelerator else None,
-                args.early_stopping,
-            )
+        future = client.submit(
+            fit_with_covar,
+            anchor_symbol,
+            anchor_df_future,
+            cov_table,
+            symbol,
+            min_date,
+            random_seed,
+            feature,
+            "auto" if args.accelerator else None,
+            args.early_stopping,
         )
-    pending_tasks = client.scheduler_info()["tasks"]
-    while pending_tasks:
-        time.sleep(2)  # Sleep for a short period before checking again
-        pending_tasks = client.scheduler_info()["tasks"]
-    # All tasks have completed at this point
+        futures.append(future)
+        # fire_and_forget(
+        # )
+        # if too much pending task, then slow down for the tasks to be digested
+        num = num_undone()
+        if num > multiprocessing.cpu_count():
+            time.sleep(2 ** (num - multiprocessing.cpu_count()))
 
 
 def _load_covar_set(covar_set_id):
@@ -430,33 +435,52 @@ def _cleanup_stale_keys():
         )
 
 
+def num_undone():
+    global futures
+    undone = 0
+    for f in futures:
+        # iterate over `futures`. call `f.done()` to check if it's done.
+        # if it's done (True), call `del f` and then remove it from the `futures` list.
+        # if False, increment `undone`.
+        if f.done():
+            f.release()
+            futures.remove(f)
+        else:
+            undone += 1
+    return undone
+
 def grid_search(df, covar_set_id, args):
-    global alchemyEngine, logger, random_seed, client
+    global alchemyEngine, logger, random_seed, client, futures
 
     _cleanup_stale_keys()
 
     grid = _init_search_grid()
 
     df_future = client.scatter(df)
-
     for params in grid:
-        fire_and_forget(
-            client.submit(
-                log_metrics_for_hyper_params,
-                args.symbol,
-                df_future,
-                params,
-                args.epochs,
-                random_seed,
-                "auto" if args.accelerator else None,
-                covar_set_id,
-                args.early_stopping,
-            )
+        future = client.submit(
+            log_metrics_for_hyper_params,
+            args.symbol,
+            df_future,
+            params,
+            args.epochs,
+            random_seed,
+            "auto" if args.accelerator else None,
+            covar_set_id,
+            args.early_stopping,
         )
-    pending_tasks = client.scheduler_info()["tasks"]
-    while pending_tasks:
-        time.sleep(2)  # Sleep for a short period before checking again
-        pending_tasks = client.scheduler_info()["tasks"]
+        futures.append(future)
+        # fire_and_forget(future)
+        # if too much pending task, then slow down for the tasks to be digested.
+        undone = num_undone()
+        if undone > multiprocessing.cpu_count():
+            time.sleep(2 ** (undone-multiprocessing.cpu_count()))
+
+    # TODO: check for any pending tasks. wait until all is completed.
+    undone = num_undone()
+    while undone > 0:
+        time.sleep(2 ** undone)
+        undone = num_undone()
     # All tasks have completed at this point
 
 
@@ -578,17 +602,19 @@ def univariate_baseline(anchor_df, args):
         "yearly_seasonality": "auto",
     }
     df_future = client.scatter(df)
-    client.submit(
-        log_metrics_for_hyper_params,
-        args.symbol,
-        df_future,
-        default_params,
-        args.epochs,
-        random_seed,
-        "auto" if args.accelerator else None,
-        0,
-        args.early_stopping,
-    ).result()
+    fire_and_forget(
+        client.submit(
+            log_metrics_for_hyper_params,
+            args.symbol,
+            df_future,
+            default_params,
+            args.epochs,
+            random_seed,
+            "auto" if args.accelerator else None,
+            0,
+            args.early_stopping,
+        )
+    )
 
 
 def main(args):
@@ -609,6 +635,11 @@ def main(args):
                 args.symbol,
                 time.time() - t1_start,
             )
+            ##TODO wait for all tasks to be completed before restarting
+            num = num_undone()
+            while num > 0:
+                time.sleep(2 ** num)
+                num = num_undone()
             client.restart()
 
         if not args.covar_only:

@@ -16,7 +16,7 @@ from tenacity import (
 
 def fit_with_covar(
     anchor_symbol,
-    anchor_df_future,
+    anchor_df,
     cov_table,
     cov_symbol,
     min_date,
@@ -29,7 +29,6 @@ def fit_with_covar(
     from dask.distributed import get_worker
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
-    anchor_df = anchor_df_future.result()
     if anchor_symbol == cov_symbol:
         if feature == "y":
             # no covariate is needed. this is a baseline metric
@@ -204,7 +203,7 @@ def train(df, epochs=None, random_seed=7, early_stopping=True, **kwargs):
 
 def log_metrics_for_hyper_params(
     anchor_symbol,
-    df_future,
+    df,
     params,
     epochs,
     random_seed,
@@ -231,7 +230,6 @@ def log_metrics_for_hyper_params(
 
     start_time = time.time()
     metrics = None
-    df = df_future.result()
     try:
         metrics = train(
             df,
