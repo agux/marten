@@ -84,23 +84,23 @@ def main(args):
 
     ## collect and await all task futures
     futures = []
-    futures.extend(client.submit(etf_spot))
-    futures.extend(client.submit(etf_perf))
+    futures.append(client.submit(etf_spot))
+    futures.append(client.submit(etf_perf))
 
     future_etf_list = client.submit(etf_list)
     future_bond_ir = client.submit(bond_ir)
 
-    futures.extend(client.submit(update_etf_metrics, future_etf_list, future_bond_ir))
+    futures.append(client.submit(update_etf_metrics, future_etf_list, future_bond_ir))
 
     ##TODO: consider to scale up workers or threads at this point since major blockage is remote service?
 
     future_cn_index_list = client.submit(get_cn_index_list, cn_index_types)
-    futures.extend(client.submit(cn_index_daily, future_cn_index_list))
+    futures.append(client.submit(cn_index_daily, future_cn_index_list))
 
     future_hk_index_list = client.submit(hk_index_spot)
-    futures.extend(client.submit(hk_index_daily, future_hk_index_list))
+    futures.append(client.submit(hk_index_daily, future_hk_index_list))
 
-    futures.extend(client.submit(get_us_indices, us_index_list))
+    futures.append(client.submit(get_us_indices, us_index_list))
 
     await_futures(futures)
 

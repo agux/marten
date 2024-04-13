@@ -113,7 +113,7 @@ def hk_index_daily(future_hk_index_list):
     with worker_client() as client:
         logger.info("starting tasks on function update_hk_indices()...")
         for symbol in index_list:
-            futures.extend(client.submit(update_hk_indices, symbol))
+            futures.append(client.submit(update_hk_indices, symbol))
             await_futures(futures, False)
 
     await_futures(futures)
@@ -160,7 +160,7 @@ def get_us_indices(us_index_list):
     with worker_client() as client:
         logger.info("starting joblib on function update_us_indices()...")
         for symbol in us_index_list:
-            futures.extend(client.submit(update_us_indices, symbol))
+            futures.append(client.submit(update_us_indices, symbol))
             await_futures(futures, False)
 
     await_futures(futures)
@@ -234,7 +234,7 @@ def cn_index_daily(future_cn_index_list):
     futures = []
     with worker_client() as client:
         for symbol, src in zip(cn_index_fulllist["symbol"], cn_index_fulllist["src"]):
-            futures.extend(client.submit(stock_zh_index_spot_em, symbol, src))
+            futures.append(client.submit(stock_zh_index_spot_em, symbol, src))
             await_futures(futures, False)
 
     await_futures(futures)
@@ -310,7 +310,7 @@ def get_cn_index_list(cn_index_types):
     futures = []
     with worker_client() as client:
         for symbol, src in cn_index_types:
-            futures.extend(client.submit(stock_zh_index_spot_em, symbol, src))
+            futures.append(client.submit(stock_zh_index_spot_em, symbol, src))
             await_futures(futures, False)
 
     await_futures(futures)
@@ -428,7 +428,7 @@ def update_etf_metrics(future_etf_list, future_bond_ir):
     with worker_client() as client:
         logger.info(f"starting tasks on function calc_etf_metrics()...")
         for symbol in etf_list:
-            futures.extend(client.submit(calc_etf_metrics, symbol, end_date))
+            futures.append(client.submit(calc_etf_metrics, symbol, end_date))
             await_futures(futures, False)
 
     await_futures(futures)
@@ -570,7 +570,7 @@ def etf_list():
         with worker_client() as client:
             logger.info(f"starting task on function get_etf_daily()...")
             for symbol in df['symbol']:
-                futures.extend(client.submit(get_etf_daily,symbol))
+                futures.append(client.submit(get_etf_daily,symbol))
                 await_futures(futures, False)
 
         await_futures(futures)
