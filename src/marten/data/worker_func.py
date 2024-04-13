@@ -234,7 +234,7 @@ def cn_index_daily(future_cn_index_list):
     futures = []
     with worker_client() as client:
         for symbol, src in zip(cn_index_fulllist["symbol"], cn_index_fulllist["src"]):
-            futures.append(client.submit(stock_zh_index_spot_em, symbol, src))
+            futures.append(client.submit(stock_zh_index_daily_em, symbol, src))
             await_futures(futures, False)
 
     await_futures(futures)

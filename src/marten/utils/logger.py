@@ -22,6 +22,9 @@ def get_logger(name) -> Logger:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+    file_handler.setLevel(logging.INFO if level is None else level)
+    console_handler.setLevel(logging.INFO if level is None else level)
+
     # Step 5: Attach the formatter to the handlers
     file_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
