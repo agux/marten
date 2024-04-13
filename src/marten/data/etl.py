@@ -49,7 +49,7 @@ client = None
 
 
 def init(args):
-    global alchemyEngine
+    global alchemyEngine, client
     logger.info("Using akshare version: %s", ak.__version__)
 
     load_dotenv()  # take environment variables from .env.
