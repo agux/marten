@@ -19,4 +19,4 @@ OUTPUT_LOG=output_etl.log
 
 # Run the script with nohup
 # nohup "$PYENV_PYTHON" "$script" "$@" > >(tee -a output.log) 2>&1 &
-nohup "$COMMAND" "etl" "--profile" "$@" > >(tee -a $OUTPUT_LOG) 2>&1 &
+nohup "$COMMAND" "etl" "$@" > >(tee -a $OUTPUT_LOG) 2>&1 &
