@@ -14,6 +14,7 @@ OUTPUT_LOG=output_etl.log
 
 # Clear the logs
 >marten.data.etl.log
+>marten.cli.commands.etl.log
 >etl.log
 >$OUTPUT_LOG
 
