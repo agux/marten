@@ -1,5 +1,6 @@
 import os
 import time
+import random
 import multiprocessing
 from dask.distributed import WorkerPlugin, get_worker
 from marten.utils.database import get_database_engine
@@ -49,20 +50,20 @@ def await_futures(futures, until_all_completed=True):
     num = num_undone(futures)
     
     ##FIXME: this log is for debugging hanging-task issue only. remove them after fixed
-    try:
-        worker = get_worker()
-        worker.logger.info("#futures: %s #undone: %s", len(futures), num)
-    except ValueError as e:
-        if "No worker found" in str(e):
-            # possible that this is not called from a worker process. simply ignore
-            pass
-        else:
-            raise e
+    # try:
+    #     worker = get_worker()
+    #     worker.logger.info("#futures: %s #undone: %s", len(futures), num)
+    # except ValueError as e:
+    #     if "No worker found" in str(e):
+    #         # possible that this is not called from a worker process. simply ignore
+    #         pass
+    #     else:
+    #         raise e
     #---------end of debug code----------------------
 
     if until_all_completed:
         while num > 0:
-            time.sleep(min(2**num, 256))
+            time.sleep(random.randint(0,10) + min(2**num, 256))
             num = num_undone(futures)
     elif num > multiprocessing.cpu_count():
-        time.sleep(min(2 ** (num - multiprocessing.cpu_count()), 256))
+        time.sleep(random.randint(0,10) + min(2 ** (num - multiprocessing.cpu_count()), 256))
