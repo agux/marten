@@ -55,8 +55,13 @@ def update_on_conflict(table_def, conn, df: pd.DataFrame, primary_keys):
     # table = sqlalchemy.Table(table, sqlalchemy.MetaData(), autoload_with=conn)
     # Create an insert statement from the DataFrame records
     insert_stmt = insert(table_def).values(df.to_dict(orient="records"))
+    
+    if hasattr(table_def, "__table__"):
+        table_columns = table_def.__table__.columns
+    else:
+        table_columns = table_def.columns
+
     # Build a dictionary of column values to be updated, excluding primary keys and non-existent columns
-    table_columns = getattr(table_def, "columns", table_def.__table__.columns)
     update_dict = {
         c.name: insert_stmt.excluded[c.name]
         for c in table_columns
