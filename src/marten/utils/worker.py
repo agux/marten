@@ -45,10 +45,12 @@ def num_undone(futures):
             undone += 1
     return undone
 
+def random_seconds(a, b, max):
+    return min(float(max), round(random.uniform(float(a), float(b)), 3))
 
 def await_futures(futures, until_all_completed=True):
     num = num_undone(futures)
-    
+
     ##FIXME: this log is for debugging hanging-task issue only. remove them after fixed
     # try:
     #     worker = get_worker()
@@ -59,11 +61,12 @@ def await_futures(futures, until_all_completed=True):
     #         pass
     #     else:
     #         raise e
-    #---------end of debug code----------------------
+    # ---------end of debug code----------------------
 
     if until_all_completed:
         while num > 0:
-            time.sleep(random.randint(0,10) + min(2**num, 256))
+            time.sleep(random_seconds(2 ** (num - 1), 2**num, 256))
             num = num_undone(futures)
     elif num > multiprocessing.cpu_count():
-        time.sleep(random.randint(0,10) + min(2 ** (num - multiprocessing.cpu_count()), 256))
+        delta = num - multiprocessing.cpu_count()
+        time.sleep(random_seconds(2 ** (delta - 1), 2**delta, 256))

@@ -147,7 +147,7 @@ if __name__ == "__main__":
 
         args = SimpleNamespace(
             worker=multiprocessing.cpu_count(),
-            threads=5,
+            threads=3,
         )
 
         main(args)
