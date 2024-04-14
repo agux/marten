@@ -238,7 +238,7 @@ def bond_spot():
         update_on_conflict(bond_zh_hs_spot, conn, bzhs, ["symbol"])
     return len(bzhs)
 
-def bond_zh_hs_daily(symbol):
+def get_bond_zh_hs_daily(symbol):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
     try:
@@ -270,12 +270,12 @@ def bond_daily_hs(future_bond_spot):
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
     bond_list = pd.read_sql("SELECT symbol FROM bond_zh_hs_spot", alchemyEngine)
-    logger.info("starting tasks on function bond_daily_hs()...")
+    logger.info("starting tasks on function bond_daily_hs(). #symbols: %s", len(bond_list))
 
     futures = []
     with worker_client() as client:
         for symbol in bond_list["symbol"]:
-            futures.append(client.submit(bond_zh_hs_daily, symbol))
+            futures.append(client.submit(get_bond_zh_hs_daily, symbol))
             await_futures(futures, False)
 
     await_futures(futures)
