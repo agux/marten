@@ -28,6 +28,8 @@ from marten.data.tabledef import (
     table_def_fund_etf_list_sina,
     table_def_fund_etf_daily_em,
     table_def_bond_metrics_em,
+    bond_zh_hs_spot,
+    bond_zh_hs_daily,
 )
 
 from dask.distributed import worker_client, get_worker
@@ -129,14 +131,14 @@ def update_hk_indices(symbol):
         if shide.empty:
             return None
 
-        shide["symbol"] = symbol
-        shide = shide.rename(
+        shide.loc[:, "symbol"] = symbol
+        shide.rename(
             columns={
                 "latest": "close",
-            }
+            },inplace=True
         )
         # Convert the 'date' column to datetime
-        shide["date"] = pd.to_datetime(shide["date"]).dt.date
+        shide.loc[:, "date"] = pd.to_datetime(shide["date"]).dt.date
         with alchemyEngine.begin() as conn:
             latest_date = get_latest_date(conn, symbol, "hk_index_daily_em")
 
@@ -158,7 +160,7 @@ def get_us_indices(us_index_list):
 
     futures = []
     with worker_client() as client:
-        logger.info("starting joblib on function update_us_indices()...")
+        logger.info("starting task on function update_us_indices()...")
         for symbol in us_index_list:
             futures.append(client.submit(update_us_indices, symbol))
             await_futures(futures, False)
@@ -172,9 +174,9 @@ def update_us_indices(symbol):
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
     try:
         iuss = ak.index_us_stock_sina(symbol=symbol)
-        iuss["symbol"] = symbol
+        iuss.loc[:, "symbol"] = symbol
         # Convert iuss["date"] to datetime and normalize to date only
-        iuss["date"] = pd.to_datetime(iuss["date"]).dt.date
+        iuss.loc[:, "date"] = pd.to_datetime(iuss["date"]).dt.date
         with alchemyEngine.begin() as conn:
             latest_date = get_latest_date(conn, symbol, "us_index_daily_sina")
             if latest_date is not None:
@@ -189,6 +191,76 @@ def update_us_indices(symbol):
         )
         return None
 
+def bond_spot():
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+
+    logger.info("running bond_spot()...")
+    bzhs = ak.bond_zh_hs_spot()
+    bzhs.rename(
+        columns={
+            "代码": "symbol",
+            "名称": "name",
+            "最新价": "close",
+            "涨跌额": "change_amount",
+            "涨跌幅": "change_rate",
+            "买入": "bid_price",
+            "卖出": "ask_price",
+            "今开": "open",
+            "最高": "high",
+            "最低": "low",
+            "昨收": "prev_close",
+            "成交量": "volume",
+            "成交额": "turnover",
+        }, inplace=True
+    )
+
+    with alchemyEngine.begin() as conn:
+        update_on_conflict(bond_zh_hs_spot, conn, bzhs, ["symbol"])
+    return len(bzhs)
+
+def bond_zh_hs_daily(symbol):
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+    try:
+        with alchemyEngine.begin() as conn:
+            bzhd = ak.bond_zh_hs_daily(symbol)
+
+            # if shide is empty, return immediately
+            if bzhd.empty:
+                logger.warning("bond daily history data is empty: %s", symbol)
+                return None
+
+            latest_date = get_latest_date(conn, symbol, "bond_zh_hs_daily")
+            if latest_date is not None:
+                ## keep rows only with `date` later than the latest record in database.
+                bzhd = bzhd[bzhd["date"] > (latest_date - timedelta(days=10))]
+
+            bzhd.loc[:, "symbol"] = symbol
+
+            ignore_on_conflict(bond_zh_hs_daily, conn, bzhd, ["symbol", "date"])
+        return len(bzhd)
+    except Exception:
+        logger.error(f"failed to update bond_zh_hs_daily for {symbol}", exc_info=True)
+        return None
+
+def bond_daily_hs(future_bond_spot):
+    precursor_task_completed = future_bond_spot
+
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+
+    bond_list = pd.read_sql("SELECT symbol FROM bond_zh_hs_spot", alchemyEngine)
+    logger.info("starting tasks on function bond_daily_hs()...")
+
+    futures = []
+    with worker_client() as client:
+        for symbol in bond_list["symbol"]:
+            futures.append(client.submit(bond_zh_hs_daily, symbol))
+            await_futures(futures, False)
+
+    await_futures(futures)
+    return len(bond_list)
 
 def hk_index_spot():
     worker = get_worker()
@@ -196,7 +268,7 @@ def hk_index_spot():
 
     logger.info("running stock_hk_index_spot_em()...")
     hk_index_list_df = ak.stock_hk_index_spot_em()
-    hk_index_list_df = hk_index_list_df.rename(
+    hk_index_list_df.rename(
         columns={
             "序号": "seq",
             "内部编号": "internal_code",
@@ -211,7 +283,7 @@ def hk_index_spot():
             "昨收": "prev_close",
             "成交量": "volume",
             "成交额": "amount",
-        }
+        }, inplace=True
     )
 
     with alchemyEngine.begin() as conn:
@@ -261,7 +333,7 @@ def stock_zh_index_daily_em(symbol, src):
                 logger.warning("index data is empty: %s", symbol)
                 return None
 
-            szide["symbol"] = symbol
+            szide.loc[:, "symbol"] = symbol
 
             ignore_on_conflict(
                 table_def_index_daily_em(), conn, szide, ["symbol", "date"]
@@ -294,7 +366,7 @@ def stock_zh_index_spot_em(symbol, src):
                 "量比": "volume_ratio",
             }
         )
-        szise["src"] = src
+        szise.loc[:, "src"] = src
         with alchemyEngine.begin() as conn:
             update_on_conflict(table_def_index_spot_em(), conn, szise, ["symbol"])
         return len(szise)
@@ -305,7 +377,7 @@ def stock_zh_index_spot_em(symbol, src):
 def get_cn_index_list(cn_index_types):
     worker = get_worker()
     logger = worker.logger
-    logger.info("starting joblib on function stock_zh_index_spot_em()...")
+    logger.info("starting task on function stock_zh_index_spot_em()...")
     ##loop thru cn_index_types and send off further tasks to client
     futures = []
     with worker_client() as client:
@@ -339,7 +411,7 @@ def calc_etf_metrics(symbol, end_date):
             )
             bme_df = pd.read_sql(query, conn, parse_dates=["date"])
             # Convert annualized rate to a daily rate
-            bme_df["china_yield_2y_daily"] = bme_df["china_yield_2y"] / 365.25
+            bme_df.loc[:, "china_yield_2y_daily"] = bme_df["china_yield_2y"] / 365.25
 
             # merge df with bme_df by matching dates.
             df = pd.merge_asof(
@@ -350,7 +422,7 @@ def calc_etf_metrics(symbol, end_date):
             ).dropna(subset=["change_rate"])
 
             # calculate the Sharpe ratio, Sortino ratio, and max drawdown with the time series data inside df.
-            df["excess_return"] = df["change_rate"] - df["china_yield_2y_daily"]
+            df.loc[:, "excess_return"] = df["change_rate"] - df["china_yield_2y_daily"]
             # Annualize the excess return
             annualized_excess_return = np.mean(df["excess_return"])
 
@@ -369,7 +441,7 @@ def calc_etf_metrics(symbol, end_date):
             )
 
             # To calculate max drawdown, get the cummulative_returns
-            df["cumulative_returns"] = np.cumprod(1 + df["change_rate"] / 100.0) - 1
+            df.loc[:, "cumulative_returns"] = np.cumprod(1 + df["change_rate"] / 100.0) - 1
             # Calculate the maximum cumulative return up to each point
             peak = np.maximum.accumulate(df["cumulative_returns"])
             # Calculate drawdown as the difference between the current value and the peak
@@ -498,7 +570,7 @@ def get_etf_daily(symbol):
             if df.empty:
                 return None
 
-            df["symbol"] = symbol
+            df.loc[:, "symbol"] = symbol
             df = df.rename(
                 columns={
                     "日期": "date",
@@ -544,7 +616,6 @@ def get_etf_daily(symbol):
 
 
 def etf_list():
-
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
     try:
@@ -556,7 +627,10 @@ def etf_list():
         # for example: 代码=sz159998, split into `exch=sz`, `symbol=159998`.
         df = fund_etf_category_sina_df[["代码", "名称"]].copy()
         df.columns = ["code", "name"]
-        df[["exch", "symbol"]] = df["code"].str.extract(r"([a-z]+)(\d+)")
+        # df[["exch", "symbol"]] = df["code"].str.extract(r"([a-z]+)(\d+)")
+        split_codes = df["code"].str.extract(r"([a-z]+)(\d+)")
+        df.loc[:, "exch"] = split_codes[0]
+        df.loc[:, "symbol"] = split_codes[1]
         df.drop(columns=["code"], inplace=True)
 
         # Now, use the update_on_conflict function to insert or update the data

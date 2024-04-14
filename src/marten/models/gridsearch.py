@@ -37,6 +37,7 @@ def init(args):
     )
     client = Client(cluster)
     client.register_plugin(LocalWorkerPlugin(__name__))
+    client.forward_logging()
     logger.info("dask dashboard can be accessed at: %s", cluster.dashboard_link)
 
 

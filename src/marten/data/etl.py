@@ -27,6 +27,8 @@ from marten.data.worker_func import (
     hk_index_spot,
     hk_index_daily,
     get_us_indices,
+    bond_spot,
+    bond_daily_hs,
 )
 
 # module_path = os.getenv("LOCAL_AKSHARE_DEV_MODULE")
@@ -49,7 +51,7 @@ client = None
 
 
 def init(args):
-    global alchemyEngine, client
+    global alchemyEngine, client, logger
     logger.info("Using akshare version: %s", ak.__version__)
 
     load_dotenv()  # take environment variables from .env.
@@ -73,6 +75,7 @@ def init(args):
     )
     client = Client(cluster)
     client.register_plugin(LocalWorkerPlugin(__name__))
+    client.forward_logging()
     logger.info("dask dashboard can be accessed at: %s", cluster.dashboard_link)
 
 
@@ -102,6 +105,12 @@ def main(args):
 
     futures.append(client.submit(get_us_indices, us_index_list))
 
+    future_bond_spot = client.submit(bond_spot)
+    futures.append(client.submit(bond_daily_hs, future_bond_spot))
+
+    futures.extend(
+        [future_etf_list, future_bond_ir, future_cn_index_list, future_bond_spot]
+    )
     await_futures(futures)
 
     logger.info("Time taken: %s seconds", time.time() - t_start)

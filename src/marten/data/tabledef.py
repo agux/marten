@@ -1,5 +1,6 @@
 from datetime import datetime
 from sqlalchemy.sql import func
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import (
     Table,
     Column,
@@ -13,6 +14,52 @@ from sqlalchemy import (
     PrimaryKeyConstraint,
 )
 
+Base = declarative_base()
+
+
+class bond_zh_hs_daily(Base):
+    __tablename__ = "bond_zh_hs_daily"
+    __table_args__ = {"comment": "Daily market bond data"}
+
+    symbol = Column(String, primary_key=True, comment="Symbol")
+    date = Column(Date, primary_key=True, comment="Date")
+    open = Column(Numeric, comment="Open Price")
+    high = Column(Numeric, comment="High Price")
+    low = Column(Numeric, comment="Low Price")
+    close = Column(Numeric, comment="Close Price")
+    volume = Column(Numeric, comment="Trade volume")
+    last_modified = Column(
+        DateTime(timezone=True),
+        default=func.current_timestamp(),
+        comment="Last Modified Timestamp",
+    )
+
+
+class bond_zh_hs_spot(Base):
+    __tablename__ = "bond_zh_hs_spot"
+    __table_args__ = {"comment": "Spot market bond data"}
+
+    symbol = Column(String, primary_key=True, comment="Code")
+    name = Column(String, comment="Name")
+    close = Column(Numeric, comment="Latest Price")
+    change_amount = Column(Numeric, comment="Change Amount")
+    change_rate = Column(Numeric, comment="Change Percent")
+    bid_price = Column(Numeric, comment="Bid Price")
+    ask_price = Column(Numeric, comment="Ask Price")
+    prev_close = Column(Numeric, comment="Previous Close")
+    open = Column(Numeric, comment="Open Price")
+    high = Column(Numeric, comment="High Price")
+    low = Column(Numeric, comment="Low Price")
+    volume = Column(Numeric, comment="Volume")
+    turnover = Column(Numeric, comment="Turnover")
+    last_modified = Column(
+        DateTime(timezone=True),
+        default=func.current_timestamp(),
+        nullable=False,
+        comment="Last Modified Timestamp",
+    )
+
+
 def table_def_index_daily_em():
     return Table(
         "index_daily_em",
@@ -24,7 +71,11 @@ def table_def_index_daily_em():
         Column("high", Numeric),
         Column("low", Numeric),
         Column("volume", Numeric),
-        Column("last_modified", DateTime, default=datetime.utcnow),
+        Column(
+            "last_modified",
+            DateTime(timezone=True),
+            default=func.current_timestamp(),
+        ),
         Column("amount", Numeric),
     )
 
@@ -40,7 +91,10 @@ def table_def_hk_index_daily_em():
         Column("high", Numeric),
         Column("low", Numeric),
         Column(
-            "last_modified", DateTime, default=func.current_timestamp(), nullable=False
+            "last_modified",
+            DateTime(timezone=True),
+            default=func.current_timestamp(),
+            nullable=False,
         ),
         PrimaryKeyConstraint("symbol", "date", name="hk_index_daily_em_pkey"),
     )
@@ -59,7 +113,10 @@ def table_def_us_index_daily_sina():
         Column("volume", Numeric),
         Column("amount", Numeric),
         Column(
-            "last_modified", DateTime, default=func.current_timestamp(), nullable=False
+            "last_modified",
+            DateTime(timezone=True),
+            default=func.current_timestamp(),
+            nullable=False,
         ),
         PrimaryKeyConstraint("symbol", "date", name="us_index_daily_sina_pkey"),
     )
@@ -83,7 +140,10 @@ def table_def_hk_index_spot_em():
         Column("change_amount", Numeric),
         Column("change_rate", Numeric),
         Column(
-            "last_modified", DateTime, default=func.current_timestamp(), nullable=False
+            "last_modified",
+            DateTime(timezone=True),
+            default=func.current_timestamp(),
+            nullable=False,
         ),
         PrimaryKeyConstraint("symbol", name="hk_index_spot_em_pkey"),
     )
@@ -205,7 +265,10 @@ def table_def_index_spot_em():
         Column("volume", Numeric),
         Column("amount", Numeric),
         Column(
-            "last_modified", DateTime, default=func.current_timestamp(), nullable=False
+            "last_modified",
+            DateTime(timezone=True),
+            default=func.current_timestamp(),
+            nullable=False,
         ),
         Column("src", Text),
         PrimaryKeyConstraint("symbol", name="index_spot_em_pkey"),
@@ -289,7 +352,10 @@ def table_def_fund_etf_perf_em():
         Column("sortinoratio", Numeric, comment="Sortino Ratio (索提诺比率)"),
         Column("maxdrawdown", Numeric, comment="Maximum Drawdown (最大回撤)"),
         Column(
-            "last_modified", DateTime, default=func.current_timestamp(), nullable=False
+            "last_modified",
+            DateTime(timezone=True),
+            default=func.current_timestamp(),
+            nullable=False,
         ),
         PrimaryKeyConstraint("id", name="etf_perf_em_pkey"),
     )
@@ -303,7 +369,10 @@ def table_def_fund_etf_list_sina():
         Column("symbol", String, nullable=False),
         Column("name", String, nullable=False),
         Column(
-            "last_modified", DateTime, default=func.current_timestamp(), nullable=False
+            "last_modified",
+            DateTime(timezone=True),
+            default=func.current_timestamp(),
+            nullable=False,
         ),
         PrimaryKeyConstraint("exch", "symbol", name="fund_etf_list_sina_pk"),
     )
@@ -327,7 +396,7 @@ def table_def_fund_etf_daily_em():
         Column("turnover_rate", Numeric, comment="Turnover rate (换手率)"),
         Column(
             "last_modified",
-            DateTime,
+            DateTime(timezone=True),
             default=func.current_timestamp(),
             nullable=False,
             comment="Last modified timestamp (最后修改时间)",
@@ -403,7 +472,7 @@ def table_def_bond_metrics_em():
         ),
         Column(
             "last_modified",
-            DateTime,
+            DateTime(timezone=True),
             default=func.current_timestamp(),
             nullable=False,
             comment="Last modified timestamp (最后修改时间)",
