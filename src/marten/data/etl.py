@@ -111,9 +111,13 @@ def main(args):
     futures.extend(
         [future_etf_list, future_bond_ir, future_cn_index_list, future_bond_spot]
     )
-    await_futures(futures)
 
+    await_futures(futures)
     logger.info("Time taken: %s seconds", time.time() - t_start)
+
+    if client is not None:
+        # Remember to close the client if your program is done with all computations
+        client.close()
 
 
 def run_main_with_profiling(args):

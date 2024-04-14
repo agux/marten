@@ -597,14 +597,15 @@ def main(args):
         if not args.grid_search_only:
             t1_start = time.time()
             prep_covar_baseline_metrics(anchor_df, anchor_table, args)
+            if not args.covar_only:
+                ## wait for all tasks to be completed before restarting
+                await_futures(futures)
+                client.restart()
             logger.info(
                 "%s covariate baseline metric computation completed. Time taken: %s seconds",
                 args.symbol,
                 time.time() - t1_start,
             )
-            ## wait for all tasks to be completed before restarting
-            await_futures(futures)
-            client.restart()
 
         if not args.covar_only:
             t2_start = time.time()
