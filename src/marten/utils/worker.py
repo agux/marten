@@ -26,12 +26,19 @@ class LocalWorkerPlugin(WorkerPlugin):
         worker.alchemyEngine = get_database_engine(db_url)
         worker.logger = get_logger(self.logger_name, role='worker')
 
+def get_result(future):
+    try:
+        r = future.result()
+        return r
+    except Exception as e:
+        get_logger().exception(e)
+        pass
 
 def num_undone(futures):
     undone = 0
     for f in futures:
         if f.done():
-            f.result()
+            get_result(f)
             futures.remove(f)
         else:
             undone += 1
@@ -55,7 +62,7 @@ def await_futures(futures, until_all_completed=True):
 
     if until_all_completed:
         while num > 0:
-            time.sleep(min(2**num, 128))
+            time.sleep(min(2**num, 256))
             num = num_undone(futures)
     elif num > multiprocessing.cpu_count():
-        time.sleep(min(2 ** (num - multiprocessing.cpu_count()), 128))
+        time.sleep(min(2 ** (num - multiprocessing.cpu_count()), 256))

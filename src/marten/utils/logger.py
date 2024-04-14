@@ -7,6 +7,7 @@ from logging import Logger
 
 from dotenv import load_dotenv
 
+logger = None
 
 class CustomFormatter(logging.Formatter):
     def format(self, record):
@@ -20,6 +21,11 @@ class CustomFormatter(logging.Formatter):
 
 
 def get_logger(name, role: Literal["client", "worker"] = "client") -> Logger:
+    global logger
+
+    if logger is not None:
+        return logger
+    
     load_dotenv()
 
     level = os.getenv("LOG_LEVEL")
