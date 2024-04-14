@@ -8,6 +8,17 @@ from logging import Logger
 from dotenv import load_dotenv
 
 
+class CustomFormatter(logging.Formatter):
+    def format(self, record):
+        # Check if 'worker' attribute exists, if not, set it to a default value
+        if hasattr(record, "worker"):
+            record.role = f"worker {record.worker}"
+        else:
+            record.role = "master"  # Default value for missing 'worker'
+        # Call the superclass's format method to do the actual message formatting
+        return super(CustomFormatter, self).format(record)
+
+
 def get_logger(name, role: Literal["client", "worker"] = "client") -> Logger:
     load_dotenv()
 
@@ -19,8 +30,8 @@ def get_logger(name, role: Literal["client", "worker"] = "client") -> Logger:
 
         formatter = None
         if role == 'client':
-            formatter = logging.Formatter(
-                "%(asctime)s - [worker %(worker)s] - %(name)s - %(levelname)s - %(message)s",
+            formatter = CustomFormatter(
+                "%(asctime)s - [%(role)s] - %(name)s - %(levelname)s - %(message)s",
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
             file_handler = logging.FileHandler(f"{logger.name}.log")
