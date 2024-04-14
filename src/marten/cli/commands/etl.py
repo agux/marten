@@ -3,15 +3,25 @@ from marten.utils.logger import get_logger
 
 def configure_parser(parser):
     parser.add_argument("--profile", action="store_true", help="Profile the ETL process e.g. to troubleshoot bottlenecks")
-    
+
     parser.add_argument(
         "--worker",
         action="store",
         type=int,
         default=-1,
         help=(
-            "Number or parallel workers (python processes) for data retrieval. "
+            "Number of parallel workers (python processes) for data retrieval. "
             "Defaults to using all CPU cores available."
+        ),
+    )
+    parser.add_argument(
+        "--threads",
+        action="store",
+        type=int,
+        default=5,
+        help=(
+            "Number of threads per worker (python processes) for data retrieval. "
+            "Defaults to 5."
         ),
     )
     parser.set_defaults(func=handle_etl)

@@ -69,7 +69,7 @@ def init(args):
 
     cluster = LocalCluster(
         n_workers=args.worker if args.worker > 0 else multiprocessing.cpu_count(),
-        threads_per_worker=1,
+        threads_per_worker=args.threads,
         processes=True,
         # memory_limit="2GB",
     )
@@ -145,7 +145,10 @@ if __name__ == "__main__":
         # profiler.enable()
         from types import SimpleNamespace
 
-        args = SimpleNamespace(worker=multiprocessing.cpu_count())
+        args = SimpleNamespace(
+            worker=multiprocessing.cpu_count(),
+            threads=5,
+        )
 
         main(args)
 
