@@ -541,6 +541,11 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     cov_table = "hk_index_daily_em_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
+    # prep CN bond: bond_zh_hs_daily_view
+    features = ["change_rate", "vol_change_rate"]
+    cov_table = "bond_zh_hs_daily_view"
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
+
     # TODO: prep stock features
 
     # TODO prep options
