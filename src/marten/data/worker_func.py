@@ -4,6 +4,12 @@ import numpy as np
 
 import exchange_calendars as xcals
 
+from tenacity import (
+    stop_after_attempt,
+    wait_exponential,
+    Retrying,
+)
+
 # import exchange_calendars as xcals
 from datetime import datetime, timedelta
 from sqlalchemy import (
@@ -156,9 +162,9 @@ def update_hk_indices(symbol):
             )
 
         return len(shide)
-    except Exception:
+    except Exception as e:
         logger.error(f"failed to update hk_index_daily_em for {symbol}", exc_info=True)
-        return None
+        raise e
 
 def get_us_indices(us_index_list):
     worker = get_worker()
@@ -191,18 +197,25 @@ def update_us_indices(symbol):
                 table_def_us_index_daily_sina(), conn, iuss, ["symbol", "date"]
             )
         return len(iuss)
-    except Exception:
+    except Exception as e:
         logger.error(
             f"failed to update us_index_daily_sina for {symbol}", exc_info=True
         )
-        return None
+        raise e
 
 def bond_spot():
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
     logger.info("running bond_spot()...")
-    bzhs = ak.bond_zh_hs_spot()
+    
+    bzhs = None
+    for attempt in Retrying(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=5)
+    ):
+        with attempt:
+            bzhs = ak.bond_zh_hs_spot()
+
     bzhs.rename(
         columns={
             "代码": "symbol",
@@ -246,9 +259,9 @@ def bond_zh_hs_daily(symbol):
 
             ignore_on_conflict(bond_zh_hs_daily, conn, bzhd, ["symbol", "date"])
         return len(bzhd)
-    except Exception:
+    except Exception as e:
         logger.error(f"failed to update bond_zh_hs_daily for {symbol}", exc_info=True)
-        return None
+        raise e
 
 def bond_daily_hs(future_bond_spot):
     precursor_task_completed = future_bond_spot
@@ -345,9 +358,9 @@ def stock_zh_index_daily_em(symbol, src):
                 table_def_index_daily_em(), conn, szide, ["symbol", "date"]
             )
         return len(szide)
-    except Exception:
+    except Exception as e:
         logger.error(f"failed to update index_daily_em for {symbol}", exc_info=True)
-        return None
+        raise e
 
 def stock_zh_index_spot_em(symbol, src):
     worker = get_worker()
@@ -376,9 +389,9 @@ def stock_zh_index_spot_em(symbol, src):
         with alchemyEngine.begin() as conn:
             update_on_conflict(table_def_index_spot_em(), conn, szise, ["symbol"])
         return len(szise)
-    except Exception:
+    except Exception as e:
         logger.error(f"failed to update index_spot_em for {symbol}", exc_info=True)
-        return None
+        raise e
 
 def get_cn_index_list(cn_index_types):
     worker = get_worker()
@@ -478,9 +491,9 @@ def calc_etf_metrics(symbol, end_date):
             conn.execute(update_query, params)
 
         return len(df)
-    except Exception:
+    except Exception as e:
         logger.error(f"failed to update ETF metrics for {symbol}", exc_info=True)
-        return None
+        raise e
 
 # load historical data from daily table and calc metrics, then update perf table
 def update_etf_metrics(future_etf_list, future_bond_ir):
@@ -614,11 +627,11 @@ def get_etf_daily(symbol):
             )
 
             return len(df)
-    except Exception:
+    except Exception as e:
         logger.error(
             f"failed to get daily trade history data for {symbol}", exc_info=True
         )
-        return None
+        raise e
 
 
 def etf_list():
