@@ -20,7 +20,7 @@ class CustomFormatter(logging.Formatter):
         return super(CustomFormatter, self).format(record)
 
 
-def get_logger(name, role: Literal["client", "worker"] = "client") -> Logger:
+def get_logger(name=None, role: Literal["client", "worker"] = "client") -> Logger:
     global logger
 
     if logger is not None:
