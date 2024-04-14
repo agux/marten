@@ -66,8 +66,8 @@ def load_anchor_ts(symbol, limit):
     global alchemyEngine, logger, random_seed
     ## support arbitrary types of symbol (could be from different tables, with different features available)
     tbl_cols_dict = {
-        "index_daily_em_view": "date DS, change_rate y, vol_change_rate vol_cr, amt_change_rate amt_cr, open, close, high, low, volume, amount",
-        "fund_etf_daily_em_view": "date DS, change_rate y, vol_change_rate vol_cr, amt_change_rate amt_cr, open, close, high, low, volume, turnover, turnover_rate",
+        "index_daily_em_view": "date DS, change_rate y, vol_change_rate, amt_change_rate, open, close, high, low, volume, amount",
+        "fund_etf_daily_em_view": "date DS, change_rate y, vol_change_rate, amt_change_rate, open, close, high, low, volume, turnover, turnover_rate",
         "us_index_daily_sina_view": "date DS, change_rate y, amt_change_rate amt_cr, open, close, high, low, volume, amount",
     }
     # lookup which table the symbol's data is in

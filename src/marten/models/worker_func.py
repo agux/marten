@@ -257,7 +257,7 @@ def log_metrics_for_hyper_params(
     fit_time = time.time() - start_time
     last_metric = metrics.iloc[-1]
     covars = [col for col in df.columns if col not in ("ds", "y")]
-    logger.info("params:%s\n#covars:%s\n%s", params, len(covars), last_metric)
+    logger.debug("params:%s\n#covars:%s\n%s", params, len(covars), last_metric)
 
     update_metrics_table(
         alchemyEngine,
