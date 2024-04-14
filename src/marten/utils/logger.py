@@ -20,7 +20,7 @@ def get_logger(name, role: Literal["client", "worker"] = "client") -> Logger:
         formatter = None
         if role == 'client':
             formatter = logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                "%(asctime)s - [worker %(worker)s] - %(name)s - %(levelname)s - %(message)s",
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
             file_handler = logging.FileHandler(f"{logger.name}.log")
@@ -29,7 +29,7 @@ def get_logger(name, role: Literal["client", "worker"] = "client") -> Logger:
             logger.addHandler(file_handler)
         elif role == 'worker':
             formatter = logging.Formatter(
-                "%(asctime)s - [worker %(worker)s] - %(name)s - %(levelname)s - %(message)s",
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
 

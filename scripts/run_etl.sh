@@ -18,6 +18,12 @@ OUTPUT_LOG=output_etl.log
 >etl.log
 >$OUTPUT_LOG
 
+# Check if 'marten etl' process is already running
+if pgrep -af 'marten etl' | grep -v 'grep'; then
+  echo "The process 'marten etl' is already running."
+  exit 1
+fi
+
 # Run the script with nohup
 # nohup "$PYENV_PYTHON" "$script" "$@" > >(tee -a output.log) 2>&1 &
 nohup "$COMMAND" "etl" "$@" > >(tee -a $OUTPUT_LOG) 2>&1 &
