@@ -1,14 +1,14 @@
 import os
 import time
 import argparse
-import pandas as pd
 import multiprocessing
+import pandas as pd
 from dotenv import load_dotenv
-from dask.distributed import LocalCluster, Client, fire_and_forget
+from dask.distributed import fire_and_forget
 
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
-from marten.utils.worker import LocalWorkerPlugin, await_futures
+from marten.utils.worker import await_futures, init_client
 from marten.models.worker_func import fit_with_covar, log_metrics_for_hyper_params
 
 from sqlalchemy import text
@@ -17,6 +17,15 @@ from neuralprophet import set_log_level
 
 from sklearn.model_selection import ParameterGrid
 
+default_params = {
+    # default hyperparameters. the order of keys MATTER (which affects the PK in table)
+    "ar_layers": [],
+    "batch_size": None,
+    "lagged_reg_layers": [],
+    "n_lags": 0,
+    "yearly_seasonality": "auto",
+}
+
 random_seed = 7
 logger = None
 alchemyEngine = None
@@ -24,21 +33,16 @@ args = None
 client = None
 futures = []
 
+
 def init(args):
     global alchemyEngine, logger, random_seed, client
 
     alchemyEngine, logger = _init_local_resource()
 
-    cluster = LocalCluster(
-        n_workers=args.worker if args.worker > 0 else multiprocessing.cpu_count(),
-        threads_per_worker=1,
-        processes=True,
-        # memory_limit="2GB",
+    client = init_client(
+        __name__,
+        int(multiprocessing.cpu_count() * 0.9) if args.worker < 1 else args.worker,
     )
-    client = Client(cluster)
-    client.register_plugin(LocalWorkerPlugin(__name__))
-    client.forward_logging()
-    logger.info("dask dashboard can be accessed at: %s", cluster.dashboard_link)
 
 
 def _init_local_resource():
@@ -62,8 +66,7 @@ def _init_local_resource():
     return alchemyEngine, logger
 
 
-def load_anchor_ts(symbol, limit):
-    global alchemyEngine, logger, random_seed
+def load_anchor_ts(symbol, limit, alchemyEngine):
     ## support arbitrary types of symbol (could be from different tables, with different features available)
     tbl_cols_dict = {
         "index_daily_em_view": "date DS, change_rate y, vol_change_rate, amt_change_rate, open, close, high, low, volume, amount",
@@ -161,6 +164,7 @@ def _pair_endogenous_covar_metrics(anchor_symbol, anchor_df, cov_table, features
         )
         futures.append(future)
 
+
 def _pair_covar_metrics(
     anchor_symbol, anchor_df, cov_table, cov_symbols, feature, args
 ):
@@ -185,11 +189,10 @@ def _pair_covar_metrics(
         await_futures(futures, False)
 
 
-def _load_covar_set(covar_set_id):
-    global alchemyEngine
+def _load_covar_set(covar_set_id, alchemyEngine):
     query = """
         select
-            cov_symbol, cov_table, cov_feature
+            cov_symbol, cov_table, cov_feature feature
         from
             covar_set
         where
@@ -207,9 +210,8 @@ def _load_covar_set(covar_set_id):
 
 
 def _load_topn_covars(
-    n, anchor_symbol, nan_threshold=None, cov_table=None, feature=None
+    alchemyEngine, n, anchor_symbol, nan_threshold=None, cov_table=None, feature=None
 ):
-    global alchemyEngine
     sub_query = """
 		select
 			loss_val
@@ -291,17 +293,16 @@ def _load_topn_covars(
     return df, covar_set_id
 
 
-def augment_anchor_df_with_covars(df, args):
-    global alchemyEngine, logger
+def augment_anchor_df_with_covars(df, args, alchemyEngine, logger):
     merged_df = df[["ds", "y"]]
     if args.covar_set_id is not None:
         # TODO load covars based on the set id
         covar_set_id = args.covar_set_id
-        covars_df = _load_covar_set(covar_set_id)
+        covars_df = _load_covar_set(covar_set_id, alchemyEngine)
     else:
         nan_threshold = round(len(df) * args.nan_limit, 0)
         covars_df, covar_set_id = _load_topn_covars(
-            args.top_n, args.symbol, nan_threshold
+            alchemyEngine, args.top_n, args.symbol, nan_threshold
         )
 
     if covars_df.empty:
@@ -559,16 +560,8 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
 
 
 def univariate_baseline(anchor_df, args):
-    global random_seed, client
+    global random_seed, client, default_params
     df = anchor_df[["ds", "y"]]
-    default_params = {
-        # default hyperparameters. the order of keys MATTER (which affects the PK in table)
-        "ar_layers": [],
-        "batch_size": None,
-        "lagged_reg_layers": [],
-        "n_lags": 0,
-        "yearly_seasonality": "auto",
-    }
     df_future = client.scatter(df)
     fire_and_forget(
         client.submit(
@@ -584,13 +577,16 @@ def univariate_baseline(anchor_df, args):
         )
     )
 
+
 def main(args):
-    global client, logger, futures
+    global client, logger, futures, alchemyEngine, logger, random_seed
     t_start = time.time()
     try:
         init(args)
 
-        anchor_df, anchor_table = load_anchor_ts(args.symbol, args.timestep_limit)
+        anchor_df, anchor_table = load_anchor_ts(
+            args.symbol, args.timestep_limit, alchemyEngine
+        )
 
         univariate_baseline(anchor_df, args)
 
@@ -609,14 +605,14 @@ def main(args):
 
         if not args.covar_only:
             t2_start = time.time()
-            df, covar_set_id = augment_anchor_df_with_covars(anchor_df, args)
+            df, covar_set_id = augment_anchor_df_with_covars(anchor_df, args, alchemyEngine, logger)
             grid_search(df, covar_set_id, args)
             logger.info(
                 "%s grid-search completed. Time taken: %s seconds",
                 args.symbol,
                 time.time() - t2_start,
             )
-        
+
         await_futures(futures)
     finally:
         if client is not None:

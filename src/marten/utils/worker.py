@@ -2,7 +2,7 @@ import os
 import time
 import random
 import multiprocessing
-from dask.distributed import WorkerPlugin, get_worker
+from dask.distributed import WorkerPlugin, get_worker, LocalCluster, Client
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
 from dotenv import load_dotenv
@@ -26,6 +26,22 @@ class LocalWorkerPlugin(WorkerPlugin):
 
         worker.alchemyEngine = get_database_engine(db_url)
         worker.logger = get_logger(self.logger_name, role='worker')
+
+
+def init_client(name, worker=-1, threads=1):
+    cluster = LocalCluster(
+        n_workers=worker if worker > 0 else multiprocessing.cpu_count(),
+        threads_per_worker=threads,
+        processes=True,
+        # memory_limit="2GB",
+    )
+    client = Client(cluster)
+    client.register_plugin(LocalWorkerPlugin(name))
+    client.forward_logging()
+    get_logger(name).info("dask dashboard can be accessed at: %s", cluster.dashboard_link)
+
+    return client
+
 
 def get_result(future):
     try:

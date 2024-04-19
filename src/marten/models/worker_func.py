@@ -4,9 +4,13 @@ import json
 import hashlib
 import warnings
 
+from datetime import datetime, timedelta
+
 from sqlalchemy import text
 
 from neuralprophet import NeuralProphet, set_random_seed, set_log_level
+
+from dask.distributed import get_worker
 
 from tenacity import (
     stop_after_attempt,
@@ -14,21 +18,11 @@ from tenacity import (
     Retrying,
 )
 
-def fit_with_covar(
-    anchor_symbol,
-    anchor_df,
-    cov_table,
-    cov_symbol,
-    min_date,
-    random_seed,
-    feature,
-    accelerator,
-    early_stopping,
+
+def merge_covar_df(
+    anchor_symbol, anchor_df, cov_table, cov_symbol, feature, min_date, alchemyEngine
 ):
-    # Local import of get_worker to avoid circular import issue
-    from dask.distributed import get_worker
-    worker = get_worker()
-    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+
     if anchor_symbol == cov_symbol:
         if feature == "y":
             # no covariate is needed. this is a baseline metric
@@ -70,10 +64,37 @@ def fit_with_covar(
             return None
         merged_df = pd.merge(anchor_df, cov_symbol_df, on="ds", how="left")
 
+    return merged_df
+
+
+def fit_with_covar(
+    anchor_symbol,
+    anchor_df,
+    cov_table,
+    cov_symbol,
+    min_date,
+    random_seed,
+    feature,
+    accelerator,
+    early_stopping,
+):
+    # Local import of get_worker to avoid circular import issue?
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+    merged_df = merge_covar_df(
+        anchor_symbol,
+        anchor_df,
+        cov_table,
+        cov_symbol,
+        feature,
+        min_date,
+        alchemyEngine,
+    )
+
     start_time = time.time()
     metrics = None
     try:
-        metrics = train(
+        _, metrics = train(
             df=merged_df,
             epochs=None,
             random_seed=random_seed,
@@ -83,6 +104,7 @@ def fit_with_covar(
             daily_seasonality=False,
             impute_missing=True,
             accelerator=accelerator,
+            validate=True,
         )
     except ValueError as e:
         logger.warning(str(e))
@@ -127,7 +149,7 @@ def save_covar_metrics(
     # Insert data into the table
     with alchemyEngine.begin() as conn:
         # Inserting DataFrame into the database table
-        for index, row in cov_metrics.iterrows():
+        for _, row in cov_metrics.iterrows():
             conn.execute(
                 text(
                     """
@@ -159,14 +181,22 @@ def save_covar_metrics(
             )
 
 
-def train(df, epochs=None, random_seed=7, early_stopping=True, **kwargs):
+def train(
+    df,
+    epochs=None,
+    random_seed=7,
+    early_stopping=True,
+    country=None,
+    validate=True,
+    **kwargs,
+):
     set_log_level("ERROR")
     set_random_seed(random_seed)
 
     with warnings.catch_warnings():
         # suppress swarming warning:
-        # WARNING - (py.warnings._showwarnmsg) - 
-        # ....../.pyenv/versions/3.12.2/envs/venv_3.12.2/lib/python3.12/site-packages/neuralprophet/df_utils.py:1152: 
+        # WARNING - (py.warnings._showwarnmsg) -
+        # ....../.pyenv/versions/3.12.2/envs/venv_3.12.2/lib/python3.12/site-packages/neuralprophet/df_utils.py:1152:
         # FutureWarning: Series.view is deprecated and will be removed in a future version. Use ``astype`` as an alternative to change the dtype.
         # converted_ds = pd.to_datetime(ds_col, utc=True).view(dtype=np.int64)
         warnings.simplefilter("ignore", FutureWarning)
@@ -174,21 +204,32 @@ def train(df, epochs=None, random_seed=7, early_stopping=True, **kwargs):
         m = NeuralProphet(**kwargs)
         covars = [col for col in df.columns if col not in ("ds", "y")]
         m.add_lagged_regressor(covars)
-        train_df, test_df = m.split_df(
-            df,
-            valid_p=1.0 / 10,
-            freq="D",
-        )
+        if country is not None:
+            m.add_country_holidays(country_name=country)
         try:
-            metrics = m.fit(
-                train_df,
-                validation_df=test_df,
-                progress=None,
-                epochs=epochs,
-                early_stopping=early_stopping,
-                freq="D",
-            )
-            return metrics
+            if validate:
+                train_df, test_df = m.split_df(
+                    df,
+                    valid_p=1.0 / 10,
+                    freq="B",
+                )
+                metrics = m.fit(
+                    train_df,
+                    validation_df=test_df,
+                    progress=None,
+                    epochs=epochs,
+                    early_stopping=early_stopping,
+                    freq="B",
+                )
+            else:
+                metrics = m.fit(
+                    df,
+                    progress=None,
+                    epochs=epochs,
+                    early_stopping=early_stopping,
+                    freq="B",
+                )
+            return m, metrics
         except ValueError as e:
             # check if the message `Inputs/targets with missing values detected` was inside the error
             if "Inputs/targets with missing values detected" in str(e):
@@ -222,16 +263,14 @@ def log_metrics_for_hyper_params(
     # Otherwise we could proceed further code execution.
     param_str = json.dumps(params)
     hpid = hashlib.md5(param_str.encode("utf-8")).hexdigest()
-    if not new_metric_keys(
-        anchor_symbol, hpid, param_str, covar_set_id, alchemyEngine
-    ):
+    if not new_metric_keys(anchor_symbol, hpid, param_str, covar_set_id, alchemyEngine):
         logger.debug("Skip re-entry for %s: %s", anchor_symbol, param_str)
         return None
 
     start_time = time.time()
     metrics = None
     try:
-        metrics = train(
+        _, metrics = train(
             df,
             epochs=epochs,
             random_seed=random_seed,
@@ -245,6 +284,7 @@ def log_metrics_for_hyper_params(
             daily_seasonality=False,
             impute_missing=True,
             accelerator=accelerator,
+            validate=True,
         )
     except ValueError as e:
         logger.warning(str(e))
@@ -374,3 +414,281 @@ def new_metric_keys(anchor_symbol, hpid, hyper_params, covar_set_id, alchemyEngi
     ):
         with attempt:
             return action()
+
+
+def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
+    # find the model setting with optimum performance, including univariate default setting.
+    from marten.models.gridsearch import (
+        default_params,
+        load_anchor_ts,
+        augment_anchor_df_with_covars,
+    )
+    from types import SimpleNamespace
+
+    query = """
+        select
+            *
+        from
+        (
+            (
+                select
+                    null cov_table,
+                    null cov_symbol,
+                    null feature,
+                    hyper_params,
+                    loss_val,
+                    covar_set_id,
+                    null nan_count
+                from
+                    grid_search_metrics
+                where
+                    anchor_symbol = %(symbol)s
+                order by
+                    loss_val asc
+                limit 1
+            )
+        union all 
+            (
+                select
+                    cov_table,
+                    cov_symbol,
+                    feature,
+                    null hyper_params,
+                    loss_val,
+                    null covar_set_id,
+                    nan_count
+                from
+                    neuralprophet_corel nc
+                where
+                    symbol = %(symbol)s
+                order by
+                    loss_val asc
+                limit 1
+            )
+        )
+        order by
+            loss_val asc
+        limit 1
+    """
+    params = {
+        "symbol": symbol,
+    }
+    best_setting = pd.read_sql(query, alchemyEngine, params=params)
+
+    df, _ = load_anchor_ts(symbol, timestep_limit, alchemyEngine)
+    hyperparams = None
+    covar_set_id = None
+    if best_setting.empty:
+        logger.warn(
+            (
+                "No grid-search or covariate metrics for %s. "
+                "Proceeding univariate prediction with default hyper-parameters. "
+                "This might not be the most accurate prediction."
+            ),
+            symbol,
+        )
+        hyperparams = default_params
+        df = df[["ds", "y"]]
+    elif best_setting["hyper_params"].iloc[0] is not None:
+        best_setting = best_setting.iloc[0]
+        covar_set_id = int(best_setting["covar_set_id"])
+        logger.info(
+            (
+                "%s - found best setting in grid_search_metrics:\n"
+                "loss_val: %s\n"
+                "covar_set_id: %s"
+            ),
+            symbol,
+            best_setting["loss_val"],
+            covar_set_id,
+        )
+
+        hyperparams = json.loads(best_setting["hyper_params"])
+        df, _ = augment_anchor_df_with_covars(
+            df,
+            SimpleNamespace(covar_set_id=covar_set_id, symbol=symbol),
+            alchemyEngine,
+            logger,
+        )
+    else:
+        best_setting = best_setting.iloc[0]
+        logger.info(
+            (
+                "%s - found best setting in neuralprophet_corel:\n"
+                "loss_val: %s\n"
+                "cov_table: %s\n"
+                "cov_symbol: %s\n"
+                "feature: %s\n"
+                "nan_count: %s"
+            ),
+            symbol,
+            best_setting["loss_val"],
+            best_setting["cov_table"],
+            best_setting["cov_symbol"],
+            best_setting["feature"],
+            best_setting["nan_count"],
+        )
+        hyperparams = default_params
+        df = merge_covar_df(
+            symbol,
+            df[["ds", "y"]],
+            best_setting["cov_table"],
+            best_setting["cov_symbol"],
+            best_setting["feature"],
+            df["ds"].min().strftime("%Y-%m-%d"),
+            alchemyEngine,
+        )
+    return df, hyperparams, covar_set_id
+
+
+def save_forecast_snapshot(
+    alchemyEngine,
+    symbol,
+    hyper_params,
+    covar_set_id,
+    metrics,
+    metrics_final,
+    forecast,
+    fit_time,
+):
+    metric = metrics.iloc[-1]
+    metric_final = metrics_final.iloc[-1]
+    mean_diff = (forecast["yhat1"] - forecast["y"]).mean()
+    std_diff = (forecast["yhat1"] - forecast["y"]).std()
+
+    with alchemyEngine.begin() as conn:
+        result = conn.execute(
+            text(
+                """
+                insert
+                    into
+                    predict_snapshots
+                    (
+                        model,symbol,hyper_params,covar_set_id,mae_val,rmse_val,loss_val,mae,rmse,loss,
+                        predict_diff_mean,predict_diff_stddev,epochs,fit_time,mae_final,rmse_final,loss_final
+                    )
+                values(
+                    :model,:symbol,:hyper_params,:covar_set_id,:mae_val,:rmse_val,:loss_val,
+                    :mae,:rmse,:loss,:predict_diff_mean,:predict_diff_stddev,:epochs,:fit_time,
+                    :mae_final,:rmse_final,:loss_final
+                ) RETURNING id
+                """
+            ),
+            {
+                "model": "NeuralProphet",
+                "symbol": symbol,
+                "hyper_params": hyper_params,
+                "covar_set_id": covar_set_id,
+                "mae_val": metric["MAE_val"],
+                "rmse_val": metric["RMSE_val"],
+                "loss_val": metric["Loss_val"],
+                "mae": metric["MAE"],
+                "rmse": metric["RMSE"],
+                "loss": metric["Loss"],
+                "predict_diff_mean": mean_diff,
+                "predict_diff_stddev": std_diff,
+                "epochs": metric["epoch"] + 1,
+                "fit_time": f"{str(fit_time)} seconds",
+                "mae_final": metric_final["MAE"],
+                "rmse_final": metric_final["RMSE"],
+                "loss_final": metric_final["Loss"],
+            },
+        )
+        snapshot_id = result.fetchone()[0]
+
+        ## save to ft_yearly_params table
+        future_date = forecast.iloc[-1]["ds"]
+        days_count = (future_date - datetime.now()).days + 1
+        start_date = future_date - timedelta(days=days_count*2)
+        forecast = forecast[
+            forecast["ds"] >= start_date
+        ]
+
+        yearly_seasonality = forecast[["ds", "season_yearly"]]
+        yearly_seasonality.rename(
+            columns={"ds": "date", "season_yearly": "coefficient"}, inplace=True
+        )
+        yearly_seasonality.loc[:, "symbol"] = symbol
+        yearly_seasonality.loc[:, "snapshot_id"] = snapshot_id
+        yearly_seasonality.to_sql(
+            "ft_yearly_params", conn, if_exists="append", index=False
+        )
+
+    return snapshot_id, len(yearly_seasonality)
+
+
+def predict_best(
+    symbol,
+    early_stopping,
+    timestep_limit,
+    epochs,
+    random_seed,
+    future_steps,
+):
+    from marten.utils.holidays import get_holiday_region
+
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+
+    df, params, covar_set_id = get_best_prediction_setting(
+        alchemyEngine, logger, symbol, timestep_limit
+    )
+    logger.info("%s - using hyper-parameters:\n%s", symbol, json.dumps(params))
+    region = get_holiday_region(alchemyEngine, symbol)
+    logger.info("%s - inferred holiday region: %s", symbol, region)
+
+    # use the best performing setting to fit and then predict
+    start_time = time.time()
+    _, metrics = train(
+        df=df,
+        country=region,
+        epochs=epochs,
+        random_seed=random_seed,
+        early_stopping=early_stopping,
+        weekly_seasonality=False,
+        daily_seasonality=False,
+        impute_missing=True,
+        validate=True,
+        **params,
+    )
+    m, metrics_final = train(
+        df=df,
+        country=region,
+        epochs=epochs,
+        random_seed=random_seed,
+        early_stopping=early_stopping,
+        weekly_seasonality=False,
+        daily_seasonality=False,
+        impute_missing=True,
+        validate=False,
+        n_forecasts=future_steps,
+        **params,
+    )
+    fit_time = time.time() - start_time
+
+    set_log_level("ERROR")
+    set_random_seed(random_seed)
+
+    future = m.make_future_dataframe(
+        df, n_historic_predictions=True, periods=future_steps
+    )
+    forecast = m.predict(future)
+
+    # save the snapshot and yearly seasonality coefficients to tables.
+    snapshot_id, n_yearly_seasonality = save_forecast_snapshot(
+        alchemyEngine,
+        symbol,
+        json.dumps(params),
+        covar_set_id,
+        metrics,
+        metrics_final,
+        forecast,
+        fit_time,
+    )
+
+    logger.info(
+        "%s - estimated %s yearly-seasonality coefficients. snapshot_id: %s",
+        symbol,
+        n_yearly_seasonality,
+        snapshot_id,
+    )

@@ -5,7 +5,6 @@ import time
 import multiprocessing
 
 from dotenv import load_dotenv
-from dask.distributed import LocalCluster, Client
 
 import yappi
 
@@ -15,7 +14,7 @@ import yappi
 
 from marten.utils.logger import get_logger
 from marten.utils.database import get_database_engine
-from marten.utils.worker import LocalWorkerPlugin, await_futures
+from marten.utils.worker import await_futures, init_client
 from marten.data.worker_func import (
     etf_spot,
     etf_perf,
@@ -67,16 +66,7 @@ def init(args):
     )
     alchemyEngine = get_database_engine(db_url, pool_size=1)
 
-    cluster = LocalCluster(
-        n_workers=args.worker if args.worker > 0 else multiprocessing.cpu_count(),
-        threads_per_worker=args.threads,
-        processes=True,
-        # memory_limit="2GB",
-    )
-    client = Client(cluster)
-    client.register_plugin(LocalWorkerPlugin(__name__))
-    client.forward_logging()
-    logger.info("dask dashboard can be accessed at: %s", cluster.dashboard_link)
+    client = init_client(__name__,args.worker,args.threads)
 
 
 def main(args):

@@ -259,6 +259,14 @@ def get_bond_zh_hs_daily(symbol):
 
             ignore_on_conflict(bond_zh_hs_daily, conn, bzhd, ["symbol", "date"])
         return len(bzhd)
+    except KeyError as e:
+        if "'date'" in str(e):
+            logger.warning("ak.bond_zh_hs_daily(%s) could be empty: %s", symbol, str(e))
+        else:
+            logger.error(
+                f"failed to update bond_zh_hs_daily for {symbol}", exc_info=True
+            )
+            raise e
     except Exception as e:
         logger.error(f"failed to update bond_zh_hs_daily for {symbol}", exc_info=True)
         raise e
