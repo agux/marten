@@ -711,6 +711,7 @@ def etf_perf():
             "成立日期": "inceptiondate",
         }
         fund_exchange_rank_em_df.rename(columns=column_mapping, inplace=True)
+        fund_exchange_rank_em_df.dropna(subset=["date"], inplace=True)
         with alchemyEngine.begin() as conn:
             update_on_conflict(
                 table_def_fund_etf_perf_em(),
