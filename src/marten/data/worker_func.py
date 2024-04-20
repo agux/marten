@@ -875,7 +875,7 @@ def get_stock_daily(symbol):
 
         start_date = "19700101"  # For entire history.
         if latest_date is not None:
-            start_date = (latest_date - timedelta(days=10)).strftime("%Y%m%d")
+            start_date = (latest_date - timedelta(days=30)).strftime("%Y%m%d")
 
         end_date = datetime.now().strftime("%Y%m%d")
         adjust="hfq"
