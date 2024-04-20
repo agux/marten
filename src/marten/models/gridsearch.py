@@ -161,6 +161,7 @@ def _pair_endogenous_covar_metrics(anchor_symbol, anchor_df, cov_table, features
             feature,
             "auto" if args.accelerator else None,
             args.early_stopping,
+            args.infer_holiday,
         )
         futures.append(future)
 
@@ -183,6 +184,7 @@ def _pair_covar_metrics(
             feature,
             "auto" if args.accelerator else None,
             args.early_stopping,
+            args.infer_holiday,
         )
         futures.append(future)
         # if too much pending task, then slow down for the tasks to be digested
@@ -209,8 +211,13 @@ def _load_covar_set(covar_set_id, alchemyEngine):
     return df
 
 
-def _load_topn_covars(
-    alchemyEngine, n, anchor_symbol, nan_threshold=None, cov_table=None, feature=None
+def _load_covars(
+    alchemyEngine,
+    max_covars,
+    anchor_symbol,
+    nan_threshold=None,
+    cov_table=None,
+    feature=None,
 ):
     sub_query = """
 		select
@@ -231,10 +238,13 @@ def _load_topn_covars(
             symbol = %(anchor_symbol)s
             and loss_val < ({sub_query})
     """
+    limit_clause = ""
     params = {
         "anchor_symbol": anchor_symbol,
-        "limit": n,
     }
+    if max_covars > 0:
+        params["limit"] = max_covars
+        limit_clause = " limit %(limit)s"
     if cov_table is not None:
         query += " and cov_table = %(cov_table)s"
         params["cov_table"] = cov_table
@@ -245,7 +255,8 @@ def _load_topn_covars(
         query += " and nan_count < %(nan_threshold)s"
         params["nan_threshold"] = nan_threshold
 
-    query += " order by loss_val asc limit %(limit)s"
+    query += " order by loss_val asc"
+    query += limit_clause
     df = pd.read_sql(
         query,
         alchemyEngine,
@@ -301,8 +312,8 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger):
         covars_df = _load_covar_set(covar_set_id, alchemyEngine)
     else:
         nan_threshold = round(len(df) * args.nan_limit, 0)
-        covars_df, covar_set_id = _load_topn_covars(
-            alchemyEngine, args.top_n, args.symbol, nan_threshold
+        covars_df, covar_set_id = _load_covars(
+            alchemyEngine, args.max_covars, args.symbol, nan_threshold
         )
 
     if covars_df.empty:
@@ -439,6 +450,7 @@ def grid_search(df, covar_set_id, args):
             "auto" if args.accelerator else None,
             covar_set_id,
             args.early_stopping,
+            args.infer_holiday,
         )
         futures.append(future)
         # if too much pending task, then slow down for the tasks to be digested.
@@ -547,7 +559,15 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     cov_table = "bond_zh_hs_daily_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
-    # TODO: prep stock features
+    # TODO: prep CN stock features. Sync table & view column names
+    features = [
+        "change_rate",
+        "turnover_rate",
+        "vol_change_rate",
+        "amt_change_rate",
+    ]
+    cov_table = "stock_zh_a_hist_em_view"
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
     # TODO prep options
     # TODO RMB exchange rate
@@ -574,6 +594,7 @@ def univariate_baseline(anchor_df, args):
             "auto" if args.accelerator else None,
             0,
             args.early_stopping,
+            args.infer_holiday,
         )
     )
 
@@ -605,7 +626,9 @@ def main(args):
 
         if not args.covar_only:
             t2_start = time.time()
-            df, covar_set_id = augment_anchor_df_with_covars(anchor_df, args, alchemyEngine, logger)
+            df, covar_set_id = augment_anchor_df_with_covars(
+                anchor_df, args, alchemyEngine, logger
+            )
             grid_search(df, covar_set_id, args)
             logger.info(
                 "%s grid-search completed. Time taken: %s seconds",
@@ -643,11 +666,15 @@ if __name__ == "__main__":
     group2 = parser.add_mutually_exclusive_group(required=False)
     # Add arguments based on the requirements of the notebook code
     group2.add_argument(
-        "--top_n",
+        "--max_covars",
         action="store",
         type=int,
         default=100,
-        help="Use top-n covariates for training and prediction.",
+        help=(
+            "Limit the maximum number of top-covariates to be included for training and prediction. "
+            "If it's less than 1, we'll use all covariates with loss_val less than univariate baseline. "
+            "Defaults to 100."
+        ),
     )
     group2.add_argument(
         "--covar_set_id",
@@ -655,9 +682,9 @@ if __name__ == "__main__":
         type=int,
         default=None,
         help=(
-            "Covariate set ID corresponding to the covar_set table. ",
-            "If not set, the grid search will look for latest top_n covariates ",
-            "as found in the neuralprophet_corel table, which could be non-static.",
+            "Covariate set ID corresponding to the covar_set table. "
+            "If not set, the grid search will look for latest max_covars covariates with loss_val less than univariate baseline "
+            "as found in the neuralprophet_corel table, which could be non-static."
         ),
     )
 
@@ -695,6 +722,14 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--accelerator", action="store_true", help="Use accelerator automatically"
+    )
+    parser.add_argument(
+        "--infer_holiday",
+        action="store_true",
+        help=(
+            "Infer holiday region based on anchor symbol's nature, "
+            "which will be utilized during covariate-searching and grid-search."
+        ),
     )
     parser.add_argument(
         "--early_stopping",

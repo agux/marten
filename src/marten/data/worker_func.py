@@ -1,4 +1,5 @@
 import math
+import time
 import pandas as pd
 import numpy as np
 
@@ -36,6 +37,8 @@ from marten.data.tabledef import (
     table_def_bond_metrics_em,
     bond_zh_hs_spot,
     bond_zh_hs_daily,
+    stock_zh_a_spot_em,
+    stock_zh_a_hist_em,
 )
 
 from dask.distributed import worker_client, get_worker
@@ -808,3 +811,120 @@ def etf_spot():
         return len(df)
     except Exception as e:
         logger.exception("failed to get ETF spot data")
+
+
+def stock_zh_spot():
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+    logger.info("running stock_zh_spot()...")
+
+    retry_attempts = 3
+    retry_delay = 5  # seconds
+
+    for attempt in range(retry_attempts):
+        try:
+            stock_zh_a_spot_em_df = ak.stock_zh_a_spot_em()
+            break
+        except Exception as e:
+            logger.warn(f'Attempt {attempt+1} failed with error: {e}')
+            if attempt < retry_attempts - 1:
+                time.sleep(retry_delay)
+            else:
+                raise
+
+    stock_zh_a_spot_em_df.rename(
+        columns={
+            "序号": "serial_no",
+            "代码": "symbol",
+            "名称": "name",
+            "最新价": "latest_price",
+            "涨跌幅": "price_change_pct",
+            "涨跌额": "price_change_amt",
+            "成交量": "volume",
+            "成交额": "turnover",
+            "振幅": "amplitude",
+            "最高": "highest",
+            "最低": "lowest",
+            "今开": "open_today",
+            "昨收": "close_yesterday",
+            "量比": "volume_ratio",
+            "换手率": "turnover_rate",
+            "市盈率-动态": "pe_ratio_dynamic",
+            "市净率": "pb_ratio",
+            "总市值": "total_market_value",
+            "流通市值": "circulating_market_value",
+            "涨速": "rise_speed",
+            "5分钟涨跌": "five_min_change",
+            "60日涨跌幅": "sixty_day_change_pct",
+            "年初至今涨跌幅": "ytd_change_pct",
+        },
+        inplace=True,
+    )
+
+    with alchemyEngine.begin() as conn:
+        update_on_conflict(stock_zh_a_spot_em, conn, stock_zh_a_spot_em_df, ["symbol"])
+
+    return stock_zh_a_spot_em_df[["symbol", "name"]]
+
+def get_stock_daily(symbol):
+    worker = get_worker()
+    alchemyEngine = worker.alchemyEngine
+
+    with alchemyEngine.begin() as conn:
+        latest_date = get_latest_date(conn, symbol, "stock_zh_a_hist_em")
+
+        start_date = "19700101"  # For entire history.
+        if latest_date is not None:
+            start_date = (latest_date - timedelta(days=10)).strftime("%Y%m%d")
+
+        end_date = datetime.now().strftime("%Y%m%d")
+        adjust="hfq"
+
+        stock_zh_a_hist_df = ak.stock_zh_a_hist(
+            symbol, "daily", start_date, end_date, adjust
+        )
+
+        if stock_zh_a_hist_df.empty:
+            return None
+
+        stock_zh_a_hist_df.loc[:,"symbol"] = symbol
+        stock_zh_a_hist_df.rename(
+                columns={
+                    "日期": "date",
+                    "开盘": "open",
+                    "收盘": "close",
+                    "最高": "high",
+                    "最低": "low",
+                    "成交量": "volume",
+                    "成交额": "turnover",
+                    "振幅": "amplitude",
+                    "涨跌幅": "change_rate",
+                    "涨跌额": "change_amt",
+                    "换手率": "turnover_rate",
+                },
+                inplace=True,
+            )
+    
+    
+        ignore_on_conflict(
+            stock_zh_a_hist_em, conn, stock_zh_a_hist_df, ["symbol", "date"]
+        )
+
+    return len(stock_zh_a_hist_df)
+
+
+def stock_zh_daily_hist(stock_list):
+    worker = get_worker()
+    logger = worker.logger
+
+    logger.info("running stock_zh_daily_hist() for %s stocks", len(stock_list))
+
+    futures = []
+    with worker_client() as client:
+        for symbol in stock_list["symbol"]:
+            futures.append(client.submit(get_stock_daily,symbol))
+            await_futures(futures, False)
+
+    await_futures(futures)
+
+    return len(stock_list)

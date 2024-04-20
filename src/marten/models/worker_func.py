@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import text
 
 from neuralprophet import NeuralProphet, set_random_seed, set_log_level
+from neuralprophet.hdays_utils import get_country_holidays
 
 from dask.distributed import get_worker
 
@@ -17,6 +18,8 @@ from tenacity import (
     wait_exponential,
     Retrying,
 )
+
+from marten.utils.holidays import get_holiday_region
 
 
 def merge_covar_df(
@@ -77,6 +80,7 @@ def fit_with_covar(
     feature,
     accelerator,
     early_stopping,
+    infer_holiday
 ):
     # Local import of get_worker to avoid circular import issue?
     worker = get_worker()
@@ -93,6 +97,9 @@ def fit_with_covar(
 
     start_time = time.time()
     metrics = None
+    region = None
+    if infer_holiday:
+        region = get_holiday_region(alchemyEngine, anchor_symbol)
     try:
         _, metrics = train(
             df=merged_df,
@@ -105,6 +112,7 @@ def fit_with_covar(
             impute_missing=True,
             accelerator=accelerator,
             validate=True,
+            country=region,
         )
     except ValueError as e:
         logger.warning(str(e))
@@ -251,6 +259,7 @@ def log_metrics_for_hyper_params(
     accelerator,
     covar_set_id,
     early_stopping,
+    infer_holiday
 ):
     # Local import of get_worker to avoid circular import issue
     from dask.distributed import get_worker
@@ -269,6 +278,9 @@ def log_metrics_for_hyper_params(
 
     start_time = time.time()
     metrics = None
+    region = None
+    if infer_holiday:
+        region = get_holiday_region(alchemyEngine, anchor_symbol)
     try:
         _, metrics = train(
             df,
@@ -285,6 +297,7 @@ def log_metrics_for_hyper_params(
             impute_missing=True,
             accelerator=accelerator,
             validate=True,
+            country=region
         )
     except ValueError as e:
         logger.warning(str(e))
@@ -541,6 +554,11 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
     return df, hyperparams, covar_set_id
 
 
+# Function to check if a date is a holiday and return the holiday name
+def check_holiday(date, country_holidays):
+    return country_holidays.get(date) if date in country_holidays else None
+
+
 def save_forecast_snapshot(
     alchemyEngine,
     symbol,
@@ -550,6 +568,10 @@ def save_forecast_snapshot(
     metrics_final,
     forecast,
     fit_time,
+    region,
+    random_seed,
+    future_steps,
+    n_covars,
 ):
     metric = metrics.iloc[-1]
     metric_final = metrics_final.iloc[-1]
@@ -565,12 +587,13 @@ def save_forecast_snapshot(
                     predict_snapshots
                     (
                         model,symbol,hyper_params,covar_set_id,mae_val,rmse_val,loss_val,mae,rmse,loss,
-                        predict_diff_mean,predict_diff_stddev,epochs,fit_time,mae_final,rmse_final,loss_final
+                        predict_diff_mean,predict_diff_stddev,epochs,fit_time,mae_final,rmse_final,loss_final,
+                        region,random_seed,future_steps,n_covars
                     )
                 values(
                     :model,:symbol,:hyper_params,:covar_set_id,:mae_val,:rmse_val,:loss_val,
                     :mae,:rmse,:loss,:predict_diff_mean,:predict_diff_stddev,:epochs,:fit_time,
-                    :mae_final,:rmse_final,:loss_final
+                    :mae_final,:rmse_final,:loss_final,:region,:random_seed,:future_steps,:n_covars
                 ) RETURNING id
                 """
             ),
@@ -592,6 +615,10 @@ def save_forecast_snapshot(
                 "mae_final": metric_final["MAE"],
                 "rmse_final": metric_final["RMSE"],
                 "loss_final": metric_final["Loss"],
+                "region": region,
+                "random_seed": random_seed,
+                "future_steps": future_steps,
+                "n_covars": n_covars,
             },
         )
         snapshot_id = result.fetchone()[0]
@@ -599,10 +626,10 @@ def save_forecast_snapshot(
         ## save to ft_yearly_params table
         future_date = forecast.iloc[-1]["ds"]
         days_count = (future_date - datetime.now()).days + 1
-        start_date = future_date - timedelta(days=days_count*2)
-        forecast = forecast[
-            forecast["ds"] >= start_date
-        ]
+        start_date = future_date - timedelta(days=days_count * 2)
+        forecast = forecast[forecast["ds"] >= start_date]
+
+        country_holidays = get_country_holidays(region)
 
         yearly_seasonality = forecast[["ds", "season_yearly"]]
         yearly_seasonality.rename(
@@ -610,6 +637,9 @@ def save_forecast_snapshot(
         )
         yearly_seasonality.loc[:, "symbol"] = symbol
         yearly_seasonality.loc[:, "snapshot_id"] = snapshot_id
+        yearly_seasonality.loc[:, "holiday"] = yearly_seasonality["date"].apply(
+            lambda x: check_holiday(x, country_holidays)
+        )
         yearly_seasonality.to_sql(
             "ft_yearly_params", conn, if_exists="append", index=False
         )
@@ -625,8 +655,6 @@ def predict_best(
     random_seed,
     future_steps,
 ):
-    from marten.utils.holidays import get_holiday_region
-
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
@@ -674,6 +702,8 @@ def predict_best(
     )
     forecast = m.predict(future)
 
+    n_covars = len([col for col in df.columns if col not in ("ds", "y")])
+
     # save the snapshot and yearly seasonality coefficients to tables.
     snapshot_id, n_yearly_seasonality = save_forecast_snapshot(
         alchemyEngine,
@@ -684,6 +714,10 @@ def predict_best(
         metrics_final,
         forecast,
         fit_time,
+        region,
+        random_seed,
+        future_steps,
+        n_covars,
     )
 
     logger.info(

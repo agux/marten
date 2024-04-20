@@ -1,4 +1,3 @@
-from datetime import datetime
 from sqlalchemy.sql import func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import (
@@ -15,6 +14,74 @@ from sqlalchemy import (
 )
 
 Base = declarative_base()
+
+
+class stock_zh_a_hist_em(Base):
+    __tablename__ = "stock_zh_a_hist_em"
+    __table_args__ = (
+        PrimaryKeyConstraint("code", "date"),
+        {"comment": "public.stock_zh_a_hist_em definition"},
+    )
+
+    code = Column(String, comment="代码 (Code)")
+    date = Column(Date, comment="日期 (Date)")
+    open = Column(Numeric, comment="开盘 (Opening Price)")
+    close = Column(Numeric, comment="收盘 (Closing Price)")
+    high = Column(Numeric, comment="最高 (Highest Price)")
+    low = Column(Numeric, comment="最低 (Lowest Price)")
+    volume = Column(Numeric, comment="成交量 (Volume)")
+    turnover = Column(Numeric, comment="成交额 (Turnover)")
+    amplitude = Column(Numeric, comment="振幅 (Amplitude)")
+    change_rate = Column(Numeric, comment="涨跌幅 (Price Change Percentage)")
+    change_amt = Column(Numeric, comment="涨跌额 (Price Change Amount)")
+    turnover_rate = Column(Numeric, comment="换手率 (Turnover Rate)")
+    last_modified = Column(
+        DateTime(timezone=True),
+        default=func.current_timestamp(),
+        nullable=False,
+        comment="Last Modified Timestamp",
+    )
+
+
+class stock_zh_a_spot_em(Base):
+    __tablename__ = "stock_zh_a_spot_em"
+    __table_args__ = {"comment": "public.stock_zh_a_spot_em definition"}
+
+    serial_no = Column(Integer, comment="序号 (Serial Number)")
+    symbol = Column(String, primary_key=True, comment="代码 (Code)")
+    name = Column(String, comment="名称 (Name)")
+    latest_price = Column(Numeric, comment="最新价 (Latest Price)")
+    price_change_pct = Column(Numeric, comment="涨跌幅 (Price Change Percentage)")
+    price_change_amt = Column(Numeric, comment="涨跌额 (Price Change Amount)")
+    volume = Column(Numeric, comment="成交量 (Volume)")
+    turnover = Column(Numeric, comment="成交额 (Turnover)")
+    amplitude = Column(Numeric, comment="振幅 (Amplitude)")
+    highest = Column(Numeric, comment="最高 (Highest)")
+    lowest = Column(Numeric, comment="最低 (Lowest)")
+    open_today = Column(Numeric, comment="今开 (Open Today)")
+    close_yesterday = Column(Numeric, comment="昨收 (Close Yesterday)")
+    volume_ratio = Column(Numeric, comment="量比 (Volume Ratio)")
+    turnover_rate = Column(Numeric, comment="换手率 (Turnover Rate)")
+    pe_ratio_dynamic = Column(Numeric, comment="市盈率-动态 (Dynamic P/E Ratio)")
+    pb_ratio = Column(Numeric, comment="市净率 (P/B Ratio)")
+    total_market_value = Column(Numeric, comment="总市值 (Total Market Value)")
+    circulating_market_value = Column(
+        Numeric, comment="流通市值 (Circulating Market Value)"
+    )
+    rise_speed = Column(Numeric, comment="涨速 (Rise Speed)")
+    five_min_change = Column(Numeric, comment="5分钟涨跌 (5-minute Price Change)")
+    sixty_day_change_pct = Column(
+        Numeric, comment="60日涨跌幅 (60-day Price Change Percentage)"
+    )
+    ytd_change_pct = Column(
+        Numeric, comment="年初至今涨跌幅 (Year-to-date Price Change Percentage)"
+    )
+    last_modified = Column(
+        DateTime(timezone=True),
+        default=func.current_timestamp(),
+        nullable=False,
+        comment="Last Modified Timestamp",
+    )
 
 
 class bond_zh_hs_daily(Base):

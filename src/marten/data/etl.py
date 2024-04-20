@@ -28,6 +28,8 @@ from marten.data.worker_func import (
     get_us_indices,
     bond_spot,
     bond_daily_hs,
+    stock_zh_spot,
+    stock_zh_daily_hist,
 )
 
 # module_path = os.getenv("LOCAL_AKSHARE_DEV_MODULE")
@@ -85,8 +87,6 @@ def main(args):
 
     futures.append(client.submit(update_etf_metrics, future_etf_list, future_bond_ir))
 
-    ##TODO: consider to scale up workers or threads at this point since major blockage is remote service?
-
     future_cn_index_list = client.submit(get_cn_index_list, cn_index_types)
     futures.append(client.submit(cn_index_daily, future_cn_index_list))
 
@@ -97,6 +97,9 @@ def main(args):
 
     future_bond_spot = client.submit(bond_spot)
     futures.append(client.submit(bond_daily_hs, future_bond_spot))
+
+    future_stock_zh_spot = client.submit(stock_zh_spot)
+    futures.append(client.submit(stock_zh_daily_hist, future_stock_zh_spot))
 
     futures.extend(
         [future_etf_list, future_bond_ir, future_cn_index_list, future_bond_spot]

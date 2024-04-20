@@ -19,11 +19,15 @@ def configure_parser(parser):
     group2 = parser.add_mutually_exclusive_group(required=False)
     # Add arguments based on the requirements of the notebook code
     group2.add_argument(
-        "--top_n",
+        "--max_covars",
         action="store",
         type=int,
         default=100,
-        help="Use top-n covariates for training and prediction.",
+        help=(
+            "Limit the maximum number of top-covariates to be included for training and prediction. "
+            "If it's less than 1, we'll use all covariates with loss_val less than univariate baseline."
+            "Defaults to 100."
+        ),
     )
     group2.add_argument(
         "--covar_set_id",
@@ -32,7 +36,7 @@ def configure_parser(parser):
         default=None,
         help=(
             "Covariate set ID corresponding to the covar_set table. "
-            "If not set, the grid search will look for latest top_n covariates "
+            "If not set, the grid search will look for latest max_covars covariates with loss_val less than univariate baseline "
             "as found in the neuralprophet_corel table, which could be non-static."
         ),
     )
@@ -77,6 +81,11 @@ def configure_parser(parser):
     )
     parser.add_argument(
         "--accelerator", action="store_true", help="Use accelerator automatically"
+    )
+    parser.add_argument(
+        "--infer_holiday", action="store_true", 
+        help=("Infer holiday region based on anchor symbol's nature, "
+              "which will be utilized during covariate-searching and grid-search.")
     )
     parser.add_argument(
         "--early_stopping",
