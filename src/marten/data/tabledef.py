@@ -23,7 +23,7 @@ class stock_zh_a_hist_em(Base):
         {"comment": "public.stock_zh_a_hist_em definition"},
     )
 
-    code = Column(String, comment="代码 (Code)")
+    symbol = Column(String, comment="代码 (Code)")
     date = Column(Date, comment="日期 (Date)")
     open = Column(Numeric, comment="开盘 (Opening Price)")
     close = Column(Numeric, comment="收盘 (Closing Price)")

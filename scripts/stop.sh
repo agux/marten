@@ -1,11 +1,21 @@
 #!/bin/bash
 
-# Name of the Python program
-SCRIPT_NAME="marten"
+# Base name of the Python program
+BASE_SCRIPT_NAME="marten"
 
-# Use pgrep to find the PID of the main script based on its name
-MAIN_PID=$(pgrep -f $SCRIPT_NAME)
+# Check if a parameter is provided
+if [ $# -eq 0 ]; then
+    echo "No additional keyword provided. Using default script name."
+    SCRIPT_NAME=$BASE_SCRIPT_NAME
+else
+    # Combine the base script name with the provided parameter
+    SCRIPT_NAME="$BASE_SCRIPT_NAME $1"
+fi
 
+# Use pgrep to find the PID of the script based on the combined name
+MAIN_PID=$(pgrep -f "$SCRIPT_NAME")
+
+# Check if the MAIN_PID variable is not empty
 if [ ! -z "$MAIN_PID" ]; then
     echo "Killing main process and its children: $MAIN_PID"
 
