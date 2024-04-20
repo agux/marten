@@ -19,7 +19,7 @@ Base = declarative_base()
 class stock_zh_a_hist_em(Base):
     __tablename__ = "stock_zh_a_hist_em"
     __table_args__ = (
-        PrimaryKeyConstraint("code", "date"),
+        PrimaryKeyConstraint("symbol", "date"),
         {"comment": "public.stock_zh_a_hist_em definition"},
     )
 
