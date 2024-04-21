@@ -40,6 +40,8 @@ from marten.data.tabledef import (
     stock_zh_a_spot_em,
     stock_zh_a_hist_em,
     currency_boc_safe,
+    spot_symbol_table_sge,
+    spot_hist_sge,
 )
 
 from dask.distributed import worker_client, get_worker
@@ -868,6 +870,7 @@ def stock_zh_spot():
 
     return stock_zh_a_spot_em_df[["symbol", "name"]]
 
+
 def get_stock_daily(symbol):
     worker = get_worker()
     alchemyEngine = worker.alchemyEngine
@@ -930,6 +933,60 @@ def stock_zh_daily_hist(stock_list):
     await_futures(futures)
 
     return len(stock_list)
+
+def get_sge_spot_daily(symbol):
+    worker = get_worker()
+    alchemyEngine = worker.alchemyEngine
+
+    with alchemyEngine.begin() as conn:
+        spot_hist_sge_df = ak.spot_hist_sge(symbol=symbol)
+
+        if spot_hist_sge_df.empty:
+            return None
+
+        latest_date = get_latest_date(conn, symbol, "spot_hist_sge")
+
+        start_date = None
+        if latest_date is not None:
+            start_date = latest_date - timedelta(days=10)
+            spot_hist_sge_df = spot_hist_sge_df[spot_hist_sge_df["date"] >= start_date]
+
+        spot_hist_sge_df.insert(0, "symbol", symbol)
+
+        ignore_on_conflict(spot_hist_sge, conn, spot_hist_sge_df, ["symbol", "date"])
+
+    return len(spot_hist_sge_df)
+
+def sge_spot_daily_hist(spot_list):
+    worker = get_worker()
+    logger = worker.logger
+
+    logger.info("running sge_spot_daily_hist() for %s spot", len(spot_list))
+
+    futures = []
+    with worker_client() as client:
+        for symbol in spot_list["product"]:
+            futures.append(client.submit(get_sge_spot_daily, symbol))
+            await_futures(futures, False)
+
+    await_futures(futures)
+
+    return len(spot_list)
+
+
+def sge_spot():
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+    logger.info("running sge_spot()...")
+
+    ssts = ak.spot_symbol_table_sge()
+
+    ssts.rename(columns={"序号": "serial", "品种": "product"}, inplace=True)
+
+    with alchemyEngine.begin() as conn:
+        update_on_conflict(spot_symbol_table_sge, conn, ssts, ["product"])
+
+    return ssts
 
 
 def rmb_exchange_rates():

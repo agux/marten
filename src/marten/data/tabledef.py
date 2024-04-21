@@ -2,6 +2,7 @@ from sqlalchemy.sql import func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import (
     Table,
+    Index,
     Column,
     MetaData,
     Text,
@@ -14,6 +15,50 @@ from sqlalchemy import (
 )
 
 Base = declarative_base()
+
+
+class spot_symbol_table_sge(Base):
+    __tablename__ = "spot_symbol_table_sge"
+    __table_args__ = (
+        Index(
+            "spot_symbol_table_sge_product_idx",
+            "product",
+            unique=True,
+            postgresql_using="btree",
+        ),
+    )
+
+    serial = Column(Integer, nullable=True)
+    product = Column(Text, nullable=True)
+
+
+class spot_hist_sge(Base):
+    __tablename__ = "spot_hist_sge"
+    __table_args__ = (
+        Index(
+            "spot_hist_sge_date_idx",
+            "date",
+            postgresql_using="btree",
+            postgresql_desc=True,
+        ),
+        Index(
+            "spot_hist_sge_symbol_idx",
+            "symbol",
+            "date",
+            unique=True,
+            postgresql_using="btree",
+        ),
+    )
+
+    symbol = Column(Text, nullable=True)
+    date = Column(Date, nullable=False)
+    open = Column(Numeric, nullable=True)
+    close = Column(Numeric, nullable=True)
+    high = Column(Numeric, nullable=True)
+    low = Column(Numeric, nullable=True)
+    last_modified = Column(
+        DateTime(timezone=True), default=func.current_timestamp(), nullable=True
+    )
 
 
 class currency_boc_safe(Base):
