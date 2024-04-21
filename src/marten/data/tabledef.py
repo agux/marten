@@ -1,4 +1,4 @@
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, desc
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import (
     Table,
@@ -37,9 +37,8 @@ class spot_hist_sge(Base):
     __table_args__ = (
         Index(
             "spot_hist_sge_date_idx",
-            "date",
+            desc("date"),
             postgresql_using="btree",
-            postgresql_desc=True,
         ),
         Index(
             "spot_hist_sge_symbol_idx",
