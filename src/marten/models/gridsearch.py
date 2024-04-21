@@ -605,6 +605,15 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     cov_table = "currency_boc_safe_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
+    features = [
+        "change_rate",
+        "open_preclose_rate",
+        "high_preclose_rate",
+        "low_preclose_rate",
+    ]
+    cov_table = "spot_hist_sge_view"
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
+
     # TODO prep options
 
     # TODO CPI, PPI

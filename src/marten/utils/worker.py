@@ -7,6 +7,8 @@ from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
 from dotenv import load_dotenv
 
+from datetime import datetime, timedelta
+
 
 class LocalWorkerPlugin(WorkerPlugin):
     def __init__(self, logger_name):
@@ -51,38 +53,66 @@ def get_result(future):
         get_logger().exception(e)
         pass
 
-def num_undone(futures):
+
+def num_undone(futures, shared_vars):
     undone = 0
-    for f in futures:
-        if f.done():
-            get_result(f)
-            futures.remove(f)
-        else:
-            undone += 1
+    if isinstance(futures, list):
+        for f in futures:
+            if f.done():
+                get_result(f)
+                futures.remove(f)
+            else:
+                undone += 1
+    elif isinstance(futures, dict):
+        for k, f in futures:
+            if f.done():
+                get_result(f)
+                shared_vars[k].delete()
+                futures.pop(k)
+                shared_vars.pop(k)
+            else:
+                undone += 1
     return undone
+
 
 def random_seconds(a, b, max):
     return min(float(max), round(random.uniform(float(a), float(b)), 3))
 
-def await_futures(futures, until_all_completed=True):
-    num = num_undone(futures)
+def handle_task_timeout(futures, task_timeout, shared_vars):
+    for symbol, var in shared_vars:
+        try:
+            st_dict = var.get("200ms")
+            if not "start_time" in st_dict:
+                # the task has not been started by the worker process yet
+                continue
+            if (
+                datetime.now() >= st_dict["start_time"] + timedelta(seconds=task_timeout)
+            ):
+                ## the task has timed out. if the future is not finished yet, cancel it.
+                future = futures[symbol]
+                if not future.done():
+                    future.cancel()
+                    futures.pop(symbol)
+                var.delete()
+                shared_vars.pop(symbol)
+        except TimeoutError as e:
+            pass
 
-    ##FIXME: this log is for debugging hanging-task issue only. remove them after fixed
-    # try:
-    #     worker = get_worker()
-    #     worker.logger.info("#futures: %s #undone: %s", len(futures), num)
-    # except ValueError as e:
-    #     if "No worker found" in str(e):
-    #         # possible that this is not called from a worker process. simply ignore
-    #         pass
-    #     else:
-    #         raise e
-    # ---------end of debug code----------------------
+def await_futures(futures, until_all_completed=True, task_timeout=None, shared_vars=None):
+    num = num_undone(futures, shared_vars)
 
     if until_all_completed:
-        while num > 0:
-            time.sleep(random_seconds(2 ** (num - 1), 2**num, 256))
-            num = num_undone(futures)
+        if task_timeout is not None and shared_vars is not None:
+            while num > 0:
+                time.sleep(random_seconds(2 ** (num - 1), 2**num, 128))
+                num = handle_task_timeout(futures, task_timeout, shared_vars)
+        else:
+            while num > 0:
+                time.sleep(random_seconds(2 ** (num - 1), 2**num, 128))
+                num = num_undone(futures, shared_vars)
     elif num > multiprocessing.cpu_count():
         delta = num - multiprocessing.cpu_count()
-        time.sleep(random_seconds(2 ** (delta - 1), 2**delta, 256))
+        time.sleep(random_seconds(2 ** (delta - 1), 2**delta, 128))
+
+        if task_timeout is not None and shared_vars is not None:
+            handle_task_timeout(futures, task_timeout, shared_vars)

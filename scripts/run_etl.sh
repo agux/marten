@@ -12,17 +12,17 @@ OUTPUT_LOG=output_etl.log
 # script=etl.py
 # PYENV_PYTHON=$(pyenv which python)
 
-# Clear the logs
->marten.data.etl.log
->marten.cli.commands.etl.log
->etl.log
->$OUTPUT_LOG
-
 # Check if 'marten etl' process is already running
 if pgrep -af 'marten etl' | grep -v 'grep'; then
   echo "The process 'marten etl' is already running."
   exit 1
 fi
+
+# Clear the logs
+>marten.data.etl.log
+>marten.cli.commands.etl.log
+>etl.log
+>$OUTPUT_LOG
 
 # Run the script with nohup
 # nohup "$PYENV_PYTHON" "$script" "$@" > >(tee -a output.log) 2>&1 &

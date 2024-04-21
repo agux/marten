@@ -44,7 +44,7 @@ from marten.data.tabledef import (
     spot_hist_sge,
 )
 
-from dask.distributed import worker_client, get_worker
+from dask.distributed import worker_client, get_worker, Variable
 
 from functools import lru_cache
 
@@ -244,18 +244,22 @@ def bond_spot():
         update_on_conflict(bond_zh_hs_spot, conn, bzhs, ["symbol"])
     return len(bzhs)
 
-def get_bond_zh_hs_daily(symbol):
+def get_bond_zh_hs_daily(symbol, shared_dict):
+    st_dict = shared_dict.get()
+    st_dict["start_time"] = datetime.now()
+    shared_dict.set(st_dict)
+
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
     try:
+        bzhd = ak.bond_zh_hs_daily(symbol)
+
+        # if shide is empty, return immediately
+        if bzhd.empty:
+            logger.warning("bond daily history data is empty: %s", symbol)
+            return None
+
         with alchemyEngine.begin() as conn:
-            bzhd = ak.bond_zh_hs_daily(symbol)
-
-            # if shide is empty, return immediately
-            if bzhd.empty:
-                logger.warning("bond daily history data is empty: %s", symbol)
-                return None
-
             latest_date = get_latest_date(conn, symbol, "bond_zh_hs_daily")
             if latest_date is not None:
                 ## keep rows only with `date` later than the latest record in database.
@@ -286,13 +290,22 @@ def bond_daily_hs(future_bond_spot):
     bond_list = pd.read_sql("SELECT symbol FROM bond_zh_hs_spot", alchemyEngine)
     logger.info("starting tasks on function bond_daily_hs(). #symbols: %s", len(bond_list))
 
-    futures = []
+    futures = {}
+    shared_vars = {}
+    task_timeout = 300 #seconds
+
     with worker_client() as client:
         for symbol in bond_list["symbol"]:
-            futures.append(client.submit(get_bond_zh_hs_daily, symbol))
-            await_futures(futures, False)
+            var_st = Variable()
+            var_st.set({"symbol": symbol})
+            shared_vars[symbol] = var_st
 
-    await_futures(futures)
+            futures[symbol]=client.submit(get_bond_zh_hs_daily, symbol)
+
+            await_futures(futures, False, task_timeout, shared_vars)
+
+    await_futures(futures, True, task_timeout, shared_vars)
+
     return len(bond_list)
 
 def hk_index_spot():
