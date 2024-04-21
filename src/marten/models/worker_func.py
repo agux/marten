@@ -38,28 +38,31 @@ def merge_covar_df(
         # Convert common special characters often seen in stock / index symbols to valid replacements as PostgreSQL table column alias.
         cov_symbol_sanitized = cov_symbol.replace(".", "_").replace("-", "_")
         cov_symbol_sanitized = f"{feature}_{cov_symbol_sanitized}"
-        if cov_table != "bond_metrics_em":
-            query = f"""
+
+        match cov_table:
+            case "bond_metrics_em" | "currency_boc_safe_view":
+                query = f"""
+                    select date ds, {feature} {cov_symbol_sanitized}
+                    from {cov_table}
+                    where date >= %(min_date)s
+                    order by date
+                """
+                params = {
+                    "min_date": min_date,
+                }
+            case _:
+                query = f"""
                     select date ds, {feature} {cov_symbol_sanitized}
                     from {cov_table}
                     where symbol = %(cov_symbol)s
                     and date >= %(min_date)s
                     order by date
                 """
-            params = {
-                "cov_symbol": cov_symbol,
-                "min_date": min_date,
-            }
-        else:
-            query = f"""
-                    select date ds, {feature} {cov_symbol_sanitized}
-                    from {cov_table}
-                    where date >= %(min_date)s
-                    order by date
-                """
-            params = {
-                "min_date": min_date,
-            }
+                params = {
+                    "cov_symbol": cov_symbol,
+                    "min_date": min_date,
+                }
+
         cov_symbol_df = pd.read_sql(
             query, alchemyEngine, params=params, parse_dates=["ds"]
         )

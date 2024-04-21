@@ -485,15 +485,20 @@ def _remove_measured_features(anchor_symbol, cov_table, features):
 def _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args):
     features = _remove_measured_features(anchor_symbol, cov_table, features)
     for feature in features:
-        if cov_table != "bond_metrics_em":
-            cov_symbols = _covar_symbols_from_table(
-                anchor_symbol, min_date, cov_table, feature
-            )
-            # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
-            cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
-        else:
-            # construct a dummy cov_symbols dataframe with `symbol` column and the value 'bond'.
-            cov_symbols = pd.DataFrame({"symbol": ["bond"]})
+
+        match feature:
+            case "bond_metrics_em":
+                # construct a dummy cov_symbols dataframe with `symbol` column and the value 'bond'.
+                cov_symbols = pd.DataFrame({"symbol": ["bond"]})
+            case "currency_boc_safe_view":
+                cov_symbols = pd.DataFrame({"symbol": ["currency_exchange"]})
+            case _:
+                cov_symbols = _covar_symbols_from_table(
+                    anchor_symbol, min_date, cov_table, feature
+                )
+                # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
+                cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
+
         if not cov_symbols.empty and features:
             _pair_covar_metrics(
                 anchor_symbol,
@@ -559,7 +564,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     cov_table = "bond_zh_hs_daily_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
-    # TODO: prep CN stock features. Sync table & view column names
+    # prep CN stock features. Sync table & view column names
     features = [
         "change_rate",
         "turnover_rate",
@@ -569,8 +574,39 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     cov_table = "stock_zh_a_hist_em_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
-    # TODO prep options
     # TODO RMB exchange rate
+    features = [
+        "USD_change_rate",
+        "EUR_change_rate",
+        "JPY_change_rate",
+        "HKD_change_rate",
+        "GBP_change_rate",
+        "AUD_change_rate",
+        "NZD_change_rate",
+        "SGD_change_rate",
+        "CHF_change_rate",
+        "CAD_change_rate",
+        "MYR_change_rate",
+        "RUB_change_rate",
+        "ZAR_change_rate",
+        "KRW_change_rate",
+        "AED_change_rate",
+        "QAR_change_rate",
+        "HUF_change_rate",
+        "PLN_change_rate",
+        "DKK_change_rate",
+        "SEK_change_rate",
+        "NOK_change_rate",
+        "TRY_change_rate",
+        "PHP_change_rate",
+        "THB_change_rate",
+        "MOP_change_rate",
+    ]
+    cov_table = "currency_boc_safe_view"
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
+
+    # TODO prep options
+
     # TODO CPI, PPI
     # TODO car sales
     # TODO electricity consumption
