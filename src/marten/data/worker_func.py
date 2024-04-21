@@ -39,6 +39,7 @@ from marten.data.tabledef import (
     bond_zh_hs_daily,
     stock_zh_a_spot_em,
     stock_zh_a_hist_em,
+    currency_boc_safe,
 )
 
 from dask.distributed import worker_client, get_worker
@@ -929,3 +930,48 @@ def stock_zh_daily_hist(stock_list):
     await_futures(futures)
 
     return len(stock_list)
+
+
+def rmb_exchange_rates():
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+    logger.info("running rmb_exchange_rates()...")
+
+    currency_boc_safe_df = ak.currency_boc_safe()
+
+    currency_boc_safe_df.rename(
+        columns={
+            "日期": "Date",
+            "美元": "USD",
+            "欧元": "EUR",
+            "日元": "JPY",
+            "港元": "HKD",
+            "英镑": "GBP",
+            "澳元": "AUD",
+            "新西兰元": "NZD",
+            "新加坡元": "SGD",
+            "瑞士法郎": "CHF",
+            "加元": "CAD",
+            "林吉特": "MYR",
+            "卢布": "RUB",
+            "兰特": "ZAR",
+            "韩元": "KRW",
+            "迪拉姆": "AED",
+            "里亚尔": "QAR",
+            "福林": "HUF",
+            "兹罗提": "PLN",
+            "丹麦克朗": "DKK",
+            "瑞典克朗": "SEK",
+            "挪威克朗": "NOK",
+            "里拉": "TRY",
+            "比索": "PHP",
+            "泰铢": "THB",
+            "澳门元": "MOP",
+        },
+        inplace=True,
+    )
+
+    with alchemyEngine.begin() as conn:
+        update_on_conflict(currency_boc_safe, conn, currency_boc_safe_df, ["date"])
+
+    return len(currency_boc_safe_df)

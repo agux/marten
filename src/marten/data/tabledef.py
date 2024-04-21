@@ -16,6 +16,47 @@ from sqlalchemy import (
 Base = declarative_base()
 
 
+class currency_boc_safe(Base):
+    __tablename__ = "currency_boc_safe"
+    __table_args__ = (
+        PrimaryKeyConstraint("date"),
+        {"comment": "public.currency_boc_safe definition"},
+    )
+
+    date = Column(Date, nullable=False, comment="Date")
+    USD = Column(Numeric, comment="USD")
+    EUR = Column(Numeric, comment="EUR")
+    JPY = Column(Numeric, comment="JPY")
+    HKD = Column(Numeric, comment="HKD")
+    GBP = Column(Numeric, comment="GBP")
+    AUD = Column(Numeric, comment="AUD")
+    NZD = Column(Numeric, comment="NZD")
+    SGD = Column(Numeric, comment="SGD")
+    CHF = Column(Numeric, comment="CHF")
+    CAD = Column(Numeric, comment="CAD")
+    MYR = Column(Numeric, comment="MYR")
+    RUB = Column(Numeric, comment="RUB")
+    ZAR = Column(Numeric, comment="ZAR")
+    KRW = Column(Numeric, comment="KRW")
+    AED = Column(Numeric, comment="AED")
+    QAR = Column(Numeric, comment="QAR")
+    HUF = Column(Numeric, comment="HUF")
+    PLN = Column(Numeric, comment="PLN")
+    DKK = Column(Numeric, comment="DKK")
+    SEK = Column(Numeric, comment="SEK")
+    NOK = Column(Numeric, comment="NOK")
+    TRY = Column(Numeric, comment="TRY")
+    PHP = Column(Numeric, comment="PHP")
+    THB = Column(Numeric, comment="THB")
+    MOP = Column(Numeric, comment="MOP")
+    last_modified = Column(
+        DateTime(timezone=True),
+        default=func.current_timestamp(),
+        nullable=False,
+        comment="Last Modified Timestamp",
+    )
+
+
 class stock_zh_a_hist_em(Base):
     __tablename__ = "stock_zh_a_hist_em"
     __table_args__ = (
