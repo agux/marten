@@ -35,6 +35,7 @@ class spot_symbol_table_sge(Base):
 class spot_hist_sge(Base):
     __tablename__ = "spot_hist_sge"
     __table_args__ = (
+        PrimaryKeyConstraint("symbol", "date"),
         Index(
             "spot_hist_sge_date_idx",
             desc("date"),
@@ -49,8 +50,8 @@ class spot_hist_sge(Base):
         ),
     )
 
-    symbol = Column(Text, nullable=True)
-    date = Column(Date, nullable=False)
+    symbol = Column(Text)
+    date = Column(Date)
     open = Column(Numeric, nullable=True)
     close = Column(Numeric, nullable=True)
     high = Column(Numeric, nullable=True)
