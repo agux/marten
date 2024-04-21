@@ -300,7 +300,7 @@ def bond_daily_hs(future_bond_spot):
             var_st.set({"symbol": symbol})
             shared_vars[symbol] = var_st
 
-            futures[symbol]=client.submit(get_bond_zh_hs_daily, symbol)
+            futures[symbol]=client.submit(get_bond_zh_hs_daily, symbol, var_st)
 
             await_futures(futures, False, task_timeout, shared_vars)
 
