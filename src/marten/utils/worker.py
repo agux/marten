@@ -65,7 +65,7 @@ def num_undone(futures, shared_vars):
             else:
                 undone += 1
     elif isinstance(futures, dict):
-        for k, f in futures:
+        for k, f in futures.items():
             if f.done():
                 get_result(f)
                 shared_vars[k].delete()
@@ -80,7 +80,7 @@ def random_seconds(a, b, max):
     return min(float(max), round(random.uniform(float(a), float(b)), 3))
 
 def handle_task_timeout(futures, task_timeout, shared_vars):
-    for symbol, var in shared_vars:
+    for symbol, var in shared_vars.items:
         try:
             st_dict = var.get("200ms")
             if not "start_time" in st_dict:
