@@ -92,6 +92,13 @@ def configure_parser(parser):
         action="store_true",
         help="Use early stopping during model fitting",
     )
+    parser.add_argument(
+        "--dashboard_port",
+        action="store",
+        type=int,
+        default=8787,
+        help=("Port number for the dask dashboard. " "Defaults to 8787."),
+    )
 
     parser.add_argument(
         "symbol", type=str, help="The asset symbol as anchor to be analyzed."

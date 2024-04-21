@@ -30,11 +30,12 @@ class LocalWorkerPlugin(WorkerPlugin):
         worker.logger = get_logger(self.logger_name, role='worker')
 
 
-def init_client(name, worker=-1, threads=1):
+def init_client(name, worker=-1, threads=1, dashboard_port=None):
     cluster = LocalCluster(
         n_workers=worker if worker > 0 else multiprocessing.cpu_count(),
         threads_per_worker=threads,
         processes=True,
+        dashboard_address=":8787" if dashboard_port is None else f":{dashboard_port}",
         # memory_limit="2GB",
     )
     client = Client(cluster)

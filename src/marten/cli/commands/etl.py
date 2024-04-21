@@ -24,6 +24,17 @@ def configure_parser(parser):
             "Defaults to 3."
         ),
     )
+    parser.add_argument(
+        "--dashboard_port",
+        action="store",
+        type=int,
+        default=8788,
+        help=(
+            "Port number for the dask dashboard. "
+            "Defaults to 8788."
+        ),
+    )
+
     parser.set_defaults(func=handle_etl)
 
 

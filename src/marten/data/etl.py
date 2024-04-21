@@ -71,7 +71,7 @@ def init(args):
     )
     alchemyEngine = get_database_engine(db_url, pool_size=1)
 
-    client = init_client(__name__,args.worker,args.threads)
+    client = init_client(__name__,args.worker,args.threads,args.dashboard_port)
 
 
 def main(args):

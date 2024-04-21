@@ -19,6 +19,7 @@ def init(args):
             len(args.symbols),
             int(multiprocessing.cpu_count() * 0.9) if args.worker < 1 else args.worker,
         ),
+        dashboard_port=args.dashboard_port,
     )
 
 
