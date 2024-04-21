@@ -29,7 +29,7 @@ class spot_symbol_table_sge(Base):
     )
 
     serial = Column(Integer, nullable=True)
-    product = Column(Text, nullable=True)
+    product = Column(Text, primary_key=True)
 
 
 class spot_hist_sge(Base):
