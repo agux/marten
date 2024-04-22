@@ -79,15 +79,17 @@ def num_undone(futures, shared_vars):
 def random_seconds(a, b, max):
     return min(float(max), round(random.uniform(float(a), float(b)), 3))
 
+
 def handle_task_timeout(futures, task_timeout, shared_vars):
-    for symbol, var in shared_vars.items():
+    for symbol in list(shared_vars.keys()):  # Create a list of keys to iterate over
         try:
+            var = shared_vars[symbol]  # Access the variable using the key
             st_dict = var.get("200ms")
             if not "start_time" in st_dict:
                 # the task has not been started by the worker process yet
                 continue
-            if (
-                datetime.now() >= st_dict["start_time"] + timedelta(seconds=task_timeout)
+            if datetime.now() >= st_dict["start_time"] + timedelta(
+                seconds=task_timeout
             ):
                 ## the task has timed out. if the future is not finished yet, cancel it.
                 future = futures[symbol]
@@ -95,9 +97,12 @@ def handle_task_timeout(futures, task_timeout, shared_vars):
                     future.cancel()
                     futures.pop(symbol)
                 var.delete()
-                shared_vars.pop(symbol)
+                shared_vars.pop(
+                    symbol
+                )  # Safe to pop because we're not iterating over shared_vars directly
         except TimeoutError as e:
             pass
+
 
 def await_futures(futures, until_all_completed=True, task_timeout=None, shared_vars=None):
     num = num_undone(futures, shared_vars)

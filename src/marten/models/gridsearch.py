@@ -393,7 +393,7 @@ def _get_layers():
 def _init_search_grid():
     global logger
 
-    layers = _get_layers()
+    ar_layers, lagged_reg_layers = _get_layers(), _get_layers()
 
     # Define your hyperparameters grid
     param_grid = [
@@ -409,8 +409,8 @@ def _init_search_grid():
             "batch_size": [None, 50, 100, 200],
             "n_lags": list(range(1, 31)),
             "yearly_seasonality": list(range(5, 30)),
-            "ar_layers": layers,
-            "lagged_reg_layers": layers,
+            "ar_layers": ar_layers,
+            "lagged_reg_layers": lagged_reg_layers,
         },
     ]
     grid = ParameterGrid(param_grid)
