@@ -1011,7 +1011,7 @@ def rmb_exchange_rates():
 
     currency_boc_safe_df.rename(
         columns={
-            "日期": "Date",
+            "日期": "date",
             "美元": "USD",
             "欧元": "EUR",
             "日元": "JPY",
