@@ -65,7 +65,8 @@ def num_undone(futures, shared_vars):
             else:
                 undone += 1
     elif isinstance(futures, dict):
-        for k, f in futures.items():
+        for k in list(futures.keys()):
+            f = futures[k]
             if f.done():
                 get_result(f)
                 shared_vars[k].delete()
