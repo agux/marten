@@ -69,9 +69,10 @@ def num_undone(futures, shared_vars):
             f = futures[k]
             if f.done():
                 get_result(f)
-                shared_vars[k].delete()
+                if k in shared_vars:
+                    shared_vars[k].delete()
+                    shared_vars.pop(k)
                 futures.pop(k)
-                shared_vars.pop(k)
             else:
                 undone += 1
     return undone
@@ -93,10 +94,11 @@ def handle_task_timeout(futures, task_timeout, shared_vars):
                 seconds=task_timeout
             ):
                 ## the task has timed out. if the future is not finished yet, cancel it.
-                future = futures[symbol]
-                if not future.done():
-                    future.cancel()
-                    futures.pop(symbol)
+                if symbol in futures:
+                    future = futures[symbol]
+                    if not future.done():
+                        future.cancel()
+                        futures.pop(symbol)
                 var.delete()
                 shared_vars.pop(
                     symbol
