@@ -70,9 +70,18 @@ def _init_local_resource():
 def load_anchor_ts(symbol, limit, alchemyEngine):
     ## support arbitrary types of symbol (could be from different tables, with different features available)
     tbl_cols_dict = {
-        "index_daily_em_view": "date DS, change_rate y, vol_change_rate, amt_change_rate, open, close, high, low, volume, amount",
-        "fund_etf_daily_em_view": "date DS, change_rate y, vol_change_rate, amt_change_rate, open, close, high, low, volume, turnover, turnover_rate",
-        "us_index_daily_sina_view": "date DS, change_rate y, amt_change_rate amt_cr, open, close, high, low, volume, amount",
+        "index_daily_em_view": (
+            "date DS, change_rate y, vol_change_rate, amt_change_rate, open, close, high, low, volume, amount, "
+            "open_preclose_rate, high_preclose_rate, low_preclose_rate"
+        ),
+        "fund_etf_daily_em_view": (
+            "date DS, change_rate y, vol_change_rate, amt_change_rate, open, close, high, low, volume, "
+            "turnover, turnover_rate, turnover_change_rate, open_preclose_rate, high_preclose_rate, low_preclose_rate"
+        ),
+        "us_index_daily_sina_view": (
+            "date DS, change_rate y, amt_change_rate amt_cr, open, close, high, low, volume, amount, "
+            "vol_change_rate, open_preclose_rate, high_preclose_rate, low_preclose_rate"
+        ),
     }
     # lookup which table the symbol's data is in
     anchor_table = (
@@ -378,11 +387,11 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger):
 
 def _get_layers():
     layers = []
-    # Loop over powers of 2 from 2^1 to 2^6
-    for i in range(1, 7):
+    # Loop over powers of 2 from 2^1 to 2^4
+    for i in range(1, 5):
         power_of_two = 2**i
         # Loop over list lengths from 2 to 16
-        for j in range(2, 17):
+        for j in range(2, 21):
             # Create a list with the current power of two, repeated 'j' times
             element = [power_of_two] * j
             # Append the list to the result
@@ -406,9 +415,9 @@ def _init_search_grid():
             "lagged_reg_layers": [[]],
         },
         {
-            "batch_size": [None, 50, 100, 200],
+            "batch_size": [100, 200, 300, 400, 500],
             "n_lags": list(range(1, 31)),
-            "yearly_seasonality": list(range(5, 30)),
+            "yearly_seasonality": list(range(3, 31)),
             "ar_layers": ar_layers,
             "lagged_reg_layers": lagged_reg_layers,
         },
@@ -527,12 +536,28 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     anchor_df = anchor_df[["ds", "y"]]
 
     # prep CN index covariates
-    features = ["change_rate", "amt_change_rate"]
+    features = [
+        "change_rate",
+        "amt_change_rate",
+        "vol_change_rate",
+        "open_preclose_rate",
+        "high_preclose_rate",
+        "low_preclose_rate",
+    ]
     cov_table = "index_daily_em_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
     # prep ETF covariates  fund_etf_daily_em_view
-    features = ["change_rate", "amt_change_rate"]
+    features = [
+        "change_rate",
+        "amt_change_rate",
+        "vol_change_rate",
+        "turnover_rate",
+        "turnover_change_rate",
+        "open_preclose_rate",
+        "high_preclose_rate",
+        "low_preclose_rate",
+    ]
     cov_table = "fund_etf_daily_em_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
@@ -551,17 +576,35 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
     # prep US index covariates us_index_daily_sina
-    features = ["change_rate", "amt_change_rate"]
+    features = [
+        "change_rate",
+        "amt_change_rate",
+        "vol_change_rate", 
+        "open_preclose_rate",
+        "high_preclose_rate",
+        "low_preclose_rate",
+    ]
     cov_table = "us_index_daily_sina_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
     # prep HK index covariates hk_index_daily_sina
-    features = ["change_rate"]
+    features = [
+        "change_rate",
+        "open_preclose_rate",
+        "high_preclose_rate",
+        "low_preclose_rate",
+    ]
     cov_table = "hk_index_daily_em_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
     # prep CN bond: bond_zh_hs_daily_view
-    features = ["change_rate", "vol_change_rate"]
+    features = [
+        "change_rate",
+        "vol_change_rate",
+        "open_preclose_rate",
+        "high_preclose_rate",
+        "low_preclose_rate",
+    ]
     cov_table = "bond_zh_hs_daily_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
@@ -569,6 +612,10 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     features = [
         "change_rate",
         "turnover_rate",
+        "turnover_change_rate",
+        "open_preclose_rate",
+        "high_preclose_rate",
+        "low_preclose_rate",
         "vol_change_rate",
         "amt_change_rate",
     ]
@@ -577,31 +624,31 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
 
     # TODO RMB exchange rate
     features = [
-        "USD_change_rate",
-        "EUR_change_rate",
-        "JPY_change_rate",
-        "HKD_change_rate",
-        "GBP_change_rate",
-        "AUD_change_rate",
-        "NZD_change_rate",
-        "SGD_change_rate",
-        "CHF_change_rate",
-        "CAD_change_rate",
-        "MYR_change_rate",
-        "RUB_change_rate",
-        "ZAR_change_rate",
-        "KRW_change_rate",
-        "AED_change_rate",
-        "QAR_change_rate",
-        "HUF_change_rate",
-        "PLN_change_rate",
-        "DKK_change_rate",
-        "SEK_change_rate",
-        "NOK_change_rate",
-        "TRY_change_rate",
-        "PHP_change_rate",
-        "THB_change_rate",
-        "MOP_change_rate",
+        "usd_change_rate",
+        "eur_change_rate",
+        "jpy_change_rate",
+        "hkd_change_rate",
+        "gbp_change_rate",
+        "aud_change_rate",
+        "nzd_change_rate",
+        "sgd_change_rate",
+        "chf_change_rate",
+        "cad_change_rate",
+        "myr_change_rate",
+        "rub_change_rate",
+        "zar_change_rate",
+        "krw_change_rate",
+        "aed_change_rate",
+        "qar_change_rate",
+        "huf_change_rate",
+        "pln_change_rate",
+        "dkk_change_rate",
+        "sek_change_rate",
+        "nok_change_rate",
+        "try_change_rate",
+        "php_change_rate",
+        "thb_change_rate",
+        "mop_change_rate",
     ]
     cov_table = "currency_boc_safe_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
