@@ -24,6 +24,12 @@ fi
 >etl.log
 >$OUTPUT_LOG
 
+# Archive .csv files
+if [ ! -d "csv" ]; then
+  mkdir csv
+fi
+mv *.csv csv/
+
 # Run the script with nohup
 # nohup "$PYENV_PYTHON" "$script" "$@" > >(tee -a output.log) 2>&1 &
 nohup "$COMMAND" "etl" "$@" > >(tee -a $OUTPUT_LOG) 2>&1 &

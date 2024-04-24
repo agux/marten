@@ -99,7 +99,7 @@ def main(args):
     futures.append(client.submit(get_us_indices, us_index_list))
 
     future_bond_spot = client.submit(bond_spot)
-    futures.append(client.submit(bond_daily_hs, future_bond_spot))
+    futures.append(client.submit(bond_daily_hs, future_bond_spot, args.threads))
 
     future_stock_zh_spot = client.submit(stock_zh_spot)
     futures.append(client.submit(stock_zh_daily_hist, future_stock_zh_spot))

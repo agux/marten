@@ -281,7 +281,8 @@ def get_bond_zh_hs_daily(symbol, shared_dict):
         logger.error(f"failed to update bond_zh_hs_daily for {symbol}", exc_info=True)
         raise e
 
-def bond_daily_hs(future_bond_spot):
+
+def bond_daily_hs(future_bond_spot, n_threads):
     precursor_task_completed = future_bond_spot
 
     worker = get_worker()
@@ -302,11 +303,12 @@ def bond_daily_hs(future_bond_spot):
 
             futures[symbol]=client.submit(get_bond_zh_hs_daily, symbol, var_st)
 
-            await_futures(futures, False, task_timeout, shared_vars)
+            await_futures(futures, False, task_timeout, shared_vars, n_threads)
 
     await_futures(futures, True, task_timeout, shared_vars)
 
     return len(bond_list)
+
 
 def hk_index_spot():
     worker = get_worker()

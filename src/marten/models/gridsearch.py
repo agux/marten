@@ -387,10 +387,10 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger):
 
 def _get_layers():
     layers = []
-    # Loop over powers of 2 from 2^1 to 2^4
-    for i in range(1, 5):
+    # Loop over powers of 2 from 2^1 to 2^6
+    for i in range(1, 7):
         power_of_two = 2**i
-        # Loop over list lengths from 2 to 16
+        # Loop over list lengths from 2 to 20
         for j in range(2, 21):
             # Create a list with the current power of two, repeated 'j' times
             element = [power_of_two] * j

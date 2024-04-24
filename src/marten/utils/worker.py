@@ -107,7 +107,7 @@ def handle_task_timeout(futures, task_timeout, shared_vars):
             pass
 
 
-def await_futures(futures, until_all_completed=True, task_timeout=None, shared_vars=None):
+def await_futures(futures, until_all_completed=True, task_timeout=None, shared_vars=None, multiplier=1):
     num = num_undone(futures, shared_vars)
 
     if until_all_completed:
@@ -119,8 +119,8 @@ def await_futures(futures, until_all_completed=True, task_timeout=None, shared_v
             while num > 0:
                 time.sleep(random_seconds(2 ** (num - 1), 2**num, 128))
                 num = num_undone(futures, shared_vars)
-    elif num > multiprocessing.cpu_count():
-        delta = num - multiprocessing.cpu_count()
+    elif num > multiprocessing.cpu_count()*multiplier:
+        delta = num - multiprocessing.cpu_count() * multiplier
         time.sleep(random_seconds(2 ** (delta - 1), 2**delta, 128))
 
         if task_timeout is not None and shared_vars is not None:
