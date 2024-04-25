@@ -309,27 +309,19 @@ def bond_daily_hs(future_bond_spot, n_threads):
     bond_list = pd.read_sql(
         """
         select symbol from (
-            -- Select rows where turnover is not 0
             (SELECT symbol, turnover, last_checked FROM bond_zh_hs_spot WHERE turnover != 0)
-            
             UNION
-
-            -- Select a limited number of rows where last_checked is NULL
             (SELECT symbol, turnover, last_checked FROM bond_zh_hs_spot WHERE turnover = 0 and last_checked IS NULL LIMIT 2000) -- Adjust the limit as needed
-
             UNION
-
-            -- Select rows where turnover is 0, last_checked is not NULL, and last_checked is older than 48 hours
-            -- Increase selection probability for older last_checked values
             (SELECT symbol, turnover, last_checked FROM bond_zh_hs_spot 
                 WHERE turnover = 0 
                 AND last_checked IS NOT NULL
                 AND last_checked < NOW() - INTERVAL '48 hours'
                 AND random() < (
                     CASE
-                        WHEN last_checked < NOW() - INTERVAL '96 hours' THEN 0.4 -- older than 96 hours, 40% chance
-                        WHEN last_checked < NOW() - INTERVAL '72 hours' THEN 0.3 -- older than 72 hours, 30% chance
-                        ELSE 0.2 -- default for older than 48 hours, 20% chance
+                        WHEN last_checked < NOW() - INTERVAL '96 hours' THEN 0.4
+                        WHEN last_checked < NOW() - INTERVAL '72 hours' THEN 0.3
+                        ELSE 0.2
                     END
                 ) order by last_checked asc limit 1000
             )
