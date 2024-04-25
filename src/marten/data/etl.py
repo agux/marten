@@ -69,7 +69,7 @@ def init(args):
     db_url = (
         f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     )
-    alchemyEngine = get_database_engine(db_url, pool_size=1)
+    alchemyEngine = get_database_engine(db_url, pool_size=args.threads)
 
     client = init_client(__name__,args.worker,args.threads,args.dashboard_port)
 

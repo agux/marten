@@ -260,16 +260,16 @@ def get_bond_zh_hs_daily(symbol, shared_dict):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
-    try:
-        with alchemyEngine.begin() as conn:
-            update_query = text("""
-                UPDATE bond_zh_hs_spot 
-                SET last_checked = CURRENT_TIMESTAMP
-                WHERE symbol = :symbol 
-            """)
-            params = {"symbol": symbol}
-            conn.execute(update_query, params)
+    with alchemyEngine.begin() as conn:
+        update_query = text("""
+            UPDATE bond_zh_hs_spot 
+            SET last_checked = CURRENT_TIMESTAMP
+            WHERE symbol = :symbol 
+        """)
+        params = {"symbol": symbol}
+        conn.execute(update_query, params)
 
+    try:
         bzhd = ak.bond_zh_hs_daily(symbol)
 
         # if shide is empty, return immediately
