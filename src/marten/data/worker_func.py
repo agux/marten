@@ -135,7 +135,7 @@ def hk_index_daily(future_hk_index_list):
     with worker_client() as client:
         logger.info("starting tasks on function update_hk_indices()...")
         for symbol in index_list:
-            futures.append(client.submit(update_hk_indices, symbol))
+            futures.append(client.submit(update_hk_indices, symbol, priority=1))
             await_futures(futures, False)
 
     await_futures(futures)
@@ -398,7 +398,7 @@ def cn_index_daily(future_cn_index_list):
     futures = []
     with worker_client() as client:
         for symbol, src in zip(cn_index_fulllist["symbol"], cn_index_fulllist["src"]):
-            futures.append(client.submit(stock_zh_index_daily_em, symbol, src))
+            futures.append(client.submit(stock_zh_index_daily_em, symbol, src, priority=1))
             await_futures(futures, False)
 
     await_futures(futures)
@@ -597,7 +597,7 @@ def update_etf_metrics(future_etf_list, future_bond_ir):
     with worker_client() as client:
         logger.info(f"starting tasks on function calc_etf_metrics()...")
         for symbol in etf_list:
-            futures.append(client.submit(calc_etf_metrics, symbol, end_date))
+            futures.append(client.submit(calc_etf_metrics, symbol, end_date, priority=1))
             await_futures(futures, False)
 
     await_futures(futures)
@@ -742,7 +742,7 @@ def etf_list():
         with worker_client() as client:
             logger.info(f"starting task on function get_etf_daily()...")
             for symbol in df["symbol"]:
-                futures.append(client.submit(get_etf_daily, symbol))
+                futures.append(client.submit(get_etf_daily, symbol, priority=1))
                 await_futures(futures, False)
 
         await_futures(futures)
@@ -991,7 +991,7 @@ def stock_zh_daily_hist(stock_list):
     futures = []
     with worker_client() as client:
         for symbol in stock_list["symbol"]:
-            futures.append(client.submit(get_stock_daily, symbol))
+            futures.append(client.submit(get_stock_daily, symbol, priority=1))
             await_futures(futures, False)
 
     await_futures(futures)
@@ -1032,7 +1032,7 @@ def sge_spot_daily_hist(spot_list):
     futures = []
     with worker_client() as client:
         for symbol in spot_list["product"]:
-            futures.append(client.submit(get_sge_spot_daily, symbol))
+            futures.append(client.submit(get_sge_spot_daily, symbol, priority=1))
             await_futures(futures, False)
 
     await_futures(futures)
