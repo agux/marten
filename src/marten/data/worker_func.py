@@ -48,6 +48,7 @@ from dask.distributed import worker_client, get_worker, Variable
 
 from functools import lru_cache
 
+
 @lru_cache()
 def last_trade_date():
     xshg = xcals.get_calendar("XSHG")
@@ -67,7 +68,7 @@ def update_on_conflict(table_def, conn, df: pd.DataFrame, primary_keys):
     # table = sqlalchemy.Table(table, sqlalchemy.MetaData(), autoload_with=conn)
     # Create an insert statement from the DataFrame records
     insert_stmt = insert(table_def).values(df.to_dict(orient="records"))
-    
+
     if hasattr(table_def, "__table__"):
         table_columns = table_def.__table__.columns
     else:
@@ -117,6 +118,7 @@ def saveAsCsv(file_name_main: str, df):
     # Save the dataframe to a csv file with timestamp as suffix. Need to properly encode and display Chinese characters.
     df.to_csv(f"{file_name_main}_{current_time}.csv", encoding="utf_8_sig", index=False)
 
+
 def hk_index_daily(future_hk_index_list):
     precursor_task_completed = future_hk_index_list
 
@@ -139,6 +141,7 @@ def hk_index_daily(future_hk_index_list):
     await_futures(futures)
     return len(index_list)
 
+
 def update_hk_indices(symbol):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
@@ -153,7 +156,8 @@ def update_hk_indices(symbol):
         shide.rename(
             columns={
                 "latest": "close",
-            },inplace=True
+            },
+            inplace=True,
         )
         # Convert the 'date' column to datetime
         shide.loc[:, "date"] = pd.to_datetime(shide["date"]).dt.date
@@ -171,6 +175,7 @@ def update_hk_indices(symbol):
     except Exception as e:
         logger.error(f"failed to update hk_index_daily_em for {symbol}", exc_info=True)
         raise e
+
 
 def get_us_indices(us_index_list):
     worker = get_worker()
@@ -209,12 +214,13 @@ def update_us_indices(symbol):
         )
         raise e
 
+
 def bond_spot():
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
     logger.info("running bond_spot()...")
-    
+
     bzhs = None
     for attempt in Retrying(
         stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=5)
@@ -237,12 +243,14 @@ def bond_spot():
             "昨收": "prev_close",
             "成交量": "volume",
             "成交额": "turnover",
-        }, inplace=True
+        },
+        inplace=True,
     )
 
     with alchemyEngine.begin() as conn:
         update_on_conflict(bond_zh_hs_spot, conn, bzhs, ["symbol"])
     return len(bzhs)
+
 
 def get_bond_zh_hs_daily(symbol, shared_dict):
     st_dict = shared_dict.get()
@@ -251,7 +259,17 @@ def get_bond_zh_hs_daily(symbol, shared_dict):
 
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
+
     try:
+        with alchemyEngine.begin() as conn:
+            update_query = text("""
+                UPDATE bond_zh_hs_spot 
+                SET last_checked = CURRENT_TIMESTAMP
+                WHERE symbol = :symbol 
+            """)
+            params = {"symbol": symbol}
+            conn.execute(update_query, params)
+
         bzhd = ak.bond_zh_hs_daily(symbol)
 
         # if shide is empty, return immediately
@@ -288,12 +306,44 @@ def bond_daily_hs(future_bond_spot, n_threads):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
-    bond_list = pd.read_sql("SELECT symbol FROM bond_zh_hs_spot", alchemyEngine)
-    logger.info("starting tasks on function bond_daily_hs(). #symbols: %s", len(bond_list))
+    bond_list = pd.read_sql(
+        """
+        select symbol from (
+            -- Select rows where turnover is not 0
+            (SELECT symbol, turnover, last_checked FROM bond_zh_hs_spot WHERE turnover != 0)
+            
+            UNION
+
+            -- Select a limited number of rows where last_checked is NULL
+            (SELECT symbol, turnover, last_checked FROM bond_zh_hs_spot WHERE turnover = 0 and last_checked IS NULL LIMIT 2000) -- Adjust the limit as needed
+
+            UNION
+
+            -- Select rows where turnover is 0, last_checked is not NULL, and last_checked is older than 48 hours
+            -- Increase selection probability for older last_checked values
+            (SELECT symbol, turnover, last_checked FROM bond_zh_hs_spot 
+                WHERE turnover = 0 
+                AND last_checked IS NOT NULL
+                AND last_checked < NOW() - INTERVAL '48 hours'
+                AND random() < (
+                    CASE
+                        WHEN last_checked < NOW() - INTERVAL '96 hours' THEN 0.4 -- older than 96 hours, 40% chance
+                        WHEN last_checked < NOW() - INTERVAL '72 hours' THEN 0.3 -- older than 72 hours, 30% chance
+                        ELSE 0.2 -- default for older than 48 hours, 20% chance
+                    END
+                ) order by last_checked asc limit 1000
+            )
+        ) order by turnover desc, last_checked asc
+        """,
+        alchemyEngine,
+    )
+    logger.info(
+        "starting tasks on function bond_daily_hs(). #symbols: %s", len(bond_list)
+    )
 
     futures = {}
     shared_vars = {}
-    task_timeout = 300 #seconds
+    task_timeout = 300  # seconds
 
     with worker_client() as client:
         for symbol in bond_list["symbol"]:
@@ -301,7 +351,7 @@ def bond_daily_hs(future_bond_spot, n_threads):
             var_st.set({"symbol": symbol})
             shared_vars[symbol] = var_st
 
-            futures[symbol]=client.submit(get_bond_zh_hs_daily, symbol, var_st)
+            futures[symbol] = client.submit(get_bond_zh_hs_daily, symbol, var_st)
 
             await_futures(futures, False, task_timeout, shared_vars, n_threads)
 
@@ -331,7 +381,8 @@ def hk_index_spot():
             "昨收": "prev_close",
             "成交量": "volume",
             "成交额": "amount",
-        }, inplace=True
+        },
+        inplace=True,
     )
 
     with alchemyEngine.begin() as conn:
@@ -339,6 +390,7 @@ def hk_index_spot():
             table_def_hk_index_spot_em(), conn, hk_index_list_df, ["symbol"]
         )
     return len(hk_index_list_df)
+
 
 def cn_index_daily(future_cn_index_list):
     precursor_task_completed = future_cn_index_list
@@ -391,6 +443,7 @@ def stock_zh_index_daily_em(symbol, src):
         logger.error(f"failed to update index_daily_em for {symbol}", exc_info=True)
         raise e
 
+
 def stock_zh_index_spot_em(symbol, src):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
@@ -421,6 +474,7 @@ def stock_zh_index_spot_em(symbol, src):
     except Exception as e:
         logger.error(f"failed to update index_spot_em for {symbol}", exc_info=True)
         raise e
+
 
 def get_cn_index_list(cn_index_types):
     worker = get_worker()
@@ -489,7 +543,9 @@ def calc_etf_metrics(symbol, end_date):
             )
 
             # To calculate max drawdown, get the cummulative_returns
-            df.loc[:, "cumulative_returns"] = np.cumprod(1 + df["change_rate"] / 100.0) - 1
+            df.loc[:, "cumulative_returns"] = (
+                np.cumprod(1 + df["change_rate"] / 100.0) - 1
+            )
             # Calculate the maximum cumulative return up to each point
             peak = np.maximum.accumulate(df["cumulative_returns"])
             # Calculate drawdown as the difference between the current value and the peak
@@ -524,6 +580,7 @@ def calc_etf_metrics(symbol, end_date):
         logger.error(f"failed to update ETF metrics for {symbol}", exc_info=True)
         raise e
 
+
 # load historical data from daily table and calc metrics, then update perf table
 def update_etf_metrics(future_etf_list, future_bond_ir):
     precursor_task_completed = future_etf_list
@@ -554,6 +611,7 @@ def update_etf_metrics(future_etf_list, future_bond_ir):
     await_futures(futures)
 
     return len(etf_list)
+
 
 def bond_ir():
     worker = get_worker()
@@ -691,8 +749,8 @@ def etf_list():
         futures = []
         with worker_client() as client:
             logger.info(f"starting task on function get_etf_daily()...")
-            for symbol in df['symbol']:
-                futures.append(client.submit(get_etf_daily,symbol))
+            for symbol in df["symbol"]:
+                futures.append(client.submit(get_etf_daily, symbol))
                 await_futures(futures, False)
 
         await_futures(futures)
@@ -845,7 +903,7 @@ def stock_zh_spot():
             stock_zh_a_spot_em_df = ak.stock_zh_a_spot_em()
             break
         except Exception as e:
-            logger.warn(f'Attempt {attempt+1} failed with error: {e}')
+            logger.warn(f"Attempt {attempt+1} failed with error: {e}")
             if attempt < retry_attempts - 1:
                 time.sleep(retry_delay)
             else:
@@ -898,7 +956,7 @@ def get_stock_daily(symbol):
             start_date = (latest_date - timedelta(days=30)).strftime("%Y%m%d")
 
         end_date = datetime.now().strftime("%Y%m%d")
-        adjust="hfq"
+        adjust = "hfq"
 
         stock_zh_a_hist_df = ak.stock_zh_a_hist(
             symbol, "daily", start_date, end_date, adjust
@@ -907,25 +965,24 @@ def get_stock_daily(symbol):
         if stock_zh_a_hist_df.empty:
             return None
 
-        stock_zh_a_hist_df.loc[:,"symbol"] = symbol
+        stock_zh_a_hist_df.loc[:, "symbol"] = symbol
         stock_zh_a_hist_df.rename(
-                columns={
-                    "日期": "date",
-                    "开盘": "open",
-                    "收盘": "close",
-                    "最高": "high",
-                    "最低": "low",
-                    "成交量": "volume",
-                    "成交额": "turnover",
-                    "振幅": "amplitude",
-                    "涨跌幅": "change_rate",
-                    "涨跌额": "change_amt",
-                    "换手率": "turnover_rate",
-                },
-                inplace=True,
-            )
-    
-    
+            columns={
+                "日期": "date",
+                "开盘": "open",
+                "收盘": "close",
+                "最高": "high",
+                "最低": "low",
+                "成交量": "volume",
+                "成交额": "turnover",
+                "振幅": "amplitude",
+                "涨跌幅": "change_rate",
+                "涨跌额": "change_amt",
+                "换手率": "turnover_rate",
+            },
+            inplace=True,
+        )
+
         ignore_on_conflict(
             stock_zh_a_hist_em, conn, stock_zh_a_hist_df, ["symbol", "date"]
         )
@@ -942,12 +999,13 @@ def stock_zh_daily_hist(stock_list):
     futures = []
     with worker_client() as client:
         for symbol in stock_list["symbol"]:
-            futures.append(client.submit(get_stock_daily,symbol))
+            futures.append(client.submit(get_stock_daily, symbol))
             await_futures(futures, False)
 
     await_futures(futures)
 
     return len(stock_list)
+
 
 def get_sge_spot_daily(symbol):
     worker = get_worker()
@@ -971,6 +1029,7 @@ def get_sge_spot_daily(symbol):
         ignore_on_conflict(spot_hist_sge, conn, spot_hist_sge_df, ["symbol", "date"])
 
     return len(spot_hist_sge_df)
+
 
 def sge_spot_daily_hist(spot_list):
     worker = get_worker()

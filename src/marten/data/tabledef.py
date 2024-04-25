@@ -211,6 +211,7 @@ class bond_zh_hs_spot(Base):
         nullable=False,
         comment="Last Modified Timestamp",
     )
+    last_checked = Column(DateTime(timezone=True))
 
 
 def table_def_index_daily_em():
