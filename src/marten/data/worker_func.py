@@ -335,7 +335,7 @@ def bond_daily_hs(future_bond_spot, n_threads):
 
     futures = {}
     shared_vars = {}
-    task_timeout = 300  # seconds
+    task_timeout = 280  # seconds
 
     with worker_client() as client:
         for symbol in bond_list["symbol"]:
@@ -837,7 +837,7 @@ def etf_spot():
         ]
         saveAsCsv("fund_etf_spot_em", df)
         # Rename the columns of df to match the table's column names
-        df = df.rename(
+        df.rename(
             columns={
                 "数据日期": "date",
                 "更新时间": "update_time",
@@ -872,7 +872,7 @@ def etf_spot():
                 "流通市值": "circulating_market_value",
                 "总市值": "total_market_value",
                 "最新份额": "latest_shares",
-            }
+            }, inplace=True
         )
         with alchemyEngine.begin() as conn:
             update_on_conflict(table_def_fund_etf_spot_em(), conn, df, ["code", "date"])
