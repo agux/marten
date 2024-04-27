@@ -1103,7 +1103,7 @@ def rmb_exchange_rates():
 
 def get_cn_bond_index_metrics(symbol, symbol_cn):
     worker = get_worker()
-    alchemyEngine = worker.alchemyEngine
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
     column_mapping = {
         '全价': 'fullprice',
@@ -1128,10 +1128,16 @@ def get_cn_bond_index_metrics(symbol, symbol_cn):
     all_df = None
 
     for indicator in list(column_mapping.keys()):
-        df = ak.bond_new_composite_index_cbond(
-            indicator=indicator, period=symbol_cn
-        )
-
+        try:
+            df = ak.bond_new_composite_index_cbond(
+                indicator=indicator, period=symbol_cn
+            )
+        except KeyError as e:
+            logger.warning("%s - %s - %s could be empty: %s", symbol, symbol_cn, indicator, str(e))
+            continue
+        except Exception as e:
+            raise e
+        
         if df.empty:
             continue
 
