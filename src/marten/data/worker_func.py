@@ -1125,7 +1125,11 @@ def get_cn_bond_index_metrics(symbol, symbol_cn):
         '现券结算量': 'spotsettlementvolume'
     }
 
-    all_df = None
+    start_date = None
+    with alchemyEngine.begin() as conn:
+        latest_date = get_latest_date(conn, symbol, "cn_bond_indices")
+        if latest_date is not None:
+            start_date = latest_date - timedelta(days=20)
 
     for indicator in list(column_mapping.keys()):
         try:
@@ -1144,33 +1148,19 @@ def get_cn_bond_index_metrics(symbol, symbol_cn):
         if df.empty:
             continue
 
+        df = df.dropna(axis=1, how="all")
+        if df.empty:
+            continue
+
         df.rename(columns={"value":column_mapping[indicator]}, inplace=True)
+        if start_date is not None:
+            df = df[df["date"] >= start_date]
+        df.insert(0, "symbol", symbol)
 
-        if all_df is None:
-            all_df = df
-        else:
-            all_df = pd.merge(all_df, df, on="date", how="left")
+        with alchemyEngine.begin() as conn:
+            update_on_conflict(cn_bond_indices, conn, df, ["symbol", "date"])
 
-    if all_df is None:
-        return 0
-    
-    # remove empty columns for all_df
-    all_df = all_df.dropna(axis=1, how='all')
-    if all_df.empty:
-        return 0
-    
-    all_df.insert(0, "symbol", symbol)
-
-    with alchemyEngine.begin() as conn:
-        latest_date = get_latest_date(conn, symbol, "cn_bond_indices")
-        if latest_date is not None:
-            start_date = latest_date - timedelta(days=20)
-            all_df = all_df[all_df["date"] >= start_date]
-        update_on_conflict(
-            cn_bond_indices, conn, all_df, ["symbol", "date"]
-        )
-
-    return len(all_df)
+    return True
 
 
 def cn_bond_index():
