@@ -42,6 +42,8 @@ from marten.data.tabledef import (
     currency_boc_safe,
     spot_symbol_table_sge,
     spot_hist_sge,
+    cn_bond_index_period,
+    cn_bond_indices,
 )
 
 from dask.distributed import worker_client, get_worker, Variable
@@ -1011,9 +1013,8 @@ def get_sge_spot_daily(symbol):
 
         latest_date = get_latest_date(conn, symbol, "spot_hist_sge")
 
-        start_date = None
         if latest_date is not None:
-            start_date = latest_date - timedelta(days=10)
+            start_date = latest_date - timedelta(days=20)
             spot_hist_sge_df = spot_hist_sge_df[spot_hist_sge_df["date"] >= start_date]
 
         spot_hist_sge_df.insert(0, "symbol", symbol)
@@ -1098,3 +1099,102 @@ def rmb_exchange_rates():
         update_on_conflict(currency_boc_safe, conn, currency_boc_safe_df, ["date"])
 
     return len(currency_boc_safe_df)
+
+
+def get_cn_bond_index_metrics(symbol, symbol_cn):
+    worker = get_worker()
+    alchemyEngine = worker.alchemyEngine
+
+    column_mapping = {
+        '全价': 'fullprice',
+        '净价': 'cleanprice',
+        '财富': 'wealth',
+        '平均市值法久期': 'avgmv_duration',
+        '平均现金流法久期': 'avgcf_duration',
+        '平均市值法凸性': 'avgmv_convexity',
+        '平均现金流法凸性': 'avgcf_convexity',
+        '平均现金流法到期收益率': 'avgcf_ytm',
+        '平均市值法到期收益率': 'avgmv_ytm',
+        '平均基点价值': 'avgbpv',
+        '平均待偿期': 'avgmaturity',
+        '平均派息率': 'avgcouponrate',
+        '指数上日总市值': 'indexprevdaymv',
+        '财富指数涨跌幅': 'wealthindex_change',
+        '全价指数涨跌幅': 'fullpriceindex_change',
+        '净价指数涨跌幅': 'cleanpriceindex_change',
+        '现券结算量': 'spotsettlementvolume'
+    }
+
+    all_df = None
+
+    for indicator in list(column_mapping.keys()):
+        df = ak.bond_new_composite_index_cbond(
+            indicator=indicator, period=symbol_cn
+        )
+
+        if df.empty:
+            continue
+
+        df.rename(columns={"value":column_mapping[indicator]}, inplace=True)
+
+        if all_df is None:
+            all_df = df
+        else:
+            all_df = pd.merge(all_df, df, on="date", how="left")
+
+    if all_df is None:
+        return 0
+
+    all_df.insert(0, "symbol", symbol)
+
+    with alchemyEngine.begin() as conn:
+        latest_date = get_latest_date(conn, symbol, "cn_bond_indices")
+        if latest_date is not None:
+            start_date = latest_date - timedelta(days=20)
+            all_df = all_df[all_df["date"] >= start_date]
+        update_on_conflict(
+            cn_bond_indices, conn, all_df, ["symbol", "date"]
+        )
+    
+    return len(all_df)
+
+
+def cn_bond_index():
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+    logger.info("running cn_bond_index_periods()...")
+
+    # Define the data as a list of tuples
+    data = [
+        ("totalvalue", "总值"),
+        ("below1yr", "1年以下"),
+        ("yr1to3", "1-3年"),
+        ("yr3to5", "3-5年"),
+        ("yr5to7", "5-7年"),
+        ("yr7to10", "7-10年"),
+        ("over10yr", "10年以上"),
+        ("mo0to3", "0-3个月"),
+        ("mo3to6", "3-6个月"),
+        ("mo6to9", "6-9个月"),
+        ("mo9to12", "9-12个月"),
+        ("mo0to6", "0-6个月"),
+        ("mo6to12", "6-12个月")
+    ]
+
+    # Create the DataFrame
+    df = pd.DataFrame(data, columns=["symbol", "symbol_cn"])
+
+    with alchemyEngine.begin() as conn:
+        ignore_on_conflict(cn_bond_index_period, conn, df, ["symbol"])
+
+    # submit tasks to get bond metrics for each period
+    futures = []
+    with worker_client() as client:
+        logger.info("starting tasks on function get_cn_bond_index_metrics()...")
+        for symbol, symbol_cn in data:
+            futures.append(client.submit(get_cn_bond_index_metrics, symbol, symbol_cn, priority=1))
+            await_futures(futures, False)
+
+    await_futures(futures)
+
+    return len(df)

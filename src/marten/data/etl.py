@@ -33,6 +33,7 @@ from marten.data.worker_func import (
     rmb_exchange_rates,
     sge_spot,
     sge_spot_daily_hist,
+    cn_bond_index,
 )
 
 # module_path = os.getenv("LOCAL_AKSHARE_DEV_MODULE")
@@ -108,6 +109,8 @@ def main(args):
 
     future_sge_spot = client.submit(sge_spot)
     futures.append(client.submit(sge_spot_daily_hist, future_sge_spot))
+
+    futures.append(client.submit(cn_bond_index))
 
     futures.extend(
         [

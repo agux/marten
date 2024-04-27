@@ -561,7 +561,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     cov_table = "fund_etf_daily_em_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
-    # prep bond covariates bond_metrics_em
+    # prep bond covariates bond_metrics_em, cn_bond_indices_view
     features = [
         "china_yield_2y",
         "china_yield_10y",
@@ -573,6 +573,25 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "us_yield_spread_10y_2y",
     ]
     cov_table = "bond_metrics_em"
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
+
+    features = [
+        "wealthindex_change",
+        "fullpriceindex_change",
+        "cleanpriceindex_change",
+        "avgmv_duration_change_rate",
+        "avgcf_duration_change_rate",
+        "avgmv_convexity_change_rate",
+        "avgcf_convexity_change_rate",
+        "avgcf_ytm_change_rate",
+        "avgmv_ytm_change_rate",
+        "avgbpv_change_rate",
+        "avgmaturity_change_rate",
+        "avgcouponrate_change_rate",
+        "indexprevdaymv_change_rate",
+        "spotsettlementvolume_change_rate",
+    ]
+    cov_table = "cn_bond_indices_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
     # prep US index covariates us_index_daily_sina

@@ -17,6 +17,52 @@ from sqlalchemy import (
 Base = declarative_base()
 
 
+class cn_bond_index_period(Base):
+    __tablename__ = "cn_bond_index_period"
+
+    symbol = Column(Text, primary_key=True, nullable=False, comment="Period Symbol")
+    symbol_cn = Column(Text, nullable=False, comment="Period Symbol in Chinese")
+    last_modified = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=func.current_timestamp(),
+        comment="Last Modified Timestamp",
+    )
+
+
+class cn_bond_indices(Base):
+    __tablename__ = 'cn_bond_indices'
+    __table_args__ = (
+        PrimaryKeyConstraint('symbol', 'date'),
+    )
+
+    symbol = Column(Text, nullable=False, comment="Symbol")
+    date = Column(Date, nullable=False, comment="Date")
+    FullPrice = Column(Numeric, comment="全价")
+    CleanPrice = Column(Numeric, comment="净价")
+    Wealth = Column(Numeric, comment="财富")
+    AvgMV_Duration = Column(Numeric, comment="平均市值法久期")
+    AvgCF_Duration = Column(Numeric, comment="平均现金流法久期")
+    AvgMV_Convexity = Column(Numeric, comment="平均市值法凸性")
+    AvgCF_Convexity = Column(Numeric, comment="平均现金流法凸性")
+    AvgCF_YTM = Column(Numeric, comment="平均现金流法到期收益率")
+    AvgMV_YTM = Column(Numeric, comment="平均市值法到期收益率")
+    AvgBPV = Column(Numeric, comment="平均基点价值")
+    AvgMaturity = Column(Numeric, comment="平均待偿期")
+    AvgCouponRate = Column(Numeric, comment="平均派息率")
+    IndexPrevDayMV = Column(Numeric, comment="指数上日总市值")
+    WealthIndex_Change = Column(Numeric, comment="财富指数涨跌幅")
+    FullPriceIndex_Change = Column(Numeric, comment="全价指数涨跌幅")
+    CleanPriceIndex_Change = Column(Numeric, comment="净价指数涨跌幅")
+    SpotSettlementVolume = Column(Numeric, comment="现券结算量")
+    last_modified = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=func.current_timestamp(),
+        comment="Last Modified Timestamp",
+    )
+
+
 class spot_symbol_table_sge(Base):
     __tablename__ = "spot_symbol_table_sge"
     __table_args__ = (
