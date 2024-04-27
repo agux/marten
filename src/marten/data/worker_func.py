@@ -100,10 +100,12 @@ def ignore_on_conflict(table_def, conn, df, primary_keys):
     conn.execute(on_conflict_stmt)
 
 
-def get_latest_date(conn, symbol, table):
-    query = f"SELECT max(date) FROM {table}"
+def get_latest_date(conn, symbol, table, col=None):
+    query = f"SELECT max(date) FROM {table} where 1=1"
+    if col is not None:
+        query += f" and {col} is not null"
     if symbol is not None:
-        query += " WHERE symbol = :symbol"
+        query += " and symbol = :symbol"
         result = conn.execute(text(query), {"symbol": symbol})
     else:
         result = conn.execute(text(query))
@@ -1125,12 +1127,6 @@ def get_cn_bond_index_metrics(symbol, symbol_cn):
         '现券结算量': 'spotsettlementvolume'
     }
 
-    start_date = None
-    with alchemyEngine.begin() as conn:
-        latest_date = get_latest_date(conn, symbol, "cn_bond_indices")
-        if latest_date is not None:
-            start_date = latest_date - timedelta(days=20)
-
     for indicator in list(column_mapping.keys()):
         try:
             df = ak.bond_new_composite_index_cbond(
@@ -1152,12 +1148,18 @@ def get_cn_bond_index_metrics(symbol, symbol_cn):
         if df.empty:
             continue
 
-        df.rename(columns={"value":column_mapping[indicator]}, inplace=True)
-        if start_date is not None:
-            df = df[df["date"] >= start_date]
-        df.insert(0, "symbol", symbol)
+        value_col_name = column_mapping[indicator]
+        df.rename(columns={"value": value_col_name}, inplace=True)
 
+        start_date = None
         with alchemyEngine.begin() as conn:
+            latest_date = get_latest_date(
+                conn, symbol, "cn_bond_indices", value_col_name
+            )
+            if latest_date is not None:
+                start_date = latest_date - timedelta(days=20)
+                df = df[df["date"] >= start_date]
+            df.insert(0, "symbol", symbol)
             update_on_conflict(cn_bond_indices, conn, df, ["symbol", "date"])
 
     return True

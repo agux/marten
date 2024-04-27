@@ -16,6 +16,8 @@ from sqlalchemy import (
 
 Base = declarative_base()
 
+## Important Node:
+## All column names must align with SQL DDL (with lower-case characters)
 
 class cn_bond_index_period(Base):
     __tablename__ = "cn_bond_index_period"
