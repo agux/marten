@@ -1136,8 +1136,11 @@ def get_cn_bond_index_metrics(symbol, symbol_cn):
             logger.warning("%s - %s - %s could be empty: %s", symbol, symbol_cn, indicator, str(e))
             continue
         except Exception as e:
-            raise e
-        
+            logger.exception(
+                "%s - %s - %s encountered error. skipping", symbol, symbol_cn, indicator
+            )
+            continue
+
         if df.empty:
             continue
 
@@ -1150,7 +1153,12 @@ def get_cn_bond_index_metrics(symbol, symbol_cn):
 
     if all_df is None:
         return 0
-
+    
+    # remove empty columns for all_df
+    all_df = all_df.dropna(axis=1, how='all')
+    if all_df.empty:
+        return 0
+    
     all_df.insert(0, "symbol", symbol)
 
     with alchemyEngine.begin() as conn:
@@ -1161,7 +1169,7 @@ def get_cn_bond_index_metrics(symbol, symbol_cn):
         update_on_conflict(
             cn_bond_indices, conn, all_df, ["symbol", "date"]
         )
-    
+
     return len(all_df)
 
 
