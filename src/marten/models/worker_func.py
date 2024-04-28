@@ -116,6 +116,7 @@ def fit_with_covar(
             accelerator=accelerator,
             validate=True,
             country=region,
+            changepoints_range=1.0,
         )
     except ValueError as e:
         logger.warning(str(e))
@@ -300,7 +301,8 @@ def log_metrics_for_hyper_params(
             impute_missing=True,
             accelerator=accelerator,
             validate=True,
-            country=region
+            country=region,
+            changepoints_range=1.0,
         )
     except ValueError as e:
         logger.warning(str(e))
@@ -680,6 +682,7 @@ def predict_best(
         daily_seasonality=False,
         impute_missing=True,
         validate=True,
+        changepoints_range=1.0,
         **params,
     )
     m, metrics_final = train(
@@ -693,6 +696,7 @@ def predict_best(
         impute_missing=True,
         validate=False,
         n_forecasts=future_steps,
+        changepoints_range=1.0,
         **params,
     )
     fit_time = time.time() - start_time

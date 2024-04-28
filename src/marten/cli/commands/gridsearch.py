@@ -17,7 +17,6 @@ def configure_parser(parser):
 
     # Create a mutually exclusive group
     group2 = parser.add_mutually_exclusive_group(required=False)
-    # Add arguments based on the requirements of the notebook code
     group2.add_argument(
         "--max_covars",
         action="store",
@@ -54,7 +53,7 @@ def configure_parser(parser):
         type=int,
         default=-1,
         help=("Number or parallel workers (python processes) for training the model. "
-              "Defaults to using all CPU cores available."
+              "Defaults to using 80% of CPU cores available."
         )
     )
     parser.add_argument(
