@@ -112,7 +112,7 @@ def await_futures(futures, until_all_completed=True, task_timeout=None, shared_v
 
     if until_all_completed:
         if task_timeout is not None and shared_vars is not None:
-            while num > 0:
+            while num is not None and num > 0:
                 time.sleep(random_seconds(2 ** (num - 1), 2**num, 128))
                 num = handle_task_timeout(futures, task_timeout, shared_vars)
         else:

@@ -19,6 +19,7 @@ Base = declarative_base()
 ## Important Node:
 ## All column names must align with SQL DDL (with lower-case characters)
 
+
 class cn_bond_index_period(Base):
     __tablename__ = "cn_bond_index_period"
 
@@ -33,10 +34,8 @@ class cn_bond_index_period(Base):
 
 
 class cn_bond_indices(Base):
-    __tablename__ = 'cn_bond_indices'
-    __table_args__ = (
-        PrimaryKeyConstraint('symbol', 'date'),
-    )
+    __tablename__ = "cn_bond_indices"
+    __table_args__ = (PrimaryKeyConstraint("symbol", "date"),)
 
     symbol = Column(Text, nullable=False, comment="Symbol")
     date = Column(Date, nullable=False, comment="Date")
@@ -679,5 +678,7 @@ def table_def_bond_metrics_em():
             nullable=False,
             comment="Last modified timestamp (最后修改时间)",
         ),
+        Column("quantile", Numeric, comment="雪球-股债性价比指数-百分位"),
+        Column("performance_benchmark", Numeric, comment="雪球-股债性价比指数-分值"),
         PrimaryKeyConstraint("date", name="bond_metrics_em_pk"),
     )

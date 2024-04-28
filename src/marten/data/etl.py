@@ -34,6 +34,7 @@ from marten.data.worker_func import (
     sge_spot,
     sge_spot_daily_hist,
     cn_bond_index,
+    get_stock_bond_ratio_index,
 )
 
 # module_path = os.getenv("LOCAL_AKSHARE_DEV_MODULE")
@@ -90,6 +91,7 @@ def main(args):
     future_bond_ir = client.submit(bond_ir)
 
     futures.append(client.submit(update_etf_metrics, future_etf_list, future_bond_ir))
+    futures.append(client.submit(get_stock_bond_ratio_index))
 
     future_cn_index_list = client.submit(get_cn_index_list, cn_index_types)
     futures.append(client.submit(cn_index_daily, future_cn_index_list))
@@ -103,7 +105,9 @@ def main(args):
     futures.append(client.submit(bond_daily_hs, future_bond_spot, args.threads))
 
     future_stock_zh_spot = client.submit(stock_zh_spot)
-    futures.append(client.submit(stock_zh_daily_hist, future_stock_zh_spot))
+    futures.append(
+        client.submit(stock_zh_daily_hist, future_stock_zh_spot, args.threads)
+    )
 
     futures.append(client.submit(rmb_exchange_rates))
 

@@ -343,7 +343,7 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger):
         ## load covariate time series from different tables and/or features
         cov_table = group1[0]
         feature = group1[1]
-        if cov_table != "bond_metrics_em":
+        if cov_table != "bond_metrics_em" or cov_table != "bond_metrics_em_view":
             query = f"""
                 SELECT symbol ID, date DS, {feature} y
                 FROM {cov_table}
@@ -497,7 +497,7 @@ def _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
     for feature in features:
 
         match feature:
-            case "bond_metrics_em":
+            case "bond_metrics_em" | "bond_metrics_em_view":
                 # construct a dummy cov_symbols dataframe with `symbol` column and the value 'bond'.
                 cov_symbols = pd.DataFrame({"symbol": ["bond"]})
             case "currency_boc_safe_view":
@@ -571,8 +571,20 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "us_yield_10y",
         "us_yield_30y",
         "us_yield_spread_10y_2y",
+        "quantile",
+        "china_yield_2y_change_rate",
+        "china_yield_5y_change_rate",
+        "china_yield_10y_change_rate",
+        "china_yield_30y_change_rate",
+        "china_yield_spread_10y_2y_change_rate",
+        "us_yield_2y_change_rate",
+        "us_yield_5y_change_rate",
+        "us_yield_10y_change_rate",
+        "us_yield_30y_change_rate",
+        "us_yield_spread_10y_2y_change_rate",
+        "performance_benchmark_change_rate",
     ]
-    cov_table = "bond_metrics_em"
+    cov_table = "bond_metrics_em_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
     features = [

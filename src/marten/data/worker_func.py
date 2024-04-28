@@ -46,6 +46,8 @@ from marten.data.tabledef import (
     cn_bond_indices,
 )
 
+import marten.data.api as mapi
+
 from dask.distributed import worker_client, get_worker, Variable
 
 from functools import lru_cache
@@ -637,7 +639,7 @@ def bond_ir():
                     "美国GDP年增率": "us_gdp_growth",
                 }
             )
-            ignore_on_conflict(table_def_bond_metrics_em(), conn, bzur, ["date"])
+            update_on_conflict(table_def_bond_metrics_em(), conn, bzur, ["date"])
         return len(bzur)
     except Exception as e:
         logger.exception("failed to get bond interest rate")
@@ -986,7 +988,7 @@ def get_stock_daily(symbol):
     return len(stock_zh_a_hist_df)
 
 
-def stock_zh_daily_hist(stock_list):
+def stock_zh_daily_hist(stock_list, threads):
     worker = get_worker()
     logger = worker.logger
 
@@ -996,7 +998,7 @@ def stock_zh_daily_hist(stock_list):
     with worker_client() as client:
         for symbol in stock_list["symbol"]:
             futures.append(client.submit(get_stock_daily, symbol, priority=1))
-            await_futures(futures, False)
+            await_futures(futures, False, multiplier=threads)
 
     await_futures(futures)
 
@@ -1202,5 +1204,24 @@ def cn_bond_index():
             await_futures(futures, False)
 
     await_futures(futures)
+
+    return len(df)
+
+
+def get_stock_bond_ratio_index():
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+    logger.info("running get_stock_bond_ratio_index()...")
+
+    df = mapi.snowball.stock_bond_ratio_index()
+
+    start_date = None
+    with alchemyEngine.begin() as conn:
+        latest_date = get_latest_date(
+            conn, table="stock_bond_ratio_index")
+        if latest_date is not None:
+            start_date = latest_date - timedelta(days=20)
+            df = df[df["date"] >= start_date]
+        update_on_conflict(table_def_bond_metrics_em(), conn, df, ["date"])
 
     return len(df)
