@@ -1218,7 +1218,7 @@ def get_stock_bond_ratio_index():
     start_date = None
     with alchemyEngine.begin() as conn:
         latest_date = get_latest_date(
-            conn, table="stock_bond_ratio_index")
+            conn, symbol=None, table="stock_bond_ratio_index")
         if latest_date is not None:
             start_date = latest_date - timedelta(days=20)
             df = df[df["date"] >= start_date]
