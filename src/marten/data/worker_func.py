@@ -46,7 +46,7 @@ from marten.data.tabledef import (
     cn_bond_indices,
 )
 
-import marten.data.api as mapi
+from marten.data.api.snowball import SnowballAPI
 
 from dask.distributed import worker_client, get_worker, Variable
 
@@ -620,7 +620,7 @@ def bond_ir():
         with alchemyEngine.begin() as conn:
             latest_date = get_latest_date(conn, None, "bond_metrics_em")
             if latest_date is not None:
-                start_date = latest_date.strftime("%Y%m%d")
+                start_date = (latest_date - timedelta(days=20)).strftime("%Y%m%d")
             bzur = ak.bond_zh_us_rate(start_date)
             bzur = bzur.rename(
                 columns={
@@ -1213,7 +1213,7 @@ def get_stock_bond_ratio_index():
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
     logger.info("running get_stock_bond_ratio_index()...")
 
-    df = mapi.snowball.stock_bond_ratio_index()
+    df = SnowballAPI.stock_bond_ratio_index()
 
     start_date = None
     with alchemyEngine.begin() as conn:
