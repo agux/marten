@@ -13,6 +13,11 @@ class SnowballAPI:
         r = requests.get(url, headers=headers)
         json_data = r.json()
         df = pd.DataFrame.from_dict(json_data["data"], orient="columns")
+        df["date"] = pd.to_datetime(df["date"], format="%Y-%m-%d").dt.date
+        df["quantile"] = pd.to_numeric(df["quantile"], errors="coerce")
+        df["performance_benchmark"] = pd.to_numeric(
+            df["performance_benchmark"], errors="coerce"
+        )
         return df
 
 if __name__ == "__main__":
