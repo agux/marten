@@ -634,20 +634,20 @@ def save_forecast_snapshot(
 
         country_holidays = get_country_holidays(region)
 
-        yearly_seasonality = forecast[["ds", "season_yearly"]]
-        yearly_seasonality.rename(
-            columns={"ds": "date", "season_yearly": "coefficient"}, inplace=True
+        forecast_params = forecast[["ds", "trend", "season_yearly"]]
+        forecast_params.rename(
+            columns={"ds": "date"}, inplace=True
         )
-        yearly_seasonality.loc[:, "symbol"] = symbol
-        yearly_seasonality.loc[:, "snapshot_id"] = snapshot_id
-        yearly_seasonality.loc[:, "holiday"] = yearly_seasonality["date"].apply(
+        forecast_params.loc[:, "symbol"] = symbol
+        forecast_params.loc[:, "snapshot_id"] = snapshot_id
+        forecast_params.loc[:, "holiday"] = forecast_params["date"].apply(
             lambda x: check_holiday(x, country_holidays)
         )
-        yearly_seasonality.to_sql(
-            "ft_yearly_params", conn, if_exists="append", index=False
+        forecast_params.to_sql(
+            "forecast_params", conn, if_exists="append", index=False
         )
 
-    return snapshot_id, len(yearly_seasonality)
+    return snapshot_id, len(forecast_params)
 
 
 def predict_best(

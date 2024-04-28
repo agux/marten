@@ -82,6 +82,14 @@ def load_anchor_ts(symbol, limit, alchemyEngine):
             "date DS, change_rate y, amt_change_rate amt_cr, open, close, high, low, volume, amount, "
             "vol_change_rate, open_preclose_rate, high_preclose_rate, low_preclose_rate"
         ),
+        "cn_bond_indices_view": (
+            "date DS, wealthindex_change y, fullpriceindex_change, cleanpriceindex_change, "
+            "fullprice, cleanprice, wealth, avgmv_duration, avgcf_duration, avgmv_convexity, avgcf_convexity, "
+            "avgcf_ytm, avgmv_ytm, avgbpv, avgmaturity, avgcouponrate, indexprevdaymv, spotsettlementvolume, "
+            "avgmv_duration_change_rate, avgcf_duration_change_rate, avgmv_convexity_change_rate, avgcf_convexity_change_rate, "
+            "avgcf_ytm_change_rate, avgmv_ytm_change_rate, avgbpv_change_rate, avgmaturity_change_rate, avgcouponrate_change_rate, "
+            "indexprevdaymv_change_rate, spotsettlementvolume_change_rate"
+        ),
     }
     # lookup which table the symbol's data is in
     anchor_table = (
