@@ -9,6 +9,7 @@ from sqlalchemy import (
     String,
     Date,
     Numeric,
+    BigInteger,
     Integer,
     DateTime,
     PrimaryKeyConstraint,
@@ -18,6 +19,31 @@ Base = declarative_base()
 
 ## Important Node:
 ## All column names must align with SQL DDL (with lower-case characters)
+
+
+class fund_dividend_events(Base):
+    __tablename__ = "fund_dividend_events"
+    __table_args__ = (PrimaryKeyConstraint("id", "rights_registration_date"),)
+
+    id = Column(BigInteger, nullable=False, comment="序号 - 唯一标识符")
+    symbol = Column(String, nullable=False, comment="基金代码 - 基金的唯一代码")
+    short_name = Column(String, nullable=False, comment="基金简称 - 基金的简短名称")
+    rights_registration_date = Column(
+        Date, nullable=False, comment="权益登记日 - 权益登记的日期"
+    )
+    ex_dividend_date = Column(
+        Date, nullable=False, comment="除息日期 - 股票或基金除息的日期"
+    )
+    dividend = Column(Numeric, nullable=False, comment="分红 - 基金分红的金额")
+    dividend_payment_date = Column(
+        Date, nullable=False, comment="分红发放日 - 分红款项发放的日期"
+    )
+    last_modified = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=func.current_timestamp(),
+        comment="最后修改时间",
+    )
 
 
 class cn_bond_index_period(Base):

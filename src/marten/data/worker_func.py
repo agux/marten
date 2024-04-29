@@ -44,6 +44,7 @@ from marten.data.tabledef import (
     spot_hist_sge,
     cn_bond_index_period,
     cn_bond_indices,
+    fund_dividend_events,
 )
 
 from marten.data.api.snowball import SnowballAPI
@@ -102,10 +103,10 @@ def ignore_on_conflict(table_def, conn, df, primary_keys):
     conn.execute(on_conflict_stmt)
 
 
-def get_latest_date(conn, symbol, table, col=None):
-    query = f"SELECT max(date) FROM {table} where 1=1"
-    if col is not None:
-        query += f" and {col} is not null"
+def get_max_for_column(conn, symbol, table, col_for_max='date', non_null_col=None):
+    query = f"SELECT max({col_for_max}) FROM {table} where 1=1"
+    if non_null_col is not None:
+        query += f" and {non_null_col} is not null"
     if symbol is not None:
         query += " and symbol = :symbol"
         result = conn.execute(text(query), {"symbol": symbol})
@@ -168,7 +169,7 @@ def update_hk_indices(symbol):
         # Convert the 'date' column to datetime
         shide.loc[:, "date"] = pd.to_datetime(shide["date"]).dt.date
         with alchemyEngine.begin() as conn:
-            latest_date = get_latest_date(conn, symbol, "hk_index_daily_em")
+            latest_date = get_max_for_column(conn, symbol, "hk_index_daily_em")
 
             if latest_date is not None:
                 ## keep rows only with `date` later than the latest record in database.
@@ -207,7 +208,7 @@ def update_us_indices(symbol):
         # Convert iuss["date"] to datetime and normalize to date only
         iuss.loc[:, "date"] = pd.to_datetime(iuss["date"]).dt.date
         with alchemyEngine.begin() as conn:
-            latest_date = get_latest_date(conn, symbol, "us_index_daily_sina")
+            latest_date = get_max_for_column(conn, symbol, "us_index_daily_sina")
             if latest_date is not None:
                 iuss = iuss[iuss["date"] > (latest_date - timedelta(days=10))]
             update_on_conflict(
@@ -284,7 +285,7 @@ def get_bond_zh_hs_daily(symbol, shared_dict):
             return None
 
         with alchemyEngine.begin() as conn:
-            latest_date = get_latest_date(conn, symbol, "bond_zh_hs_daily")
+            latest_date = get_max_for_column(conn, symbol, "bond_zh_hs_daily")
             if latest_date is not None:
                 ## keep rows only with `date` later than the latest record in database.
                 bzhd = bzhd[bzhd["date"] > (latest_date - timedelta(days=10))]
@@ -416,7 +417,7 @@ def stock_zh_index_daily_em(symbol, src):
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
     try:
         with alchemyEngine.begin() as conn:
-            latest_date = get_latest_date(conn, symbol, "index_daily_em")
+            latest_date = get_max_for_column(conn, symbol, "index_daily_em")
 
             start_date = "19900101"  # For entire history.
             if latest_date is not None:
@@ -618,7 +619,7 @@ def bond_ir():
     try:
         start_date = None  # For entire history.
         with alchemyEngine.begin() as conn:
-            latest_date = get_latest_date(conn, None, "bond_metrics_em")
+            latest_date = get_max_for_column(conn, None, "bond_metrics_em")
             if latest_date is not None:
                 start_date = (latest_date - timedelta(days=20)).strftime("%Y%m%d")
             bzur = ak.bond_zh_us_rate(start_date)
@@ -654,7 +655,7 @@ def get_etf_daily(symbol):
         logger.debug(f"running fund_etf_hist_em({symbol})...")
         with alchemyEngine.begin() as conn:
             # check latest date on fund_etf_daily_em
-            latest_date = get_latest_date(conn, symbol, "fund_etf_daily_em")
+            latest_date = get_max_for_column(conn, symbol, "fund_etf_daily_em")
 
             start_date = "19700101"  # For entire history.
             if latest_date is not None:
@@ -947,7 +948,7 @@ def get_stock_daily(symbol):
     alchemyEngine = worker.alchemyEngine
 
     with alchemyEngine.begin() as conn:
-        latest_date = get_latest_date(conn, symbol, "stock_zh_a_hist_em")
+        latest_date = get_max_for_column(conn, symbol, "stock_zh_a_hist_em")
 
         start_date = "19700101"  # For entire history.
         if latest_date is not None:
@@ -1015,7 +1016,7 @@ def get_sge_spot_daily(symbol):
         if spot_hist_sge_df.empty:
             return None
 
-        latest_date = get_latest_date(conn, symbol, "spot_hist_sge")
+        latest_date = get_max_for_column(conn, symbol, "spot_hist_sge")
 
         if latest_date is not None:
             start_date = latest_date - timedelta(days=20)
@@ -1155,8 +1156,8 @@ def get_cn_bond_index_metrics(symbol, symbol_cn):
 
         start_date = None
         with alchemyEngine.begin() as conn:
-            latest_date = get_latest_date(
-                conn, symbol, "cn_bond_indices", value_col_name
+            latest_date = get_max_for_column(
+                conn, symbol, "cn_bond_indices", non_null_col=value_col_name
             )
             if latest_date is not None:
                 start_date = latest_date - timedelta(days=20)
@@ -1207,6 +1208,37 @@ def cn_bond_index():
 
     return len(df)
 
+def get_fund_dividend_events():
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+    logger.info("running fund_dividend_events()...")
+
+    fund_fh_em_df = ak.fund_fh_em()
+
+    fund_fh_em_df.rename(
+        columns={
+            "序号": "id",
+            "基金代码": "symbol",
+            "基金简称": "short_name",
+            "权益登记日": "rights_registration_date",
+            "除息日期": "ex_dividend_date",
+            "分红": "dividend",
+            "分红发放日": "dividend_payment_date",
+        },
+        inplace=True,
+    )
+
+    with alchemyEngine.begin() as conn:
+        max_id = get_max_for_column(
+            conn, symbol=None, table="bond_metrics_em", col_for_max="id"
+        )
+        if max_id is not None:
+            start_id = max_id - 10
+            fund_fh_em_df = fund_fh_em_df[fund_fh_em_df["id"] >= start_id]
+        update_on_conflict(fund_dividend_events, conn, fund_fh_em_df, ["id"])
+
+    return len(fund_fh_em_df)
+
 
 def get_stock_bond_ratio_index():
     worker = get_worker()
@@ -1215,9 +1247,8 @@ def get_stock_bond_ratio_index():
 
     df = SnowballAPI.stock_bond_ratio_index()
 
-    start_date = None
     with alchemyEngine.begin() as conn:
-        latest_date = get_latest_date(conn, symbol=None, table="bond_metrics_em", col="quantile")
+        latest_date = get_max_for_column(conn, symbol=None, table="bond_metrics_em", non_null_col="quantile")
         if latest_date is not None:
             start_date = latest_date - timedelta(days=20)
             df = df[df["date"] >= start_date]
