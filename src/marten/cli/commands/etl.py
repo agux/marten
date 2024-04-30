@@ -25,6 +25,24 @@ def configure_parser(parser):
         ),
     )
     parser.add_argument(
+        "--include",
+        action="store",
+        type=str,
+        default=None,
+        help=("Data to be included for ETL. By default it will collect all data. "
+              "Multiple data sources can be separated by comma."),
+    )
+    parser.add_argument(
+        "--exclude",
+        action="store",
+        type=str,
+        default=None,
+        help=(
+            "Data to be excluded from ETL. By default it will not exclude any data."
+            "Multiple data sources can be separated by comma."
+        ),
+    )
+    parser.add_argument(
         "--dashboard_port",
         action="store",
         type=int,

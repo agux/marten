@@ -55,10 +55,11 @@ us_index_list = [".IXIC", ".DJI", ".INX", ".NDX"]
 logger = get_logger(__name__)
 alchemyEngine = None
 client = None
+args = None
+futures = []
 
-
-def init(args):
-    global alchemyEngine, client, logger
+def init():
+    global alchemyEngine, client, logger, args
     logger.info("Using akshare version: %s", ak.__version__)
 
     load_dotenv()  # take environment variables from .env.
@@ -76,59 +77,61 @@ def init(args):
 
     client = init_client(__name__,args.worker,args.threads,args.dashboard_port)
 
+def run(task, **kwargs):
+    global args, client, futures
 
-def main(args):
-    global client, logger, cn_index_types, us_index_list
+    name = task.__name__
+
+    if (args.include is None or name in args.include) and (args.exclude is None or name not in args.exclude):
+        future = client.submit(task, **kwargs)
+        futures.append(future)
+        return future
+    elif name in args.include and name in args.exclude:
+        raise ValueError(f"Conflicting options: {name} is given in both --include and --exclude arguments.")
+    else:
+        return None
+
+
+def main(_args):
+    global client, logger, cn_index_types, us_index_list, args, futures
+    args = _args
     t_start = time.time()
 
-    init(args)
+    init()
 
     ## collect and await all task futures
-    futures = []
-    futures.append(client.submit(etf_spot))
-    futures.append(client.submit(etf_perf))
+    run(etf_spot)
+    run(etf_perf)
 
-    future_etf_list = client.submit(etf_list)
-    future_bond_ir = client.submit(bond_ir)
+    future_etf_list = run(etf_list, priority=1)
+    future_bond_ir = run(bond_ir, priority=1)
 
-    futures.append(client.submit(update_etf_metrics, future_etf_list, future_bond_ir))
-    futures.append(client.submit(get_stock_bond_ratio_index))
+    run(update_etf_metrics, future_etf_list, future_bond_ir)
+    run(get_stock_bond_ratio_index, priority=1)
 
-    future_cn_index_list = client.submit(get_cn_index_list, cn_index_types)
-    futures.append(client.submit(cn_index_daily, future_cn_index_list))
+    future_cn_index_list = run(get_cn_index_list, cn_index_types)
+    run(cn_index_daily, future_cn_index_list)
 
-    future_hk_index_list = client.submit(hk_index_spot)
-    futures.append(client.submit(hk_index_daily, future_hk_index_list))
+    future_hk_index_list = run(hk_index_spot)
+    run(hk_index_daily, future_hk_index_list)
 
-    futures.append(client.submit(get_us_indices, us_index_list))
+    run(get_us_indices, us_index_list)
 
-    future_bond_spot = client.submit(bond_spot)
-    futures.append(client.submit(bond_daily_hs, future_bond_spot, args.threads))
+    future_bond_spot = run(bond_spot)
+    run(bond_daily_hs, future_bond_spot, args.threads)
 
-    future_stock_zh_spot = client.submit(stock_zh_spot)
-    futures.append(
-        client.submit(stock_zh_daily_hist, future_stock_zh_spot, args.threads)
-    )
+    future_stock_zh_spot = run(stock_zh_spot)
+    run(stock_zh_daily_hist, future_stock_zh_spot, args.threads)
 
-    futures.append(client.submit(rmb_exchange_rates))
+    run(rmb_exchange_rates)
 
-    future_sge_spot = client.submit(sge_spot)
-    futures.append(client.submit(sge_spot_daily_hist, future_sge_spot))
+    future_sge_spot = run(sge_spot)
+    run(sge_spot_daily_hist, future_sge_spot)
 
-    futures.append(client.submit(cn_bond_index))
+    run(client.submit(cn_bond_index))
 
-    futures.append(client.submit(get_fund_dividend_events))
+    run(get_fund_dividend_events, priority=1)
 
-    futures.extend(
-        [
-            future_etf_list,
-            future_bond_ir,
-            future_cn_index_list,
-            future_bond_spot,
-            future_stock_zh_spot,
-            future_sge_spot,
-        ]
-    )
 
     await_futures(futures)
     logger.info("Time taken: %s seconds", time.time() - t_start)
