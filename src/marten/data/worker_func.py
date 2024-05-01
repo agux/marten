@@ -438,6 +438,11 @@ def stock_zh_index_daily_em(symbol, src):
                 table_def_index_daily_em(), conn, szide, ["symbol", "date"]
             )
         return len(szide)
+    except TypeError as e:
+        if "'NoneType' object is not subscriptable" in str(e):
+            logger.warning("ak.stock_zh_index_daily_em(%s%s, %s, %s) - data source could be empty: %s", 
+                           src, symbol, start_date, end_date, str(e))
+            return 0
     except Exception as e:
         logger.error(f"failed to update index_daily_em for {symbol}", exc_info=True)
         raise e
@@ -902,7 +907,7 @@ def stock_zh_spot():
             stock_zh_a_spot_em_df = ak.stock_zh_a_spot_em()
             break
         except Exception as e:
-            logger.warn(f"Attempt {attempt+1} failed with error: {e}")
+            logger.warning(f"Attempt {attempt+1} failed with error: {e}")
             if attempt < retry_attempts - 1:
                 time.sleep(retry_delay)
             else:
