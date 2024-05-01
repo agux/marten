@@ -55,11 +55,11 @@ us_index_list = [".IXIC", ".DJI", ".INX", ".NDX"]
 logger = get_logger(__name__)
 alchemyEngine = None
 client = None
-args = None
+prog_args = None
 futures = []
 
 def init():
-    global alchemyEngine, client, logger, args
+    global alchemyEngine, client, logger, prog_args
     logger.info("Using akshare version: %s", ak.__version__)
 
     load_dotenv()  # take environment variables from .env.
@@ -73,28 +73,32 @@ def init():
     db_url = (
         f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     )
-    alchemyEngine = get_database_engine(db_url, pool_size=args.threads)
+    alchemyEngine = get_database_engine(db_url, pool_size=prog_args.threads)
 
-    client = init_client(__name__,args.worker,args.threads,args.dashboard_port)
+    client = init_client(
+        __name__, prog_args.worker, prog_args.threads, prog_args.dashboard_port
+    )
 
-def run(task, **kwargs):
-    global args, client, futures
+def run(task, *args, **kwargs):
+    global prog_args, client, futures
 
     name = task.__name__
 
-    if (args.include is None or name in args.include) and (args.exclude is None or name not in args.exclude):
-        future = client.submit(task, **kwargs)
+    if (prog_args.include is None or name in prog_args.include) and (
+        prog_args.exclude is None or name not in prog_args.exclude
+    ):
+        future = client.submit(task, *args, **kwargs)
         futures.append(future)
         return future
-    elif name in args.include and name in args.exclude:
+    elif name in prog_args.include and name in prog_args.exclude:
         raise ValueError(f"Conflicting options: {name} is given in both --include and --exclude arguments.")
     else:
         return None
 
 
 def main(_args):
-    global client, logger, cn_index_types, us_index_list, args, futures
-    args = _args
+    global client, logger, cn_index_types, us_index_list, prog_args, futures
+    prog_args = _args
     t_start = time.time()
 
     init()
@@ -118,10 +122,10 @@ def main(_args):
     run(get_us_indices, us_index_list)
 
     future_bond_spot = run(bond_spot)
-    run(bond_daily_hs, future_bond_spot, args.threads)
+    run(bond_daily_hs, future_bond_spot, prog_args.threads)
 
     future_stock_zh_spot = run(stock_zh_spot)
-    run(stock_zh_daily_hist, future_stock_zh_spot, args.threads)
+    run(stock_zh_daily_hist, future_stock_zh_spot, prog_args.threads)
 
     run(rmb_exchange_rates)
 
@@ -131,7 +135,6 @@ def main(_args):
     run(client.submit(cn_bond_index))
 
     run(get_fund_dividend_events, priority=1)
-
 
     await_futures(futures)
     logger.info("Time taken: %s seconds", time.time() - t_start)
