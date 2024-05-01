@@ -1235,12 +1235,12 @@ def get_fund_dividend_events():
 
     with alchemyEngine.begin() as conn:
         max_id = get_max_for_column(
-            conn, symbol=None, table="bond_metrics_em", col_for_max="id"
+            conn, symbol=None, table="fund_dividend_events", col_for_max="id"
         )
         if max_id is not None:
             start_id = max_id - 10
             fund_fh_em_df = fund_fh_em_df[fund_fh_em_df["id"] >= start_id]
-        update_on_conflict(fund_dividend_events, conn, fund_fh_em_df, ["id"])
+        update_on_conflict(fund_dividend_events, conn, fund_fh_em_df, ["id", "rights_registration_date"])
 
     return len(fund_fh_em_df)
 
