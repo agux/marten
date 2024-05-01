@@ -28,7 +28,12 @@ fi
 if [ ! -d "csv" ]; then
   mkdir csv
 fi
-mv *.csv csv/
+# Check if there are any .csv files in the current directory
+csv_files=$(find . -maxdepth 1 -name "*.csv" -print)
+if [ -n "$csv_files" ]; then
+  # If .csv files are found, move them to the csv directory
+  mv *.csv csv/
+fi
 
 # Run the script with nohup
 # nohup "$PYENV_PYTHON" "$script" "$@" > >(tee -a output.log) 2>&1 &

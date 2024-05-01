@@ -132,7 +132,7 @@ def main(_args):
     future_sge_spot = run(sge_spot)
     run(sge_spot_daily_hist, future_sge_spot)
 
-    run(client.submit(cn_bond_index))
+    run(cn_bond_index)
 
     run(get_fund_dividend_events, priority=1)
 
