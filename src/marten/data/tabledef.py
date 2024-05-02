@@ -32,11 +32,11 @@ class fund_dividend_events(Base):
         Date, nullable=False, comment="权益登记日 - 权益登记的日期"
     )
     ex_dividend_date = Column(
-        Date, nullable=False, comment="除息日期 - 股票或基金除息的日期"
+        Date, comment="除息日期 - 股票或基金除息的日期"
     )
     dividend = Column(Numeric, nullable=False, comment="分红 - 基金分红的金额")
     dividend_payment_date = Column(
-        Date, nullable=False, comment="分红发放日 - 分红款项发放的日期"
+        Date, comment="分红发放日 - 分红款项发放的日期"
     )
     last_modified = Column(
         DateTime(timezone=True),

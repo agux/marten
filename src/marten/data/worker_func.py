@@ -48,6 +48,8 @@ from marten.data.tabledef import (
 )
 
 from marten.data.api.snowball import SnowballAPI
+from marten.data.api.em import EastMoneyAPI
+from marten.data.api.sina import SinaAPI
 
 from dask.distributed import worker_client, get_worker, Variable
 
@@ -103,7 +105,7 @@ def ignore_on_conflict(table_def, conn, df, primary_keys):
     conn.execute(on_conflict_stmt)
 
 
-def get_max_for_column(conn, symbol, table, col_for_max='date', non_null_col=None):
+def get_max_for_column(conn, symbol, table, col_for_max="date", non_null_col=None):
     query = f"SELECT max({col_for_max}) FROM {table} where 1=1"
     if non_null_col is not None:
         query += f" and {non_null_col} is not null"
@@ -268,16 +270,18 @@ def get_bond_zh_hs_daily(symbol, shared_dict):
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
     with alchemyEngine.begin() as conn:
-        update_query = text("""
+        update_query = text(
+            """
             UPDATE bond_zh_hs_spot 
             SET last_checked = CURRENT_TIMESTAMP
             WHERE symbol = :symbol 
-        """)
+        """
+        )
         params = {"symbol": symbol}
         conn.execute(update_query, params)
 
     try:
-        bzhd = ak.bond_zh_hs_daily(symbol)
+        bzhd = SinaAPI.bond_zh_hs_daily(symbol)
 
         # if shide is empty, return immediately
         if bzhd.empty:
@@ -405,7 +409,9 @@ def cn_index_daily(future_cn_index_list):
     futures = []
     with worker_client() as client:
         for symbol, src in zip(cn_index_fulllist["symbol"], cn_index_fulllist["src"]):
-            futures.append(client.submit(stock_zh_index_daily_em, symbol, src, priority=1))
+            futures.append(
+                client.submit(stock_zh_index_daily_em, symbol, src, priority=1)
+            )
             await_futures(futures, False)
 
     await_futures(futures)
@@ -440,8 +446,14 @@ def stock_zh_index_daily_em(symbol, src):
         return len(szide)
     except TypeError as e:
         if "'NoneType' object is not subscriptable" in str(e):
-            logger.warning("ak.stock_zh_index_daily_em(%s%s, %s, %s) - data source could be empty: %s", 
-                           src, symbol, start_date, end_date, str(e))
+            logger.warning(
+                "ak.stock_zh_index_daily_em(%s%s, %s, %s) - data source could be empty: %s",
+                src,
+                symbol,
+                start_date,
+                end_date,
+                str(e),
+            )
             return 0
     except Exception as e:
         logger.error(f"failed to update index_daily_em for {symbol}", exc_info=True)
@@ -609,7 +621,9 @@ def update_etf_metrics(future_etf_list, future_bond_ir):
     with worker_client() as client:
         logger.info(f"starting tasks on function calc_etf_metrics()...")
         for symbol in etf_list:
-            futures.append(client.submit(calc_etf_metrics, symbol, end_date, priority=1))
+            futures.append(
+                client.submit(calc_etf_metrics, symbol, end_date, priority=1)
+            )
             await_futures(futures, False)
 
     await_futures(futures)
@@ -884,7 +898,8 @@ def etf_spot():
                 "流通市值": "circulating_market_value",
                 "总市值": "total_market_value",
                 "最新份额": "latest_shares",
-            }, inplace=True
+            },
+            inplace=True,
         )
         with alchemyEngine.begin() as conn:
             update_on_conflict(table_def_fund_etf_spot_em(), conn, df, ["code", "date"])
@@ -1116,23 +1131,23 @@ def get_cn_bond_index_metrics(symbol, symbol_cn):
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
     column_mapping = {
-        '全价': 'fullprice',
-        '净价': 'cleanprice',
-        '财富': 'wealth',
-        '平均市值法久期': 'avgmv_duration',
-        '平均现金流法久期': 'avgcf_duration',
-        '平均市值法凸性': 'avgmv_convexity',
-        '平均现金流法凸性': 'avgcf_convexity',
-        '平均现金流法到期收益率': 'avgcf_ytm',
-        '平均市值法到期收益率': 'avgmv_ytm',
-        '平均基点价值': 'avgbpv',
-        '平均待偿期': 'avgmaturity',
-        '平均派息率': 'avgcouponrate',
-        '指数上日总市值': 'indexprevdaymv',
-        '财富指数涨跌幅': 'wealthindex_change',
-        '全价指数涨跌幅': 'fullpriceindex_change',
-        '净价指数涨跌幅': 'cleanpriceindex_change',
-        '现券结算量': 'spotsettlementvolume'
+        "全价": "fullprice",
+        "净价": "cleanprice",
+        "财富": "wealth",
+        "平均市值法久期": "avgmv_duration",
+        "平均现金流法久期": "avgcf_duration",
+        "平均市值法凸性": "avgmv_convexity",
+        "平均现金流法凸性": "avgcf_convexity",
+        "平均现金流法到期收益率": "avgcf_ytm",
+        "平均市值法到期收益率": "avgmv_ytm",
+        "平均基点价值": "avgbpv",
+        "平均待偿期": "avgmaturity",
+        "平均派息率": "avgcouponrate",
+        "指数上日总市值": "indexprevdaymv",
+        "财富指数涨跌幅": "wealthindex_change",
+        "全价指数涨跌幅": "fullpriceindex_change",
+        "净价指数涨跌幅": "cleanpriceindex_change",
+        "现券结算量": "spotsettlementvolume",
     }
 
     for indicator in list(column_mapping.keys()):
@@ -1141,7 +1156,9 @@ def get_cn_bond_index_metrics(symbol, symbol_cn):
                 indicator=indicator, period=symbol_cn
             )
         except KeyError as e:
-            logger.warning("%s - %s - %s could be empty: %s", symbol, symbol_cn, indicator, str(e))
+            logger.warning(
+                "%s - %s - %s could be empty: %s", symbol, symbol_cn, indicator, str(e)
+            )
             continue
         except Exception as e:
             logger.exception(
@@ -1192,7 +1209,7 @@ def cn_bond_index():
         ("mo6to9", "6-9个月"),
         ("mo9to12", "9-12个月"),
         ("mo0to6", "0-6个月"),
-        ("mo6to12", "6-12个月")
+        ("mo6to12", "6-12个月"),
     ]
 
     # Create the DataFrame
@@ -1206,21 +1223,24 @@ def cn_bond_index():
     with worker_client() as client:
         logger.info("starting tasks on function get_cn_bond_index_metrics()...")
         for symbol, symbol_cn in data:
-            futures.append(client.submit(get_cn_bond_index_metrics, symbol, symbol_cn, priority=1))
+            futures.append(
+                client.submit(get_cn_bond_index_metrics, symbol, symbol_cn, priority=1)
+            )
             await_futures(futures, False)
 
     await_futures(futures)
 
     return len(df)
 
+
 def get_fund_dividend_events():
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
     logger.info("running fund_dividend_events()...")
 
-    fund_fh_em_df = ak.fund_fh_em()
+    df = EastMoneyAPI.fund_fh_em()
 
-    fund_fh_em_df.rename(
+    df.rename(
         columns={
             "序号": "id",
             "基金代码": "symbol",
@@ -1233,16 +1253,23 @@ def get_fund_dividend_events():
         inplace=True,
     )
 
+    # convert `NaT` values in `ex_dividend_date` or `dividend_payment_date` columns of `df` to None
+    df[["ex_dividend_date", "dividend_payment_date"]] = df[
+        ["ex_dividend_date", "dividend_payment_date"]
+    ].where(df[["ex_dividend_date", "dividend_payment_date"]].notnull(), None)
+
     with alchemyEngine.begin() as conn:
         max_id = get_max_for_column(
             conn, symbol=None, table="fund_dividend_events", col_for_max="id"
         )
         if max_id is not None:
             start_id = max_id - 10
-            fund_fh_em_df = fund_fh_em_df[fund_fh_em_df["id"] >= start_id]
-        update_on_conflict(fund_dividend_events, conn, fund_fh_em_df, ["id", "rights_registration_date"])
+            df = df[df["id"] >= start_id]
+        update_on_conflict(
+            fund_dividend_events, conn, df, ["id", "rights_registration_date"]
+        )
 
-    return len(fund_fh_em_df)
+    return len(df)
 
 
 def get_stock_bond_ratio_index():
@@ -1253,7 +1280,9 @@ def get_stock_bond_ratio_index():
     df = SnowballAPI.stock_bond_ratio_index()
 
     with alchemyEngine.begin() as conn:
-        latest_date = get_max_for_column(conn, symbol=None, table="bond_metrics_em", non_null_col="quantile")
+        latest_date = get_max_for_column(
+            conn, symbol=None, table="bond_metrics_em", non_null_col="quantile"
+        )
         if latest_date is not None:
             start_date = latest_date - timedelta(days=20)
             df = df[df["date"] >= start_date]
