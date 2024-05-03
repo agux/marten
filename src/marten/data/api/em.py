@@ -32,7 +32,7 @@ class EastMoneyAPI:
         for page in tqdm(range(1, total_page + 1), leave=False):
             params.update({"page": page})
             # r = requests.get(url, params=params)
-            r = make_request(url, params=params)
+            r = make_request(url, params=params, initial_timeout=60)
             data_text = r.text
             temp_list = eval(
                 data_text[data_text.find("[["): data_text.find(";var jjfh_jjgs")]

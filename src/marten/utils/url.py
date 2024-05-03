@@ -1,4 +1,6 @@
 import requests
+import time
+import random
 
 from marten.utils.logger import get_logger
 
@@ -23,5 +25,8 @@ def make_request(url, params=None, initial_timeout=45, total_attempts=5):
             raise e
         attempt += 1
         
+        # wait random interval between 2-5 seconds before next attempt
+        time.sleep(random.uniform(2, 5))
+
     # If the loop completes without returning, all attempts failed
     return None
