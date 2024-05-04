@@ -1301,10 +1301,46 @@ def fund_holding(symbol):
     last_year = str(int(current_year) - 1)
     year = current_year
 
+    fund_type = None
+    with alchemyEngine.begin() as conn:
+        result = conn.execute(
+            text("select type from fund_etf_perf_em where fundcode=:symbol"),
+            {"symbol": symbol},
+        )
+        fund_type = result.fetchone()[0]
+
     df = None
     while year >= last_year:
         try:
-            df = ak.fund_portfolio_hold_em(symbol=symbol, date=year)
+            if fund_type == "指数型-固收":  ## Bonds
+                df = ak.fund_portfolio_bond_hold_em(symbol=symbol, date=year)
+                df.rename(
+                    columns={
+                        "序号": "serial_number",
+                        "债券代码": "stock_code",
+                        "债券名称": "stock_name",
+                        "占净值比例": "proportion_of_net_value",
+                        "持仓市值": "market_value_of_holdings",
+                        "季度": "quarter",
+                    },
+                    inplace=True,
+                )
+            else:
+                df = ak.fund_portfolio_hold_em(symbol=symbol, date=year)
+                df.rename(
+                    columns={
+                        "序号": "serial_number",
+                        "股票代码": "stock_code",
+                        "股票名称": "stock_name",
+                        "占净值比例": "proportion_of_net_value",
+                        "持股数": "number_of_shares",
+                        "持仓市值": "market_value_of_holdings",
+                        "季度": "quarter",
+                    },
+                    inplace=True,
+                )
+
+            df.insert(0, "symbol", symbol)
             break
         except KeyError as e:
             # try last year. and if it still fails, could be a fund which composition it not available, such as bond
