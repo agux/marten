@@ -21,6 +21,32 @@ Base = declarative_base()
 ## All column names must align with SQL DDL (with lower-case characters)
 
 
+class fund_portfolio_holdings(Base):
+    __tablename__ = "fund_portfolio_holdings"
+    __table_args__ = (PrimaryKeyConstraint("symbol", "serial_number"),)
+
+    symbol = Column(
+        Text, nullable=False, comment="基金符号 - Unique symbol for the fund"
+    )
+    serial_number = Column(Integer, nullable=False, comment="序号 - Serial number")
+    stock_code = Column(String(20), nullable=False, comment="股票代码 - Stock code")
+    stock_name = Column(Text, comment="股票名称 - Name of the stock")
+    proportion_of_net_value = Column(
+        Numeric, comment="占净值比例 - Proportion of net value"
+    )
+    number_of_shares = Column(Numeric, comment="持股数 - Number of shares held")
+    market_value_of_holdings = Column(
+        Numeric, comment="持仓市值 - Market value of the holdings"
+    )
+    quarter = Column(Text, comment="季度 - Quarter for which the data is reported")
+    last_modified = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=func.current_timestamp(),
+        comment="最后修改时间 - Timestamp of the last modification of the record",
+    )
+
+
 class fund_dividend_events(Base):
     __tablename__ = "fund_dividend_events"
     __table_args__ = (PrimaryKeyConstraint("id", "rights_registration_date"),)

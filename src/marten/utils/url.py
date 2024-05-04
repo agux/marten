@@ -4,14 +4,14 @@ import random
 
 from marten.utils.logger import get_logger
 
-def make_request(url, params=None, initial_timeout=45, total_attempts=5):
+def make_request(url, params=None, initial_timeout=45, total_attempts=5, **kwargs):
     attempt = 0
     while attempt < total_attempts:
         # Set timeout for the first two attempts, no timeout for the last attempt
         timeout = initial_timeout if attempt < total_attempts - 1 else None
 
         try:
-            response = requests.get(url, params=params, timeout=timeout)
+            response = requests.get(url, params=params, timeout=timeout, **kwargs)
             # If the request was successful, return the response
             return response
         except requests.exceptions.Timeout:
@@ -24,7 +24,7 @@ def make_request(url, params=None, initial_timeout=45, total_attempts=5):
         except Exception as e:
             raise e
         attempt += 1
-        
+
         # wait random interval between 2-5 seconds before next attempt
         time.sleep(random.uniform(2, 5))
 

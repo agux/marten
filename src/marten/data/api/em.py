@@ -30,23 +30,32 @@ class EastMoneyAPI:
         headers = {
             "User-Agent": user_agent,
         }
-        r = requests.get(
+        # r = requests.get(
+        #     url,
+        #     params=params,
+        #     headers=headers,
+        # )
+        r = make_request(
             url,
             params=params,
             headers=headers,
         )
-        # r = make_request(url, params=params)
         data_text = r.text
         total_page = eval(data_text[data_text.find("=") + 1 : data_text.find(";")])[0]
         big_df = pd.DataFrame()
         for page in tqdm(range(1, total_page + 1), leave=False):
             params.update({"page": page})
-            r = requests.get(
+            # r = requests.get(
+            #     url,
+            #     params=params,
+            #     headers=headers,
+            # )
+            r = make_request(
                 url,
                 params=params,
+                initial_timeout=60,
                 headers=headers,
             )
-            # r = make_request(url, params=params, initial_timeout=60)
             data_text = r.text
             temp_list = eval(
                 data_text[data_text.find("[[") : data_text.find(";var jjfh_jjgs")]

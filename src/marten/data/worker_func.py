@@ -45,6 +45,7 @@ from marten.data.tabledef import (
     cn_bond_index_period,
     cn_bond_indices,
     fund_dividend_events,
+    fund_portfolio_hold_em,
 )
 
 from marten.data.api.snowball import SnowballAPI
@@ -763,12 +764,13 @@ def etf_list():
                 table_def_fund_etf_list_sina(), conn, df, ["exch", "symbol"]
             )
 
-        ##submit new task (get_etf_daily) for each symbol to get historical data
+        ## get historical data and holdings for each ETF
         futures = []
         with worker_client() as client:
-            logger.info(f"starting task on function get_etf_daily()...")
+            logger.info(f"starting task on function get_etf_daily() and fund_holding()...")
             for symbol in df["symbol"]:
                 futures.append(client.submit(get_etf_daily, symbol, priority=1))
+                futures.append(client.submit(fund_holding, symbol, priority=1))
                 await_futures(futures, False)
 
         await_futures(futures)
@@ -1287,5 +1289,36 @@ def get_stock_bond_ratio_index():
             start_date = latest_date - timedelta(days=20)
             df = df[df["date"] >= start_date]
         update_on_conflict(table_def_bond_metrics_em(), conn, df, ["date"])
+
+    return len(df)
+
+def fund_holding(symbol):
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+
+    # get current year in yyyy format
+    current_year = datetime.now().strftime('%Y')
+    last_year = str(int(current_year) - 1)
+    year = current_year
+
+    df = None
+    while year >= last_year:
+        try:
+            df = ak.fund_portfolio_hold_em(symbol=symbol, date=year)
+            break
+        except KeyError as e:
+            # try last year. and if it still fails, could be a fund which composition it not available, such as bond
+            if year != last_year:
+                year = last_year
+                continue
+            else:
+                logger.warning("fund_portfolio_hold_em(%s, %s) data could be  unavailable.", symbol, year)
+                return 0
+
+    if df is None or df.empty:
+        return 0
+
+    with alchemyEngine.begin() as conn:
+        update_on_conflict(fund_portfolio_hold_em, conn, df, ["symbol", "serial_number"])
 
     return len(df)

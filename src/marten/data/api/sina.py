@@ -26,16 +26,16 @@ class SinaAPI:
         :rtype: pandas.DataFrame
         """
 
-        # r = make_request(
-        #     zh_sina_bond_hs_hist_url.format(
-        #         symbol, datetime.datetime.now().strftime("%Y_%m_%d")
-        #     )
-        # )
-
         headers = {
             "User-Agent": user_agent,
         }
-        r = requests.get(
+        # r = requests.get(
+        #     zh_sina_bond_hs_hist_url.format(
+        #         symbol, datetime.datetime.now().strftime("%Y_%m_%d")
+        #     ),
+        #     headers=headers,
+        # )
+        r = make_request(
             zh_sina_bond_hs_hist_url.format(
                 symbol, datetime.datetime.now().strftime("%Y_%m_%d")
             ),
