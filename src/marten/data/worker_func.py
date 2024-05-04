@@ -45,7 +45,7 @@ from marten.data.tabledef import (
     cn_bond_index_period,
     cn_bond_indices,
     fund_dividend_events,
-    fund_portfolio_hold_em,
+    fund_portfolio_holdings,
 )
 
 from marten.data.api.snowball import SnowballAPI
@@ -1355,6 +1355,8 @@ def fund_holding(symbol):
         return 0
 
     with alchemyEngine.begin() as conn:
-        update_on_conflict(fund_portfolio_hold_em, conn, df, ["symbol", "serial_number"])
+        update_on_conflict(
+            fund_portfolio_holdings, conn, df, ["symbol", "serial_number"]
+        )
 
     return len(df)
