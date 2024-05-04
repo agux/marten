@@ -11,6 +11,8 @@ zh_sina_bond_hs_hist_url = (
     "https://finance.sina.com.cn/realstock/company/{}/hisdata/klc_kl.js?d={}"
 )
 
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.3"
+
 class SinaAPI:
 
     @staticmethod
@@ -24,16 +26,21 @@ class SinaAPI:
         :rtype: pandas.DataFrame
         """
 
-        r = make_request(
-            zh_sina_bond_hs_hist_url.format(
-                symbol, datetime.datetime.now().strftime("%Y_%m_%d")
-            )
-        )
-        # r = requests.get(
+        # r = make_request(
         #     zh_sina_bond_hs_hist_url.format(
         #         symbol, datetime.datetime.now().strftime("%Y_%m_%d")
         #     )
         # )
+
+        headers = {
+            "User-Agent": user_agent,
+        }
+        r = requests.get(
+            zh_sina_bond_hs_hist_url.format(
+                symbol, datetime.datetime.now().strftime("%Y_%m_%d")
+            ),
+            headers=headers,
+        )
         js_code = py_mini_racer.MiniRacer()
         js_code.eval(hk_js_decode)
         dict_list = js_code.call(
