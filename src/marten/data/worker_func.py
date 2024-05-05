@@ -1309,7 +1309,8 @@ def fund_holding(symbol):
             text("select type from fund_etf_perf_em where fundcode=:symbol"),
             {"symbol": symbol},
         )
-        if result is not None:
+        # check if result is empty
+        if result.fetchone() is not None:
             fund_type = result.fetchone()[0]
 
     df = None
