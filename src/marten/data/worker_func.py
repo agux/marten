@@ -1242,9 +1242,9 @@ def get_fund_dividend_events():
 
     df = EastMoneyAPI.fund_fh_em()
 
+    df.drop(columns=["序号"], inplace=True)
     df.rename(
         columns={
-            "序号": "id",
             "基金代码": "symbol",
             "基金简称": "short_name",
             "权益登记日": "rights_registration_date",
@@ -1254,6 +1254,7 @@ def get_fund_dividend_events():
         },
         inplace=True,
     )
+    # remove column `id` from df
 
     # convert `NaT` values in `ex_dividend_date` or `dividend_payment_date` columns of `df` to None
     df[["ex_dividend_date", "dividend_payment_date"]] = df[
@@ -1261,14 +1262,15 @@ def get_fund_dividend_events():
     ].where(df[["ex_dividend_date", "dividend_payment_date"]].notnull(), None)
 
     with alchemyEngine.begin() as conn:
-        max_id = get_max_for_column(
-            conn, symbol=None, table="fund_dividend_events", col_for_max="id"
+        max_reg_date = get_max_for_column(
+            conn, symbol=None, table="fund_dividend_events", col_for_max="rights_registration_date"
         )
-        if max_id is not None:
-            start_id = max_id - 10
-            df = df[df["id"] >= start_id]
+        if max_reg_date is not None:
+            df = df[
+                df["rights_registration_date"] >= (max_reg_date - timedelta(days=30))
+            ]
         update_on_conflict(
-            fund_dividend_events, conn, df, ["id", "rights_registration_date"]
+            fund_dividend_events, conn, df, ["symbol", "rights_registration_date"]
         )
 
     return len(df)

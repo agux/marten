@@ -49,9 +49,8 @@ class fund_portfolio_holdings(Base):
 
 class fund_dividend_events(Base):
     __tablename__ = "fund_dividend_events"
-    __table_args__ = (PrimaryKeyConstraint("id", "rights_registration_date"),)
+    __table_args__ = (PrimaryKeyConstraint("symbol", "rights_registration_date"),)
 
-    id = Column(BigInteger, nullable=False, comment="序号 - 唯一标识符")
     symbol = Column(String, nullable=False, comment="基金代码 - 基金的唯一代码")
     short_name = Column(String, nullable=False, comment="基金简称 - 基金的简短名称")
     rights_registration_date = Column(
