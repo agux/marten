@@ -1307,7 +1307,8 @@ def fund_holding(symbol):
             text("select type from fund_etf_perf_em where fundcode=:symbol"),
             {"symbol": symbol},
         )
-        fund_type = result.fetchone()[0]
+        if result is not None:
+            fund_type = result.fetchone()[0]
 
     df = None
     while year >= last_year:

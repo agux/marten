@@ -54,6 +54,7 @@ class EastMoneyAPI:
                 url,
                 params=params,
                 initial_timeout=60,
+                max_timeout=300,
                 headers=headers,
             )
             data_text = r.text

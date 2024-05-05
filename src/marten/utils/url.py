@@ -4,11 +4,29 @@ import random
 
 from marten.utils.logger import get_logger
 
-def make_request(url, params=None, initial_timeout=45, total_attempts=5, **kwargs):
+
+def make_request(
+    url,
+    params=None,
+    initial_timeout=45,
+    max_timeout=None,
+    max_attempts=5,
+    max_delay=60,
+    **kwargs,
+):
     attempt = 0
-    while attempt < total_attempts:
-        # Set timeout for the first two attempts, no timeout for the last attempt
-        timeout = initial_timeout if attempt < total_attempts - 1 else None
+    delay = random.uniform(1, 10)
+    while attempt < max_attempts:
+        # timeout = initial_timeout if attempt < max_attempts - 1 else None
+        timeout = (
+            min(
+                max_timeout,
+                initial_timeout
+                + float(max_timeout - initial_timeout) / max_attempts * attempt,
+            )
+            if max_timeout is not None
+            else initial_timeout if attempt < max_attempts - 1 else None
+        )
 
         try:
             response = requests.get(url, params=params, timeout=timeout, **kwargs)
@@ -18,15 +36,21 @@ def make_request(url, params=None, initial_timeout=45, total_attempts=5, **kwarg
             # If a timeout exception occurs, print an error and retry if attempts are left
             get_logger().warning(
                 f"[{url}] attempt {attempt + 1} timed out. Retrying..."
-                if attempt < total_attempts - 1
-                else "[{url}] final attempt timed out."
+                if attempt < max_attempts - 1
+                else f"[{url}] final attempt timed out."
             )
+            if attempt >= max_attempts - 1:
+                raise e
         except Exception as e:
             raise e
         attempt += 1
 
-        # wait random interval between 2-5 seconds before next attempt
-        time.sleep(random.uniform(2, 5))
+        # wait before next attempt
+        time.sleep(delay)
+
+        delay = min(max_delay, (delay + random.uniform(1, 5)) * 2) + random.uniform(
+            1, 10
+        )
 
     # If the loop completes without returning, all attempts failed
     return None
