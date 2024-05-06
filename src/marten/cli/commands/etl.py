@@ -18,7 +18,7 @@ def configure_parser(parser):
         "--threads",
         action="store",
         type=int,
-        default=3,
+        default=4,
         help=(
             "Number of threads per worker (python processes) for data retrieval. "
             "Defaults to 3."
