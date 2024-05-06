@@ -162,7 +162,7 @@ def update_hk_indices(symbol):
         if shide.empty:
             return None
 
-        shide.loc[:, "symbol"] = symbol
+        shide.insert(0, "symbol", symbol)
         shide.rename(
             columns={
                 "latest": "close",
@@ -207,7 +207,7 @@ def update_us_indices(symbol):
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
     try:
         iuss = ak.index_us_stock_sina(symbol=symbol)
-        iuss.loc[:, "symbol"] = symbol
+        iuss.insert(0, "symbol", symbol)
         # Convert iuss["date"] to datetime and normalize to date only
         iuss.loc[:, "date"] = pd.to_datetime(iuss["date"]).dt.date
         with alchemyEngine.begin() as conn:
@@ -295,7 +295,7 @@ def get_bond_zh_hs_daily(symbol, shared_dict):
                 ## keep rows only with `date` later than the latest record in database.
                 bzhd = bzhd[bzhd["date"] > (latest_date - timedelta(days=10))]
 
-            bzhd.loc[:, "symbol"] = symbol
+            bzhd.insert(0, "symbol", symbol)
 
             ignore_on_conflict(bond_zh_hs_daily, conn, bzhd, ["symbol", "date"])
         return len(bzhd)
@@ -323,7 +323,7 @@ def bond_daily_hs(future_bond_spot, n_threads):
         select symbol from (
             (SELECT symbol, turnover, last_checked FROM bond_zh_hs_spot WHERE turnover != 0)
             UNION
-            (SELECT symbol, turnover, last_checked FROM bond_zh_hs_spot WHERE turnover = 0 and last_checked IS NULL LIMIT 2000) -- Adjust the limit as needed
+            (SELECT symbol, turnover, last_checked FROM bond_zh_hs_spot WHERE turnover = 0 and last_checked IS NULL LIMIT 500)
             UNION
             (SELECT symbol, turnover, last_checked FROM bond_zh_hs_spot 
                 WHERE turnover = 0 
@@ -335,7 +335,7 @@ def bond_daily_hs(future_bond_spot, n_threads):
                         WHEN last_checked < NOW() - INTERVAL '72 hours' THEN 0.3
                         ELSE 0.2
                     END
-                ) order by last_checked asc limit 1000
+                ) order by last_checked asc limit 500
             )
         ) order by turnover desc, last_checked asc
         """,
@@ -439,7 +439,7 @@ def stock_zh_index_daily_em(symbol, src):
                 logger.warning("index data is empty: %s", symbol)
                 return None
 
-            szide.loc[:, "symbol"] = symbol
+            szide.insert(0, "symbol", symbol)
 
             ignore_on_conflict(
                 table_def_index_daily_em(), conn, szide, ["symbol", "date"]
@@ -695,7 +695,7 @@ def get_etf_daily(symbol):
             if df.empty:
                 return None
 
-            df.loc[:, "symbol"] = symbol
+            df.insert(0, "symbol", symbol)
             df = df.rename(
                 columns={
                     "日期": "date",
@@ -986,7 +986,7 @@ def get_stock_daily(symbol):
         if stock_zh_a_hist_df.empty:
             return None
 
-        stock_zh_a_hist_df.loc[:, "symbol"] = symbol
+        stock_zh_a_hist_df.insert(0, "symbol", symbol)
         stock_zh_a_hist_df.rename(
             columns={
                 "日期": "date",
@@ -1318,7 +1318,7 @@ def fund_holding(symbol):
     while year >= last_year:
         try:
             if fund_type == "指数型-固收":  ## Bonds
-                df = ak.fund_portfolio_bond_hold_em(symbol=symbol, date=year)
+                df = EastMoneyAPI.fund_portfolio_bond_hold_em(symbol=symbol, date=year)
                 df.rename(
                     columns={
                         "序号": "serial_number",
@@ -1331,7 +1331,7 @@ def fund_holding(symbol):
                     inplace=True,
                 )
             else:
-                df = ak.fund_portfolio_hold_em(symbol=symbol, date=year)
+                df = EastMoneyAPI.fund_portfolio_hold_em(symbol=symbol, date=year)
                 df.rename(
                     columns={
                         "序号": "serial_number",
