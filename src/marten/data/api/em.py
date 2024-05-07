@@ -190,6 +190,8 @@ class EastMoneyAPI:
             url,
             params=params,
             headers=headers,
+            max_timeout=200,
+            max_attempts=30,
         )
         data_text = r.text
         total_page = eval(data_text[data_text.find("=") + 1 : data_text.find(";")])[0]
