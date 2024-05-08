@@ -3,6 +3,7 @@ import pandas as pd
 import json
 import hashlib
 import warnings
+import math
 
 from datetime import datetime, timedelta
 
@@ -21,6 +22,7 @@ from tenacity import (
 
 from marten.utils.holidays import get_holiday_region
 
+nan_inf_replacement = 99999.99999
 
 def merge_covar_df(
     anchor_symbol, anchor_df, cov_table, cov_symbol, feature, min_date, alchemyEngine
@@ -334,6 +336,7 @@ def log_metrics_for_hyper_params(
 
     fit_time = time.time() - start_time
     last_metric = metrics.iloc[-1]
+    last_metric["Loss_val"] = sanitize_loss(last_metric["Loss_val"])
     covars = [col for col in df.columns if col not in ("ds", "y")]
     logger.debug("params:%s\n#covars:%s\n%s", params, len(covars), last_metric)
 
@@ -349,6 +352,11 @@ def log_metrics_for_hyper_params(
     )
 
     return last_metric["Loss_val"]
+
+
+def sanitize_loss(value):
+    global nan_inf_replacement
+    return nan_inf_replacement if math.isnan(value) or math.isinf(value) else value
 
 
 def update_metrics_table(
@@ -682,7 +690,9 @@ def predict_best(
     df, params, covar_set_id = get_best_prediction_setting(
         alchemyEngine, logger, symbol, timestep_limit
     )
-    logger.info("%s - using hyper-parameters:\n%s", symbol, json.dumps(params, sort_keys=True))
+    logger.info(
+        "%s - using hyper-parameters:\n%s", symbol, json.dumps(params, sort_keys=True)
+    )
     region = get_holiday_region(alchemyEngine, symbol)
     logger.info("%s - inferred holiday region: %s", symbol, region)
 
