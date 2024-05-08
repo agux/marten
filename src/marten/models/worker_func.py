@@ -269,7 +269,7 @@ def log_metrics_for_hyper_params(
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
     # to support distributed processing, we try to insert a new record (with primary keys only)
-    # into grid_search_metrics first. If we hit duplicated key error, return None.
+    # into hps_metrics first. If we hit duplicated key error, return None.
     # Otherwise we could proceed further code execution.
     param_str = json.dumps(params)
     hpid = hashlib.md5(param_str.encode("utf-8")).hexdigest()
@@ -280,7 +280,7 @@ def log_metrics_for_hyper_params(
                 text(
                     """
                         select loss_val 
-                        from grid_search_metrics
+                        from hps_metrics
                         where model = :model
                         and anchor_symbol = :anchor_symbol
                         and hpid = :hpid
@@ -379,7 +379,7 @@ def update_metrics_table(
             conn.execute(
                 text(
                     """
-                    UPDATE grid_search_metrics
+                    UPDATE hps_metrics
                     SET 
                         mae_val = :mae_val, 
                         rmse_val = :rmse_val, 
@@ -428,7 +428,7 @@ def new_metric_keys(anchor_symbol, hpid, hyper_params, covar_set_id, alchemyEngi
                 conn.execute(
                     text(
                         """
-                        INSERT INTO grid_search_metrics (model, anchor_symbol, hpid, hyper_params, covar_set_id) 
+                        INSERT INTO hps_metrics (model, anchor_symbol, hpid, hyper_params, covar_set_id) 
                         VALUES (:model, :anchor_symbol, :hpid, :hyper_params, :covar_set_id)
                         """
                     ),
@@ -478,7 +478,7 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
                     covar_set_id,
                     null nan_count
                 from
-                    grid_search_metrics
+                    hps_metrics
                 where
                     anchor_symbol = %(symbol)s
                 order by
@@ -532,7 +532,7 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
         covar_set_id = int(best_setting["covar_set_id"])
         logger.info(
             (
-                "%s - found best setting in grid_search_metrics:\n"
+                "%s - found best setting in hps_metrics:\n"
                 "loss_val: %s\n"
                 "covar_set_id: %s"
             ),

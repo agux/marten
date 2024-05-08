@@ -457,7 +457,7 @@ def _cleanup_stale_keys():
         conn.execute(
             text(
                 """
-                delete from grid_search_metrics
+                delete from hps_metrics
                 where loss_val is null 
                     and last_modified <= NOW() - INTERVAL '1 hour'
                 """
@@ -797,7 +797,7 @@ def main(args):
 
         univariate_baseline(anchor_df, args)
 
-        if not args.grid_search_only:
+        if not args.hps_only:
             t1_start = time.time()
             prep_covar_baseline_metrics(anchor_df, anchor_table, args)
             if not args.covar_only:
