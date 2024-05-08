@@ -527,7 +527,7 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
     if best_setting.empty:
         logger.warn(
             (
-                "No grid-search or covariate metrics for %s. "
+                "No hyper-parameter search or covariate metrics for %s. "
                 "Proceeding univariate prediction with default hyper-parameters. "
                 "This might not be the most accurate prediction."
             ),

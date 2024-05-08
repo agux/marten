@@ -1,6 +1,7 @@
 import os
 import time
 import argparse
+import json
 import multiprocessing
 import pandas as pd
 from dotenv import load_dotenv
@@ -327,7 +328,6 @@ def _load_covars(
 def augment_anchor_df_with_covars(df, args, alchemyEngine, logger):
     merged_df = df[["ds", "y"]]
     if args.covar_set_id is not None:
-        # TODO load covars based on the set id
         covar_set_id = args.covar_set_id
         covars_df = _load_covar_set(covar_set_id, alchemyEngine)
     else:
@@ -410,7 +410,7 @@ def _get_layers(w_power=6, min_size=2, max_size=20):
 
 
 def _search_space():
-    ar_layers, lagged_reg_layers = _get_layers(8, 1, 32), _get_layers(8, 1, 32)
+    ar_layers, lagged_reg_layers = _get_layers(10, 1, 64), _get_layers(10, 1, 64)
 
     ss = dict(
         batch_size=[None, 100, 200, 300, 400, 500],
@@ -464,6 +464,33 @@ def _cleanup_stale_keys():
             )
         )
 
+def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, limit):
+    global alchemyEngine, logger
+
+    with alchemyEngine.connect() as conn:
+        results = conn.execute(text(
+            """
+                select hyper_params, loss_val
+                from hps_metrics
+                where model = :model
+                and anchor_symbol = :anchor_symbol
+                and covar_set_id = :covar_set_id
+                order by loss_val
+                limit :limit
+            """
+        ), {
+            "model": model,
+            "anchor_symbol": anchor_symbol,
+            "covar_set_id": covar_set_id,
+            "limit": limit,
+        })
+
+        tuples = []
+        for row in results:
+            tuples.append((json.loads(row[0]), row[1]))
+
+        return tuples
+
 def bayesopt(df, covar_set_id, args):
     global alchemyEngine, logger, random_seed, client, futures
 
@@ -494,16 +521,17 @@ def bayesopt(df, covar_set_id, args):
             jobs.append(future)
         return client.gather(jobs)
 
+    warmstart_tuples = preload_warmstart_tuples(
+        "NeuralProphet", args.symbol, covar_set_id, n_jobs
+    )
+
     tuner = Tuner(
         space,
         objective,
         dict(
-            initial_random=(
-                int(multiprocessing.cpu_count() * 0.8)
-                if args.worker < 1
-                else args.worker
-            ),
+            initial_random=n_jobs,
             num_iteration=args.iteration,
+            initial_custom=warmstart_tuples
         ),
     )
     results = tuner.minimize()
@@ -723,7 +751,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     cov_table = "stock_zh_a_hist_em_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
-    # TODO RMB exchange rate
+    # RMB exchange rate
     features = [
         "usd_change_rate",
         "eur_change_rate",
