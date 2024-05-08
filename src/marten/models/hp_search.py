@@ -473,7 +473,9 @@ def bayesopt(df, covar_set_id, args):
 
     df_future = client.scatter(df)
 
-    @scheduler.custom(n_jobs=int(multiprocessing.cpu_count()*0.9))
+    n_jobs = int(multiprocessing.cpu_count()*0.9)
+
+    @scheduler.custom(n_jobs=n_jobs)
     def objective(params_batch):
         jobs = []
         for params in params_batch:
@@ -492,7 +494,10 @@ def bayesopt(df, covar_set_id, args):
             jobs.append(future)
         return client.gather(jobs)
 
-    tuner = Tuner(space, objective)
+    tuner = Tuner(space, objective, dict(
+        initial_random=n_jobs,
+        num_iteration=args.iteration,
+        ))
     results = tuner.minimize()
     logger.info('best parameters:', results['best_params'])
     logger.info("best Loss_val:", results["best_objective"])
@@ -814,6 +819,8 @@ def main(args):
                 grid_search(df, covar_set_id, args)
             elif args.method == "bayesopt":
                 bayesopt(df, covar_set_id, args)
+            else:
+                raise ValueError(f"unsupported search method: {args.method}")
             logger.info(
                 "%s hyper-parameter search completed. Time taken: %s seconds",
                 args.symbol,

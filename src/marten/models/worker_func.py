@@ -83,7 +83,7 @@ def fit_with_covar(
     feature,
     accelerator,
     early_stopping,
-    infer_holiday
+    infer_holiday,
 ):
     # Local import of get_worker to avoid circular import issue?
     worker = get_worker()
@@ -263,7 +263,7 @@ def log_metrics_for_hyper_params(
     accelerator,
     covar_set_id,
     early_stopping,
-    infer_holiday
+    infer_holiday,
 ):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
@@ -275,9 +275,30 @@ def log_metrics_for_hyper_params(
     hpid = hashlib.md5(param_str.encode("utf-8")).hexdigest()
     if not new_metric_keys(anchor_symbol, hpid, param_str, covar_set_id, alchemyEngine):
         logger.debug("Skip re-entry for %s: %s", anchor_symbol, param_str)
-        # TODO load saved Loss_val from historical record
-        
-        return None
+        with alchemyEngine.connect() as conn:
+            result = conn.execute(
+                text(
+                    """
+                        select loss_val 
+                        from grid_search_metrics
+                        where model = :model
+                        and anchor_symbol = :anchor_symbol
+                        and hpid = :hpid
+                        and covar_set_id = :covar_set_id
+                    """
+                ),
+                {
+                    "model": "NeuralProphet",
+                    "anchor_symbol": anchor_symbol,
+                    "hpid": hpid,
+                    # "hyper_params": param_str,
+                    "covar_set_id": covar_set_id,
+                },
+            )
+            row = result.fetchone()
+            if row is not None:
+                loss_val = row[0]
+            return loss_val
 
     start_time = time.time()
     metrics = None
@@ -636,17 +657,13 @@ def save_forecast_snapshot(
         country_holidays = get_country_holidays(region)
 
         forecast_params = forecast[["ds", "trend", "season_yearly"]]
-        forecast_params.rename(
-            columns={"ds": "date"}, inplace=True
-        )
+        forecast_params.rename(columns={"ds": "date"}, inplace=True)
         forecast_params.loc[:, "symbol"] = symbol
         forecast_params.loc[:, "snapshot_id"] = snapshot_id
         forecast_params.loc[:, "holiday"] = forecast_params["date"].apply(
             lambda x: check_holiday(x, country_holidays)
         )
-        forecast_params.to_sql(
-            "forecast_params", conn, if_exists="append", index=False
-        )
+        forecast_params.to_sql("forecast_params", conn, if_exists="append", index=False)
 
     return snapshot_id, len(forecast_params)
 

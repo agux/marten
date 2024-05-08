@@ -98,6 +98,13 @@ def configure_parser(parser):
         help=("Search method to use. Available options are: gs (grid-search) and bayesopt (Bayesian optimization. This is the default)"),
     )
     parser.add_argument(
+        "--iteration",
+        action="store",
+        type=int,
+        default=5000,
+        help=("Number of iteration for the Bayesian search. Defaults to 5000"),
+    )
+    parser.add_argument(
         "--dashboard_port",
         action="store",
         type=int,
