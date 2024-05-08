@@ -138,8 +138,8 @@ def hk_index_daily(future_hk_index_list):
     ##query index list from table and submit tasks to client for each
     with alchemyEngine.connect() as conn:
         result = conn.execute(text("select symbol from hk_index_spot_em"))
-    result_set = result.fetchall()
-    index_list = [row[0] for row in result_set]
+        result_set = result.fetchall()
+        index_list = [row[0] for row in result_set]
 
     futures = []
     with worker_client() as client:
