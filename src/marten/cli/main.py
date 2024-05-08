@@ -1,5 +1,5 @@
 import argparse
-from marten.cli.commands import etl, gridsearch, predict
+from marten.cli.commands import etl, hps, predict
 
 
 def main():
@@ -14,8 +14,8 @@ def main():
     etl_parser = subparsers.add_parser("etl", help="Extract, transform, and load data")
     etl.configure_parser(etl_parser)
 
-    gs_parser = subparsers.add_parser("gs", help="Perform grid-search to find the best-possible hyperparameters.")
-    gridsearch.configure_parser(gs_parser)
+    gs_parser = subparsers.add_parser("hps", help="Perform hyper-parameter search to find the best-possible hyperparameters.")
+    hps.configure_parser(gs_parser)
 
     predict_parser = subparsers.add_parser(
         "predict", help="Predict yearly seasonality using the best setting for the given asset symbols."

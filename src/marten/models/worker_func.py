@@ -265,9 +265,6 @@ def log_metrics_for_hyper_params(
     early_stopping,
     infer_holiday
 ):
-    # Local import of get_worker to avoid circular import issue
-    from dask.distributed import get_worker
-
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
@@ -278,6 +275,8 @@ def log_metrics_for_hyper_params(
     hpid = hashlib.md5(param_str.encode("utf-8")).hexdigest()
     if not new_metric_keys(anchor_symbol, hpid, param_str, covar_set_id, alchemyEngine):
         logger.debug("Skip re-entry for %s: %s", anchor_symbol, param_str)
+        # TODO load saved Loss_val from historical record
+        
         return None
 
     start_time = time.time()
@@ -328,7 +327,7 @@ def log_metrics_for_hyper_params(
         covar_set_id,
     )
 
-    return last_metric
+    return last_metric["Loss_val"]
 
 
 def update_metrics_table(
@@ -436,7 +435,7 @@ def new_metric_keys(anchor_symbol, hpid, hyper_params, covar_set_id, alchemyEngi
 
 def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
     # find the model setting with optimum performance, including univariate default setting.
-    from marten.models.gridsearch import (
+    from marten.models.hp_search import (
         default_params,
         load_anchor_ts,
         augment_anchor_df_with_covars,

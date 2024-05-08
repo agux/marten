@@ -1,4 +1,4 @@
-from marten.models.gridsearch import main
+from marten.models.hp_search import main
 from marten.utils.logger import get_logger
 
 
@@ -12,7 +12,7 @@ def configure_parser(parser):
         help="Collect paired covariate metrics in neuralprophet_corel table only.",
     )
     group1.add_argument(
-        "--grid_search_only", action="store_true", help="Perform grid search only."
+        "--hps_only", action="store_true", help="Perform hyper-parameter search only."
     )
 
     # Create a mutually exclusive group
@@ -35,7 +35,7 @@ def configure_parser(parser):
         default=None,
         help=(
             "Covariate set ID corresponding to the covar_set table. "
-            "If not set, the grid search will look for latest max_covars covariates with loss_val less than univariate baseline "
+            "If not set, the HP search will look for latest max_covars covariates with loss_val less than univariate baseline "
             "as found in the neuralprophet_corel table, which could be non-static."
         ),
     )
@@ -74,7 +74,7 @@ def configure_parser(parser):
         default=0.005,
         help=(
             "Limit the ratio of NaN (missing data) in covariates. "
-            "Only those with NaN rate lower than the limit ratio can be selected during multivariate grid searching."
+            "Only those with NaN rate lower than the limit ratio can be selected during multivariate HP searching."
             "Defaults to 0.5%."
         ),
     )
@@ -84,12 +84,18 @@ def configure_parser(parser):
     parser.add_argument(
         "--infer_holiday", action="store_true", 
         help=("Infer holiday region based on anchor symbol's nature, "
-              "which will be utilized during covariate-searching and grid-search.")
+              "which will be utilized during covariate-searching and HP search.")
     )
     parser.add_argument(
         "--early_stopping",
         action="store_true",
         help="Use early stopping during model fitting",
+    )
+    parser.add_argument(
+        "--method",
+        choices=['gs', 'bayesopt'],
+        default="bayesopt",
+        help=("Search method to use. Available options are: gs (grid-search) and bayesopt (Bayesian optimization. This is the default)"),
     )
     parser.add_argument(
         "--dashboard_port",
@@ -110,6 +116,6 @@ def handle_gs(args):
     logger = get_logger(__name__)
     try:
         main(args)
-        logger.info("grid-search process completed successfully.")
+        logger.info("Hyper-parameter search process completed successfully.")
     except Exception:
-        logger.exception("grid-search main process terminated")
+        logger.exception("Hyper-parameter search main process terminated")

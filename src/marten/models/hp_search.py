@@ -17,6 +17,8 @@ from neuralprophet import set_log_level
 
 from sklearn.model_selection import ParameterGrid
 
+from mango import Tuner, scheduler
+
 default_params = {
     # default hyperparameters. the order of keys MATTER (which affects the PK in table)
     "ar_layers": [],
@@ -393,18 +395,32 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger):
     return merged_df, covar_set_id
 
 
-def _get_layers():
+def _get_layers(w_power=6, min_size=2, max_size=20):
     layers = []
     # Loop over powers of 2 from 2^1 to 2^6
-    for i in range(1, 7):
+    for i in range(1, w_power + 1):
         power_of_two = 2**i
         # Loop over list lengths from 2 to 20
-        for j in range(2, 21):
+        for j in range(min_size, max_size + 1):
             # Create a list with the current power of two, repeated 'j' times
             element = [power_of_two] * j
             # Append the list to the result
             layers.append(element)
     return layers
+
+
+def _search_space():
+    ar_layers, lagged_reg_layers = _get_layers(8, 1, 32), _get_layers(8, 1, 32)
+
+    ss = dict(
+        batch_size=[None, 100, 200, 300, 400, 500],
+        n_lags=list(range(0, 61)),
+        yearly_seasonality=["auto"] + list(range(1, 61)),
+        ar_layers=[[]] + ar_layers,
+        lagged_reg_layers=[[]] + lagged_reg_layers,
+    )
+
+    return ss
 
 
 def _init_search_grid():
@@ -447,6 +463,39 @@ def _cleanup_stale_keys():
                 """
             )
         )
+
+def bayesopt(df, covar_set_id, args):
+    global alchemyEngine, logger, random_seed, client, futures
+
+    _cleanup_stale_keys()
+
+    space = _search_space()
+
+    df_future = client.scatter(df)
+
+    @scheduler.custom(n_jobs=int(multiprocessing.cpu_count()*0.9))
+    def objective(params_batch):
+        jobs = []
+        for params in params_batch:
+            future = client.submit(
+                log_metrics_for_hyper_params,
+                args.symbol,
+                df_future,
+                params,
+                args.epochs,
+                random_seed,
+                "auto" if args.accelerator else None,
+                covar_set_id,
+                args.early_stopping,
+                args.infer_holiday,
+            )
+            jobs.append(future)
+        return client.gather(jobs)
+
+    tuner = Tuner(space, objective)
+    results = tuner.minimize()
+    logger.info('best parameters:', results['best_params'])
+    logger.info("best Loss_val:", results["best_objective"])
 
 
 def grid_search(df, covar_set_id, args):
@@ -618,7 +667,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     features = [
         "change_rate",
         "amt_change_rate",
-        "vol_change_rate", 
+        "vol_change_rate",
         "open_preclose_rate",
         "high_preclose_rate",
         "low_preclose_rate",
@@ -761,9 +810,12 @@ def main(args):
             df, covar_set_id = augment_anchor_df_with_covars(
                 anchor_df, args, alchemyEngine, logger
             )
-            grid_search(df, covar_set_id, args)
+            if args.method == "gs":
+                grid_search(df, covar_set_id, args)
+            elif args.method == "bayesopt":
+                bayesopt(df, covar_set_id, args)
             logger.info(
-                "%s grid-search completed. Time taken: %s seconds",
+                "%s hyper-parameter search completed. Time taken: %s seconds",
                 args.symbol,
                 time.time() - t2_start,
             )

@@ -136,9 +136,9 @@ def hk_index_daily(future_hk_index_list):
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
     ##query index list from table and submit tasks to client for each
-    with alchemyEngine.begin() as conn:
+    with alchemyEngine.connect() as conn:
         result = conn.execute(text("select symbol from hk_index_spot_em"))
-        result_set = result.fetchall()
+    result_set = result.fetchall()
     index_list = [row[0] for row in result_set]
 
     futures = []
@@ -171,9 +171,8 @@ def update_hk_indices(symbol):
         )
         # Convert the 'date' column to datetime
         shide.loc[:, "date"] = pd.to_datetime(shide["date"]).dt.date
-        with alchemyEngine.begin() as conn:
+        with alchemyEngine.connect() as conn:
             latest_date = get_max_for_column(conn, symbol, "hk_index_daily_em")
-
             if latest_date is not None:
                 ## keep rows only with `date` later than the latest record in database.
                 shide = shide[shide["date"] > (latest_date - timedelta(days=10))]
@@ -210,7 +209,7 @@ def update_us_indices(symbol):
         iuss.insert(0, "symbol", symbol)
         # Convert iuss["date"] to datetime and normalize to date only
         iuss.loc[:, "date"] = pd.to_datetime(iuss["date"]).dt.date
-        with alchemyEngine.begin() as conn:
+        with alchemyEngine.connect() as conn:
             latest_date = get_max_for_column(conn, symbol, "us_index_daily_sina")
             if latest_date is not None:
                 iuss = iuss[iuss["date"] > (latest_date - timedelta(days=10))]
@@ -257,7 +256,7 @@ def bond_spot():
         inplace=True,
     )
 
-    with alchemyEngine.begin() as conn:
+    with alchemyEngine.connect() as conn:
         update_on_conflict(bond_zh_hs_spot, conn, bzhs, ["symbol"])
     return len(bzhs)
 
@@ -270,7 +269,7 @@ def get_bond_zh_hs_daily(symbol, shared_dict):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
-    with alchemyEngine.begin() as conn:
+    with alchemyEngine.connect() as conn:
         update_query = text(
             """
             UPDATE bond_zh_hs_spot 
@@ -289,7 +288,7 @@ def get_bond_zh_hs_daily(symbol, shared_dict):
             logger.warning("bond daily history data is empty: %s", symbol)
             return None
 
-        with alchemyEngine.begin() as conn:
+        with alchemyEngine.connect() as conn:
             latest_date = get_max_for_column(conn, symbol, "bond_zh_hs_daily")
             if latest_date is not None:
                 ## keep rows only with `date` later than the latest record in database.
@@ -389,7 +388,7 @@ def hk_index_spot():
         inplace=True,
     )
 
-    with alchemyEngine.begin() as conn:
+    with alchemyEngine.connect() as conn:
         update_on_conflict(
             table_def_hk_index_spot_em(), conn, hk_index_list_df, ["symbol"]
         )
@@ -423,24 +422,25 @@ def stock_zh_index_daily_em(symbol, src):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
     try:
-        with alchemyEngine.begin() as conn:
+        with alchemyEngine.connect() as conn:
             latest_date = get_max_for_column(conn, symbol, "index_daily_em")
 
-            start_date = "19900101"  # For entire history.
-            if latest_date is not None:
-                start_date = (latest_date - timedelta(days=10)).strftime("%Y%m%d")
+        start_date = "19900101"  # For entire history.
+        if latest_date is not None:
+            start_date = (latest_date - timedelta(days=10)).strftime("%Y%m%d")
 
-            end_date = datetime.now().strftime("%Y%m%d")
+        end_date = datetime.now().strftime("%Y%m%d")
 
-            szide = ak.stock_zh_index_daily_em(f"{src}{symbol}", start_date, end_date)
+        szide = ak.stock_zh_index_daily_em(f"{src}{symbol}", start_date, end_date)
 
-            # if shide is empty, return immediately
-            if szide.empty:
-                logger.warning("index data is empty: %s", symbol)
-                return None
+        # if shide is empty, return immediately
+        if szide.empty:
+            logger.warning("index data is empty: %s", symbol)
+            return None
 
-            szide.insert(0, "symbol", symbol)
+        szide.insert(0, "symbol", symbol)
 
+        with alchemyEngine.connect() as conn:
             ignore_on_conflict(
                 table_def_index_daily_em(), conn, szide, ["symbol", "date"]
             )
@@ -485,7 +485,7 @@ def stock_zh_index_spot_em(symbol, src):
             }
         )
         szise.loc[:, "src"] = src
-        with alchemyEngine.begin() as conn:
+        with alchemyEngine.connect() as conn:
             update_on_conflict(table_def_index_spot_em(), conn, szise, ["symbol"])
         return len(szise)
     except Exception as e:
@@ -513,7 +513,7 @@ def calc_etf_metrics(symbol, end_date):
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
     interval = 250  # assume 250 trading days annualy
     try:
-        with alchemyEngine.begin() as conn:
+        with alchemyEngine.connect() as conn:
             # load the latest (top) `interval` records of historical market data records from `fund_etf_daily_em` table for `symbol`, order by `date`.
             # select columns: date, change_rate
             query = """SELECT date, change_rate FROM fund_etf_daily_em WHERE symbol = '{}' ORDER BY date DESC LIMIT {}""".format(
@@ -612,7 +612,7 @@ def update_etf_metrics(future_etf_list, future_bond_ir):
         end_date,
     )
 
-    with alchemyEngine.begin() as conn:
+    with alchemyEngine.connect() as conn:
         result = conn.execute(text("select symbol from fund_etf_list_sina"))
         result_set = result.fetchall()
     etf_list = [row[0] for row in result_set]
@@ -638,28 +638,29 @@ def bond_ir():
     logger.info(f"running bond_zh_us_rate()...")
     try:
         start_date = None  # For entire history.
-        with alchemyEngine.begin() as conn:
+        with alchemyEngine.connect() as conn:
             latest_date = get_max_for_column(conn, None, "bond_metrics_em")
-            if latest_date is not None:
-                start_date = (latest_date - timedelta(days=20)).strftime("%Y%m%d")
-            bzur = ak.bond_zh_us_rate(start_date)
-            bzur = bzur.rename(
-                columns={
-                    "日期": "date",
-                    "中国国债收益率2年": "china_yield_2y",
-                    "中国国债收益率5年": "china_yield_5y",
-                    "中国国债收益率10年": "china_yield_10y",
-                    "中国国债收益率30年": "china_yield_30y",
-                    "中国国债收益率10年-2年": "china_yield_spread_10y_2y",
-                    "中国GDP年增率": "china_gdp_growth",
-                    "美国国债收益率2年": "us_yield_2y",
-                    "美国国债收益率5年": "us_yield_5y",
-                    "美国国债收益率10年": "us_yield_10y",
-                    "美国国债收益率30年": "us_yield_30y",
-                    "美国国债收益率10年-2年": "us_yield_spread_10y_2y",
-                    "美国GDP年增率": "us_gdp_growth",
-                }
-            )
+        if latest_date is not None:
+            start_date = (latest_date - timedelta(days=20)).strftime("%Y%m%d")
+        bzur = ak.bond_zh_us_rate(start_date)
+        bzur = bzur.rename(
+            columns={
+                "日期": "date",
+                "中国国债收益率2年": "china_yield_2y",
+                "中国国债收益率5年": "china_yield_5y",
+                "中国国债收益率10年": "china_yield_10y",
+                "中国国债收益率30年": "china_yield_30y",
+                "中国国债收益率10年-2年": "china_yield_spread_10y_2y",
+                "中国GDP年增率": "china_gdp_growth",
+                "美国国债收益率2年": "us_yield_2y",
+                "美国国债收益率5年": "us_yield_5y",
+                "美国国债收益率10年": "us_yield_10y",
+                "美国国债收益率30年": "us_yield_30y",
+                "美国国债收益率10年-2年": "us_yield_spread_10y_2y",
+                "美国GDP年增率": "us_gdp_growth",
+            }
+        )
+        with alchemyEngine.connect() as conn:
             update_on_conflict(table_def_bond_metrics_em(), conn, bzur, ["date"])
         return len(bzur)
     except Exception as e:
@@ -673,66 +674,67 @@ def get_etf_daily(symbol):
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
     try:
         logger.debug(f"running fund_etf_hist_em({symbol})...")
-        with alchemyEngine.begin() as conn:
+        with alchemyEngine.connect() as conn:
             # check latest date on fund_etf_daily_em
             latest_date = get_max_for_column(conn, symbol, "fund_etf_daily_em")
 
-            start_date = "19700101"  # For entire history.
-            if latest_date is not None:
-                start_date = (latest_date - timedelta(days=10)).strftime("%Y%m%d")
+        start_date = "19700101"  # For entire history.
+        if latest_date is not None:
+            start_date = (latest_date - timedelta(days=10)).strftime("%Y%m%d")
 
-            end_date = datetime.now().strftime("%Y%m%d")
+        end_date = datetime.now().strftime("%Y%m%d")
 
-            df = ak.fund_etf_hist_em(
-                symbol=symbol,
-                period="daily",
-                start_date=start_date,
-                end_date=end_date,
-                adjust="qfq",
-            )
+        df = ak.fund_etf_hist_em(
+            symbol=symbol,
+            period="daily",
+            start_date=start_date,
+            end_date=end_date,
+            adjust="qfq",
+        )
 
-            # if df contains no row at all, return immediately
-            if df.empty:
-                return None
+        # if df contains no row at all, return immediately
+        if df.empty:
+            return None
 
-            df.insert(0, "symbol", symbol)
-            df = df.rename(
-                columns={
-                    "日期": "date",
-                    "开盘": "open",
-                    "收盘": "close",
-                    "最高": "high",
-                    "最低": "low",
-                    "成交量": "volume",
-                    "成交额": "turnover",
-                    "振幅": "amplitude",
-                    "涨跌幅": "change_rate",
-                    "涨跌额": "change_amount",
-                    "换手率": "turnover_rate",
-                }
-            )
-            df = df[
-                [
-                    "symbol",
-                    "date",
-                    "open",
-                    "close",
-                    "high",
-                    "low",
-                    "volume",
-                    "turnover",
-                    "amplitude",
-                    "change_rate",
-                    "change_amount",
-                    "turnover_rate",
-                ]
+        df.insert(0, "symbol", symbol)
+        df = df.rename(
+            columns={
+                "日期": "date",
+                "开盘": "open",
+                "收盘": "close",
+                "最高": "high",
+                "最低": "low",
+                "成交量": "volume",
+                "成交额": "turnover",
+                "振幅": "amplitude",
+                "涨跌幅": "change_rate",
+                "涨跌额": "change_amount",
+                "换手率": "turnover_rate",
+            }
+        )
+        df = df[
+            [
+                "symbol",
+                "date",
+                "open",
+                "close",
+                "high",
+                "low",
+                "volume",
+                "turnover",
+                "amplitude",
+                "change_rate",
+                "change_amount",
+                "turnover_rate",
             ]
+        ]
 
+        with alchemyEngine.connect() as conn:
             ignore_on_conflict(
                 table_def_fund_etf_daily_em(), conn, df, ["symbol", "date"]
             )
 
-            return len(df)
+        return len(df)
     except Exception as e:
         logger.error(
             f"failed to get daily trade history data for {symbol}", exc_info=True
@@ -759,7 +761,7 @@ def etf_list():
         df.drop(columns=["code"], inplace=True)
 
         # Now, use the update_on_conflict function to insert or update the data
-        with alchemyEngine.begin() as conn:
+        with alchemyEngine.connect() as conn:
             update_on_conflict(
                 table_def_fund_etf_list_sina(), conn, df, ["exch", "symbol"]
             )
@@ -808,7 +810,7 @@ def etf_perf():
         }
         fund_exchange_rank_em_df.rename(columns=column_mapping, inplace=True)
         fund_exchange_rank_em_df.dropna(subset=["date"], inplace=True)
-        with alchemyEngine.begin() as conn:
+        with alchemyEngine.connect() as conn:
             update_on_conflict(
                 table_def_fund_etf_perf_em(),
                 conn,
@@ -903,7 +905,7 @@ def etf_spot():
             },
             inplace=True,
         )
-        with alchemyEngine.begin() as conn:
+        with alchemyEngine.connect() as conn:
             update_on_conflict(table_def_fund_etf_spot_em(), conn, df, ["code", "date"])
 
         return len(df)
@@ -959,7 +961,7 @@ def stock_zh_spot():
         inplace=True,
     )
 
-    with alchemyEngine.begin() as conn:
+    with alchemyEngine.connect() as conn:
         update_on_conflict(stock_zh_a_spot_em, conn, stock_zh_a_spot_em_df, ["symbol"])
 
     return stock_zh_a_spot_em_df[["symbol", "name"]]
@@ -969,41 +971,42 @@ def get_stock_daily(symbol):
     worker = get_worker()
     alchemyEngine = worker.alchemyEngine
 
-    with alchemyEngine.begin() as conn:
+    with alchemyEngine.connect() as conn:
         latest_date = get_max_for_column(conn, symbol, "stock_zh_a_hist_em")
 
-        start_date = "19700101"  # For entire history.
-        if latest_date is not None:
-            start_date = (latest_date - timedelta(days=30)).strftime("%Y%m%d")
+    start_date = "19700101"  # For entire history.
+    if latest_date is not None:
+        start_date = (latest_date - timedelta(days=30)).strftime("%Y%m%d")
 
-        end_date = datetime.now().strftime("%Y%m%d")
-        adjust = "hfq"
+    end_date = datetime.now().strftime("%Y%m%d")
+    adjust = "hfq"
 
-        stock_zh_a_hist_df = ak.stock_zh_a_hist(
-            symbol, "daily", start_date, end_date, adjust
-        )
+    stock_zh_a_hist_df = ak.stock_zh_a_hist(
+        symbol, "daily", start_date, end_date, adjust
+    )
 
-        if stock_zh_a_hist_df.empty:
-            return None
+    if stock_zh_a_hist_df.empty:
+        return None
 
-        stock_zh_a_hist_df.insert(0, "symbol", symbol)
-        stock_zh_a_hist_df.rename(
-            columns={
-                "日期": "date",
-                "开盘": "open",
-                "收盘": "close",
-                "最高": "high",
-                "最低": "low",
-                "成交量": "volume",
-                "成交额": "turnover",
-                "振幅": "amplitude",
-                "涨跌幅": "change_rate",
-                "涨跌额": "change_amt",
-                "换手率": "turnover_rate",
-            },
-            inplace=True,
-        )
+    stock_zh_a_hist_df.insert(0, "symbol", symbol)
+    stock_zh_a_hist_df.rename(
+        columns={
+            "日期": "date",
+            "开盘": "open",
+            "收盘": "close",
+            "最高": "high",
+            "最低": "low",
+            "成交量": "volume",
+            "成交额": "turnover",
+            "振幅": "amplitude",
+            "涨跌幅": "change_rate",
+            "涨跌额": "change_amt",
+            "换手率": "turnover_rate",
+        },
+        inplace=True,
+    )
 
+    with alchemyEngine.connect() as conn:
         ignore_on_conflict(
             stock_zh_a_hist_em, conn, stock_zh_a_hist_df, ["symbol", "date"]
         )
@@ -1032,20 +1035,20 @@ def get_sge_spot_daily(symbol):
     worker = get_worker()
     alchemyEngine = worker.alchemyEngine
 
-    with alchemyEngine.begin() as conn:
-        spot_hist_sge_df = ak.spot_hist_sge(symbol=symbol)
-
-        if spot_hist_sge_df.empty:
-            return None
-
+    with alchemyEngine.connect() as conn:
         latest_date = get_max_for_column(conn, symbol, "spot_hist_sge")
 
-        if latest_date is not None:
+    spot_hist_sge_df = ak.spot_hist_sge(symbol=symbol)
+    if spot_hist_sge_df.empty:
+        return None
+    
+    if latest_date is not None:
             start_date = latest_date - timedelta(days=20)
             spot_hist_sge_df = spot_hist_sge_df[spot_hist_sge_df["date"] >= start_date]
 
-        spot_hist_sge_df.insert(0, "symbol", symbol)
+    spot_hist_sge_df.insert(0, "symbol", symbol)
 
+    with alchemyEngine.connect() as conn:
         ignore_on_conflict(spot_hist_sge, conn, spot_hist_sge_df, ["symbol", "date"])
 
     return len(spot_hist_sge_df)
@@ -1077,7 +1080,7 @@ def sge_spot():
 
     ssts.rename(columns={"序号": "serial", "品种": "product"}, inplace=True)
 
-    with alchemyEngine.begin() as conn:
+    with alchemyEngine.connect() as conn:
         update_on_conflict(spot_symbol_table_sge, conn, ssts, ["product"])
 
     return ssts
@@ -1122,7 +1125,7 @@ def rmb_exchange_rates():
         inplace=True,
     )
 
-    with alchemyEngine.begin() as conn:
+    with alchemyEngine.connect() as conn:
         update_on_conflict(currency_boc_safe, conn, currency_boc_safe_df, ["date"])
 
     return len(currency_boc_safe_df)
@@ -1179,7 +1182,7 @@ def get_cn_bond_index_metrics(symbol, symbol_cn):
         df.rename(columns={"value": value_col_name}, inplace=True)
 
         start_date = None
-        with alchemyEngine.begin() as conn:
+        with alchemyEngine.connect() as conn:
             latest_date = get_max_for_column(
                 conn, symbol, "cn_bond_indices", non_null_col=value_col_name
             )
@@ -1217,7 +1220,7 @@ def cn_bond_index():
     # Create the DataFrame
     df = pd.DataFrame(data, columns=["symbol", "symbol_cn"])
 
-    with alchemyEngine.begin() as conn:
+    with alchemyEngine.connect() as conn:
         ignore_on_conflict(cn_bond_index_period, conn, df, ["symbol"])
 
     # submit tasks to get bond metrics for each period
@@ -1261,7 +1264,7 @@ def get_fund_dividend_events():
         ["ex_dividend_date", "dividend_payment_date"]
     ].where(df[["ex_dividend_date", "dividend_payment_date"]].notnull(), None)
 
-    with alchemyEngine.begin() as conn:
+    with alchemyEngine.connect() as conn:
         max_reg_date = get_max_for_column(
             conn, symbol=None, table="fund_dividend_events", col_for_max="rights_registration_date"
         )
@@ -1283,7 +1286,7 @@ def get_stock_bond_ratio_index():
 
     df = SnowballAPI.stock_bond_ratio_index()
 
-    with alchemyEngine.begin() as conn:
+    with alchemyEngine.connect() as conn:
         latest_date = get_max_for_column(
             conn, symbol=None, table="bond_metrics_em", non_null_col="quantile"
         )
@@ -1304,7 +1307,7 @@ def fund_holding(symbol):
     year = current_year
 
     fund_type = None
-    with alchemyEngine.begin() as conn:
+    with alchemyEngine.connect() as conn:
         result = conn.execute(
             text("select type from fund_etf_perf_em where fundcode=:symbol"),
             {"symbol": symbol},
@@ -1359,7 +1362,7 @@ def fund_holding(symbol):
     if df is None or df.empty:
         return 0
 
-    with alchemyEngine.begin() as conn:
+    with alchemyEngine.connect() as conn:
         update_on_conflict(
             fund_portfolio_holdings, conn, df, ["symbol", "serial_number"]
         )

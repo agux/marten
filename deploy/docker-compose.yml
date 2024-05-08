@@ -19,6 +19,7 @@ services:
       - '5432:5432'
     volumes:
       - postgre_data:/home/postgres/pgdata/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
     environment:
       # create .env file with this variable in your local setup
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
