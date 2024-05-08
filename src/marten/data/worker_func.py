@@ -173,9 +173,10 @@ def update_hk_indices(symbol):
         shide.loc[:, "date"] = pd.to_datetime(shide["date"]).dt.date
         with alchemyEngine.connect() as conn:
             latest_date = get_max_for_column(conn, symbol, "hk_index_daily_em")
-            if latest_date is not None:
-                ## keep rows only with `date` later than the latest record in database.
-                shide = shide[shide["date"] > (latest_date - timedelta(days=10))]
+        if latest_date is not None:
+            ## keep rows only with `date` later than the latest record in database.
+            shide = shide[shide["date"] > (latest_date - timedelta(days=10))]
+        with alchemyEngine.begin() as conn:
             update_on_conflict(
                 table_def_hk_index_daily_em(), conn, shide, ["symbol", "date"]
             )
@@ -211,8 +212,9 @@ def update_us_indices(symbol):
         iuss.loc[:, "date"] = pd.to_datetime(iuss["date"]).dt.date
         with alchemyEngine.connect() as conn:
             latest_date = get_max_for_column(conn, symbol, "us_index_daily_sina")
-            if latest_date is not None:
-                iuss = iuss[iuss["date"] > (latest_date - timedelta(days=10))]
+        if latest_date is not None:
+            iuss = iuss[iuss["date"] > (latest_date - timedelta(days=10))]
+        with alchemyEngine.begin() as conn:
             update_on_conflict(
                 table_def_us_index_daily_sina(), conn, iuss, ["symbol", "date"]
             )
@@ -256,7 +258,7 @@ def bond_spot():
         inplace=True,
     )
 
-    with alchemyEngine.connect() as conn:
+    with alchemyEngine.begin() as conn:
         update_on_conflict(bond_zh_hs_spot, conn, bzhs, ["symbol"])
     return len(bzhs)
 
@@ -269,7 +271,7 @@ def get_bond_zh_hs_daily(symbol, shared_dict):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
-    with alchemyEngine.connect() as conn:
+    with alchemyEngine.begin() as conn:
         update_query = text(
             """
             UPDATE bond_zh_hs_spot 
@@ -290,12 +292,14 @@ def get_bond_zh_hs_daily(symbol, shared_dict):
 
         with alchemyEngine.connect() as conn:
             latest_date = get_max_for_column(conn, symbol, "bond_zh_hs_daily")
-            if latest_date is not None:
-                ## keep rows only with `date` later than the latest record in database.
-                bzhd = bzhd[bzhd["date"] > (latest_date - timedelta(days=10))]
 
-            bzhd.insert(0, "symbol", symbol)
+        if latest_date is not None:
+            ## keep rows only with `date` later than the latest record in database.
+            bzhd = bzhd[bzhd["date"] > (latest_date - timedelta(days=10))]
 
+        bzhd.insert(0, "symbol", symbol)
+
+        with alchemyEngine.begin() as conn:
             ignore_on_conflict(bond_zh_hs_daily, conn, bzhd, ["symbol", "date"])
         return len(bzhd)
     except KeyError as e:
@@ -388,7 +392,7 @@ def hk_index_spot():
         inplace=True,
     )
 
-    with alchemyEngine.connect() as conn:
+    with alchemyEngine.begin() as conn:
         update_on_conflict(
             table_def_hk_index_spot_em(), conn, hk_index_list_df, ["symbol"]
         )
@@ -440,7 +444,7 @@ def stock_zh_index_daily_em(symbol, src):
 
         szide.insert(0, "symbol", symbol)
 
-        with alchemyEngine.connect() as conn:
+        with alchemyEngine.begin() as conn:
             ignore_on_conflict(
                 table_def_index_daily_em(), conn, szide, ["symbol", "date"]
             )
@@ -485,7 +489,7 @@ def stock_zh_index_spot_em(symbol, src):
             }
         )
         szise.loc[:, "src"] = src
-        with alchemyEngine.connect() as conn:
+        with alchemyEngine.begin() as conn:
             update_on_conflict(table_def_index_spot_em(), conn, szise, ["symbol"])
         return len(szise)
     except Exception as e:
@@ -529,67 +533,70 @@ def calc_etf_metrics(symbol, end_date):
                 start_date, end_date
             )
             bme_df = pd.read_sql(query, conn, parse_dates=["date"])
-            # Convert annualized rate to a daily rate
-            bme_df.loc[:, "china_yield_2y_daily"] = bme_df["china_yield_2y"] / 365.25
 
-            # merge df with bme_df by matching dates.
-            df = pd.merge_asof(
-                df.sort_values("date"),
-                bme_df.sort_values("date"),
-                on="date",
-                direction="backward",
-            ).dropna(subset=["change_rate"])
+        # Convert annualized rate to a daily rate
+        bme_df.loc[:, "china_yield_2y_daily"] = bme_df["china_yield_2y"] / 365.25
 
-            # calculate the Sharpe ratio, Sortino ratio, and max drawdown with the time series data inside df.
-            df.loc[:, "excess_return"] = df["change_rate"] - df["china_yield_2y_daily"]
-            # Annualize the excess return
-            annualized_excess_return = np.mean(df["excess_return"])
+        # merge df with bme_df by matching dates.
+        df = pd.merge_asof(
+            df.sort_values("date"),
+            bme_df.sort_values("date"),
+            on="date",
+            direction="backward",
+        ).dropna(subset=["change_rate"])
 
-            # Calculate the standard deviation of the excess returns
-            std_dev = df["excess_return"].std()
+        # calculate the Sharpe ratio, Sortino ratio, and max drawdown with the time series data inside df.
+        df.loc[:, "excess_return"] = df["change_rate"] - df["china_yield_2y_daily"]
+        # Annualize the excess return
+        annualized_excess_return = np.mean(df["excess_return"])
 
-            # Sharpe ratio
-            sharpe_ratio = annualized_excess_return / std_dev
+        # Calculate the standard deviation of the excess returns
+        std_dev = df["excess_return"].std()
 
-            # Calculate the downside deviation (Sortino ratio denominator)
-            downside_dev = df[df["excess_return"] < 0]["excess_return"].std()
+        # Sharpe ratio
+        sharpe_ratio = annualized_excess_return / std_dev
 
-            # Sortino ratio
-            sortino_ratio = (
-                annualized_excess_return / downside_dev if downside_dev > 0 else None
-            )
+        # Calculate the downside deviation (Sortino ratio denominator)
+        downside_dev = df[df["excess_return"] < 0]["excess_return"].std()
 
-            # To calculate max drawdown, get the cummulative_returns
-            df.loc[:, "cumulative_returns"] = (
-                np.cumprod(1 + df["change_rate"] / 100.0) - 1
-            )
-            # Calculate the maximum cumulative return up to each point
-            peak = np.maximum.accumulate(df["cumulative_returns"])
-            # Calculate drawdown as the difference between the current value and the peak
-            drawdown = (df["cumulative_returns"] - peak) / (1 + peak) * 100
-            # Calculate max drawdown
-            max_drawdown = np.min(drawdown)  # This is a negative number
+        # Sortino ratio
+        sortino_ratio = (
+            annualized_excess_return / downside_dev if downside_dev > 0 else None
+        )
 
-            # update the `sharperatio, sortinoratio, maxdrawdown` columns for `symbol` in the table `fund_etf_perf_em` using the calculated metrics.
-            update_query = text(
-                "UPDATE fund_etf_perf_em SET sharperatio = :sharperatio, sortinoratio = :sortinoratio, maxdrawdown = :maxdrawdown WHERE fundcode = :fundcode"
-            )
-            params = {
-                "sharperatio": (
-                    round(sharpe_ratio, 2)
-                    if sharpe_ratio is not None and math.isfinite(sharpe_ratio)
-                    else None
-                ),
-                "sortinoratio": (
-                    round(sortino_ratio, 2)
-                    if sortino_ratio is not None and math.isfinite(sortino_ratio)
-                    else None
-                ),
-                "maxdrawdown": (
-                    round(max_drawdown, 2) if math.isfinite(max_drawdown) else None
-                ),
-                "fundcode": symbol,
-            }
+        # To calculate max drawdown, get the cummulative_returns
+        df.loc[:, "cumulative_returns"] = (
+            np.cumprod(1 + df["change_rate"] / 100.0) - 1
+        )
+        # Calculate the maximum cumulative return up to each point
+        peak = np.maximum.accumulate(df["cumulative_returns"])
+        # Calculate drawdown as the difference between the current value and the peak
+        drawdown = (df["cumulative_returns"] - peak) / (1 + peak) * 100
+        # Calculate max drawdown
+        max_drawdown = np.min(drawdown)  # This is a negative number
+
+        # update the `sharperatio, sortinoratio, maxdrawdown` columns for `symbol` in the table `fund_etf_perf_em` using the calculated metrics.
+        update_query = text(
+            "UPDATE fund_etf_perf_em SET sharperatio = :sharperatio, sortinoratio = :sortinoratio, maxdrawdown = :maxdrawdown WHERE fundcode = :fundcode"
+        )
+        params = {
+            "sharperatio": (
+                round(sharpe_ratio, 2)
+                if sharpe_ratio is not None and math.isfinite(sharpe_ratio)
+                else None
+            ),
+            "sortinoratio": (
+                round(sortino_ratio, 2)
+                if sortino_ratio is not None and math.isfinite(sortino_ratio)
+                else None
+            ),
+            "maxdrawdown": (
+                round(max_drawdown, 2) if math.isfinite(max_drawdown) else None
+            ),
+            "fundcode": symbol,
+        }
+        
+        with alchemyEngine.begin() as conn:
             conn.execute(update_query, params)
 
         return len(df)
@@ -615,7 +622,7 @@ def update_etf_metrics(future_etf_list, future_bond_ir):
     with alchemyEngine.connect() as conn:
         result = conn.execute(text("select symbol from fund_etf_list_sina"))
         result_set = result.fetchall()
-    etf_list = [row[0] for row in result_set]
+        etf_list = [row[0] for row in result_set]
 
     ##submit tasks to calculate metrics for each symbol
     futures = []
@@ -660,7 +667,7 @@ def bond_ir():
                 "美国GDP年增率": "us_gdp_growth",
             }
         )
-        with alchemyEngine.connect() as conn:
+        with alchemyEngine.begin() as conn:
             update_on_conflict(table_def_bond_metrics_em(), conn, bzur, ["date"])
         return len(bzur)
     except Exception as e:
@@ -729,7 +736,7 @@ def get_etf_daily(symbol):
             ]
         ]
 
-        with alchemyEngine.connect() as conn:
+        with alchemyEngine.begin() as conn:
             ignore_on_conflict(
                 table_def_fund_etf_daily_em(), conn, df, ["symbol", "date"]
             )
@@ -761,7 +768,7 @@ def etf_list():
         df.drop(columns=["code"], inplace=True)
 
         # Now, use the update_on_conflict function to insert or update the data
-        with alchemyEngine.connect() as conn:
+        with alchemyEngine.begin() as conn:
             update_on_conflict(
                 table_def_fund_etf_list_sina(), conn, df, ["exch", "symbol"]
             )
@@ -769,7 +776,9 @@ def etf_list():
         ## get historical data and holdings for each ETF
         futures = []
         with worker_client() as client:
-            logger.info(f"starting task on function get_etf_daily() and fund_holding()...")
+            logger.info(
+                f"starting task on function get_etf_daily() and fund_holding()..."
+            )
             for symbol in df["symbol"]:
                 futures.append(client.submit(get_etf_daily, symbol, priority=1))
                 futures.append(client.submit(fund_holding, symbol, priority=1))
@@ -810,7 +819,7 @@ def etf_perf():
         }
         fund_exchange_rank_em_df.rename(columns=column_mapping, inplace=True)
         fund_exchange_rank_em_df.dropna(subset=["date"], inplace=True)
-        with alchemyEngine.connect() as conn:
+        with alchemyEngine.begin() as conn:
             update_on_conflict(
                 table_def_fund_etf_perf_em(),
                 conn,
@@ -905,7 +914,7 @@ def etf_spot():
             },
             inplace=True,
         )
-        with alchemyEngine.connect() as conn:
+        with alchemyEngine.begin() as conn:
             update_on_conflict(table_def_fund_etf_spot_em(), conn, df, ["code", "date"])
 
         return len(df)
@@ -961,7 +970,7 @@ def stock_zh_spot():
         inplace=True,
     )
 
-    with alchemyEngine.connect() as conn:
+    with alchemyEngine.begin() as conn:
         update_on_conflict(stock_zh_a_spot_em, conn, stock_zh_a_spot_em_df, ["symbol"])
 
     return stock_zh_a_spot_em_df[["symbol", "name"]]
@@ -1006,7 +1015,7 @@ def get_stock_daily(symbol):
         inplace=True,
     )
 
-    with alchemyEngine.connect() as conn:
+    with alchemyEngine.begin() as conn:
         ignore_on_conflict(
             stock_zh_a_hist_em, conn, stock_zh_a_hist_df, ["symbol", "date"]
         )
@@ -1041,14 +1050,14 @@ def get_sge_spot_daily(symbol):
     spot_hist_sge_df = ak.spot_hist_sge(symbol=symbol)
     if spot_hist_sge_df.empty:
         return None
-    
+
     if latest_date is not None:
-            start_date = latest_date - timedelta(days=20)
-            spot_hist_sge_df = spot_hist_sge_df[spot_hist_sge_df["date"] >= start_date]
+        start_date = latest_date - timedelta(days=20)
+        spot_hist_sge_df = spot_hist_sge_df[spot_hist_sge_df["date"] >= start_date]
 
     spot_hist_sge_df.insert(0, "symbol", symbol)
 
-    with alchemyEngine.connect() as conn:
+    with alchemyEngine.begin() as conn:
         ignore_on_conflict(spot_hist_sge, conn, spot_hist_sge_df, ["symbol", "date"])
 
     return len(spot_hist_sge_df)
@@ -1080,7 +1089,7 @@ def sge_spot():
 
     ssts.rename(columns={"序号": "serial", "品种": "product"}, inplace=True)
 
-    with alchemyEngine.connect() as conn:
+    with alchemyEngine.begin() as conn:
         update_on_conflict(spot_symbol_table_sge, conn, ssts, ["product"])
 
     return ssts
@@ -1125,7 +1134,7 @@ def rmb_exchange_rates():
         inplace=True,
     )
 
-    with alchemyEngine.connect() as conn:
+    with alchemyEngine.begin() as conn:
         update_on_conflict(currency_boc_safe, conn, currency_boc_safe_df, ["date"])
 
     return len(currency_boc_safe_df)
@@ -1186,10 +1195,14 @@ def get_cn_bond_index_metrics(symbol, symbol_cn):
             latest_date = get_max_for_column(
                 conn, symbol, "cn_bond_indices", non_null_col=value_col_name
             )
-            if latest_date is not None:
-                start_date = latest_date - timedelta(days=20)
-                df = df[df["date"] >= start_date]
-            df.insert(0, "symbol", symbol)
+
+        if latest_date is not None:
+            start_date = latest_date - timedelta(days=20)
+            df = df[df["date"] >= start_date]
+
+        df.insert(0, "symbol", symbol)
+
+        with alchemyEngine.begin() as conn:
             update_on_conflict(cn_bond_indices, conn, df, ["symbol", "date"])
 
     return True
@@ -1220,7 +1233,7 @@ def cn_bond_index():
     # Create the DataFrame
     df = pd.DataFrame(data, columns=["symbol", "symbol_cn"])
 
-    with alchemyEngine.connect() as conn:
+    with alchemyEngine.begin() as conn:
         ignore_on_conflict(cn_bond_index_period, conn, df, ["symbol"])
 
     # submit tasks to get bond metrics for each period
@@ -1266,12 +1279,16 @@ def get_fund_dividend_events():
 
     with alchemyEngine.connect() as conn:
         max_reg_date = get_max_for_column(
-            conn, symbol=None, table="fund_dividend_events", col_for_max="rights_registration_date"
+            conn,
+            symbol=None,
+            table="fund_dividend_events",
+            col_for_max="rights_registration_date",
         )
-        if max_reg_date is not None:
-            df = df[
-                df["rights_registration_date"] >= (max_reg_date - timedelta(days=30))
-            ]
+
+    if max_reg_date is not None:
+        df = df[df["rights_registration_date"] >= (max_reg_date - timedelta(days=30))]
+
+    with alchemyEngine.begin() as conn:
         update_on_conflict(
             fund_dividend_events, conn, df, ["symbol", "rights_registration_date"]
         )
@@ -1290,19 +1307,23 @@ def get_stock_bond_ratio_index():
         latest_date = get_max_for_column(
             conn, symbol=None, table="bond_metrics_em", non_null_col="quantile"
         )
-        if latest_date is not None:
-            start_date = latest_date - timedelta(days=20)
-            df = df[df["date"] >= start_date]
+
+    if latest_date is not None:
+        start_date = latest_date - timedelta(days=20)
+        df = df[df["date"] >= start_date]
+    
+    with alchemyEngine.begin() as conn:
         update_on_conflict(table_def_bond_metrics_em(), conn, df, ["date"])
 
     return len(df)
+
 
 def fund_holding(symbol):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
     # get current year in yyyy format
-    current_year = datetime.now().strftime('%Y')
+    current_year = datetime.now().strftime("%Y")
     last_year = str(int(current_year) - 1)
     year = current_year
 
@@ -1356,13 +1377,17 @@ def fund_holding(symbol):
                 year = last_year
                 continue
             else:
-                logger.warning("fund_portfolio_hold_em(%s, %s) data could be  unavailable.", symbol, year)
+                logger.warning(
+                    "fund_portfolio_hold_em(%s, %s) data could be  unavailable.",
+                    symbol,
+                    year,
+                )
                 return 0
 
     if df is None or df.empty:
         return 0
 
-    with alchemyEngine.connect() as conn:
+    with alchemyEngine.begin() as conn:
         update_on_conflict(
             fund_portfolio_holdings, conn, df, ["symbol", "serial_number"]
         )
