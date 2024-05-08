@@ -271,7 +271,7 @@ def log_metrics_for_hyper_params(
     # to support distributed processing, we try to insert a new record (with primary keys only)
     # into hps_metrics first. If we hit duplicated key error, return None.
     # Otherwise we could proceed further code execution.
-    param_str = json.dumps(params)
+    param_str = json.dumps(params, sort_keys=True)
     hpid = hashlib.md5(param_str.encode("utf-8")).hexdigest()
     if not new_metric_keys(anchor_symbol, hpid, param_str, covar_set_id, alchemyEngine):
         logger.debug("Skip re-entry for %s: %s", anchor_symbol, param_str)
@@ -682,7 +682,7 @@ def predict_best(
     df, params, covar_set_id = get_best_prediction_setting(
         alchemyEngine, logger, symbol, timestep_limit
     )
-    logger.info("%s - using hyper-parameters:\n%s", symbol, json.dumps(params))
+    logger.info("%s - using hyper-parameters:\n%s", symbol, json.dumps(params, sort_keys=True))
     region = get_holiday_region(alchemyEngine, symbol)
     logger.info("%s - inferred holiday region: %s", symbol, region)
 
@@ -731,7 +731,7 @@ def predict_best(
     snapshot_id, n_yearly_seasonality = save_forecast_snapshot(
         alchemyEngine,
         symbol,
-        json.dumps(params),
+        json.dumps(params, sort_keys=True),
         covar_set_id,
         metrics,
         metrics_final,
