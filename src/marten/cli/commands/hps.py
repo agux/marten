@@ -57,6 +57,16 @@ def configure_parser(parser):
         )
     )
     parser.add_argument(
+        "--batch_size",
+        action="store",
+        type=int,
+        default=500,
+        help=(
+            "Batch size for each iteration of the Bayesian optimized search. "
+            "Defaults to 500"
+        ),
+    )
+    parser.add_argument(
         "--timestep_limit",
         action="store",
         type=int,
@@ -101,8 +111,8 @@ def configure_parser(parser):
         "--iteration",
         action="store",
         type=int,
-        default=5000,
-        help=("Number of iteration for the Bayesian search. Defaults to 5000"),
+        default=1000,
+        help=("Number of iteration for the Bayesian search. Defaults to 1000"),
     )
     parser.add_argument(
         "--dashboard_port",

@@ -473,7 +473,7 @@ def bayesopt(df, covar_set_id, args):
 
     df_future = client.scatter(df)
 
-    n_jobs = int(multiprocessing.cpu_count()*0.9)
+    n_jobs = args.batch_size
 
     @scheduler.custom(n_jobs=n_jobs)
     def objective(params_batch):
@@ -494,10 +494,18 @@ def bayesopt(df, covar_set_id, args):
             jobs.append(future)
         return client.gather(jobs)
 
-    tuner = Tuner(space, objective, dict(
-        initial_random=n_jobs,
-        num_iteration=args.iteration,
-        ))
+    tuner = Tuner(
+        space,
+        objective,
+        dict(
+            initial_random=(
+                int(multiprocessing.cpu_count() * 0.8)
+                if args.worker < 1
+                else args.worker
+            ),
+            num_iteration=args.iteration,
+        ),
+    )
     results = tuner.minimize()
     logger.info('best parameters:', results['best_params'])
     logger.info("best Loss_val:", results["best_objective"])
