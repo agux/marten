@@ -57,7 +57,7 @@ def configure_parser(parser):
     )
 
     parser.add_argument(
-        "symbols", metavar='S', type=str, nargs='+', help="Array of asset symbols to be predicted."
+        "symbols", type=str, nargs='+', help="Array of asset symbols to be predicted."
     )
 
     parser.set_defaults(func=handle_predict)

@@ -489,7 +489,7 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, limit):
         for row in results:
             tuples.append((json.loads(row[0]), row[1]))
 
-        return tuples
+        return tuples if len(tuples) > 0 else None
 
 def bayesopt(df, covar_set_id, args):
     global alchemyEngine, logger, random_seed, client, futures
