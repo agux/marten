@@ -1257,7 +1257,7 @@ def get_fund_dividend_events():
     logger.info("running fund_dividend_events()...")
 
     with worker_client() as client:
-        df = EastMoneyAPI.fund_fh_em(client)
+        df = EastMoneyAPI.fund_fh_em(client, priority=1)
 
     df.drop(columns=["序号"], inplace=True)
     df.rename(

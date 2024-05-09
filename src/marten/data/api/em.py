@@ -161,7 +161,7 @@ class EastMoneyAPI:
         return big_df
 
     @staticmethod
-    def fund_fh_em(client=None) -> pd.DataFrame:
+    def fund_fh_em(client=None, priority=0) -> pd.DataFrame:
         """
         天天基金网-基金数据-分红送配-基金分红
         https://fund.eastmoney.com/data/fundfenhong.html#DJR,desc,1,,,
@@ -229,10 +229,9 @@ class EastMoneyAPI:
                 #     params=params,
                 #     headers=headers,
                 # )
-                futures.append(client.submit(
-                    get_dividend_page,
-                    params
-                ))
+                futures.append(
+                    client.submit(get_dividend_page, params, priority=priority)
+                )
             results = client.gather(futures)
             for temp_df in results:
                 big_df = pd.concat([big_df, temp_df], ignore_index=True)

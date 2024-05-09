@@ -35,42 +35,47 @@ def merge_covar_df(
         else:
             # using endogenous features as covariate
             merged_df = anchor_df[["ds", "y", feature]]
-    else:
-        # `cov_symbol` may contain special characters such as `.IXIC`, or `H-FIN`. The dot and hyphen is not allowed in column alias.
-        # Convert common special characters often seen in stock / index symbols to valid replacements as PostgreSQL table column alias.
-        cov_symbol_sanitized = cov_symbol.replace(".", "_").replace("-", "_")
-        cov_symbol_sanitized = f"{feature}_{cov_symbol_sanitized}"
+        
+        return merged_df
+    
+    # `cov_symbol` may contain special characters such as `.IXIC`, or `H-FIN`. The dot and hyphen is not allowed in column alias.
+    # Convert common special characters often seen in stock / index symbols to valid replacements as PostgreSQL table column alias.
+    cov_symbol_sanitized = cov_symbol.replace(".", "_").replace("-", "_")
+    cov_symbol_sanitized = f"{feature}_{cov_symbol_sanitized}"
 
-        match cov_table:
-            case "bond_metrics_em" | "bond_metrics_em_view" | "currency_boc_safe_view":
-                query = f"""
-                    select date ds, {feature} {cov_symbol_sanitized}
-                    from {cov_table}
-                    where date >= %(min_date)s
-                    order by date
-                """
-                params = {
-                    "min_date": min_date,
-                }
-            case _:
-                query = f"""
-                    select date ds, {feature} {cov_symbol_sanitized}
-                    from {cov_table}
-                    where symbol = %(cov_symbol)s
-                    and date >= %(min_date)s
-                    order by date
-                """
-                params = {
-                    "cov_symbol": cov_symbol,
-                    "min_date": min_date,
-                }
+    match cov_table:
+        case "bond_metrics_em" | "bond_metrics_em_view" | "currency_boc_safe_view":
+            query = f"""
+                select date ds, {feature} {cov_symbol_sanitized}
+                from {cov_table}
+                where date >= %(min_date)s
+                order by date
+            """
+            params = {
+                "min_date": min_date,
+            }
+        case _:
+            query = f"""
+                select date ds, {feature} {cov_symbol_sanitized}
+                from {cov_table}
+                where symbol = %(cov_symbol)s
+                and date >= %(min_date)s
+                order by date
+            """
+            params = {
+                "cov_symbol": cov_symbol,
+                "min_date": min_date,
+            }
 
+    with alchemyEngine.connect() as conn:
         cov_symbol_df = pd.read_sql(
-            query, alchemyEngine, params=params, parse_dates=["ds"]
+            query, conn, params=params, parse_dates=["ds"]
         )
-        if cov_symbol_df.empty:
-            return None
-        merged_df = pd.merge(anchor_df, cov_symbol_df, on="ds", how="left")
+
+    if cov_symbol_df.empty:
+        return None
+    
+    merged_df = pd.merge(anchor_df, cov_symbol_df, on="ds", how="left")
 
     return merged_df
 
@@ -100,6 +105,7 @@ def fit_with_covar(
         alchemyEngine,
     )
     if merged_df is None:
+        # FIXME: sometimes merged_df is None even if there's data in table
         logger.info("skipping covariate: %s, %s, %s, %s", cov_table, cov_symbol, feature, min_date)
         return None
 
@@ -522,7 +528,9 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
     params = {
         "symbol": symbol,
     }
-    best_setting = pd.read_sql(query, alchemyEngine, params=params)
+
+    with alchemyEngine.connect() as conn:
+        best_setting = pd.read_sql(query, conn, params=params)
 
     df, _ = load_anchor_ts(symbol, timestep_limit, alchemyEngine)
     hyperparams = None
