@@ -210,9 +210,9 @@ class EastMoneyAPI:
             )
             return pd.DataFrame(temp_list)
 
-        params.update({"page": page})
         if client is None:
             for page in tqdm(range(1, total_page + 1), leave=False):
+                params.update({"page": page})
                 # r = requests.get(
                 #     url,
                 #     params=params,
@@ -223,6 +223,7 @@ class EastMoneyAPI:
         else:
             futures = []
             for page in range(1, total_page + 1):
+                params.update({"page": page})
                 # r = requests.get(
                 #     url,
                 #     params=params,
