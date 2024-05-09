@@ -353,7 +353,7 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger):
         ## load covariate time series from different tables and/or features
         cov_table = group1[0]
         feature = group1[1]
-        if cov_table != "bond_metrics_em" or cov_table != "bond_metrics_em_view":
+        if cov_table != "bond_metrics_em" and cov_table != "bond_metrics_em_view":
             query = f"""
                 SELECT symbol ID, date DS, {feature} y
                 FROM {cov_table}

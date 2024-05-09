@@ -42,7 +42,7 @@ def merge_covar_df(
         cov_symbol_sanitized = f"{feature}_{cov_symbol_sanitized}"
 
         match cov_table:
-            case "bond_metrics_em" | "currency_boc_safe_view":
+            case "bond_metrics_em" | "bond_metrics_em_view" | "currency_boc_safe_view":
                 query = f"""
                     select date ds, {feature} {cov_symbol_sanitized}
                     from {cov_table}
