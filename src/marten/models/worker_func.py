@@ -12,7 +12,7 @@ from sqlalchemy import text
 from neuralprophet import NeuralProphet, set_random_seed, set_log_level
 from neuralprophet.hdays_utils import get_country_holidays
 
-from dask.distributed import get_worker
+from dask.distributed import get_worker, worker_client
 
 from tenacity import (
     stop_after_attempt,
@@ -698,33 +698,45 @@ def predict_best(
 
     # use the best performing setting to fit and then predict
     start_time = time.time()
-    _, metrics = train(
-        df=df,
-        country=region,
-        epochs=epochs,
-        random_seed=random_seed,
-        early_stopping=early_stopping,
-        weekly_seasonality=False,
-        daily_seasonality=False,
-        impute_missing=True,
-        validate=True,
-        changepoints_range=1.0,
-        **params,
-    )
-    m, metrics_final = train(
-        df=df,
-        country=region,
-        epochs=epochs,
-        random_seed=random_seed,
-        early_stopping=early_stopping,
-        weekly_seasonality=False,
-        daily_seasonality=False,
-        impute_missing=True,
-        validate=False,
-        n_forecasts=future_steps,
-        changepoints_range=1.0,
-        **params,
-    )
+    futures = []
+    with worker_client() as client:
+        # train with validation
+        futures.append(client.submit(
+                train,
+                df=df,
+                country=region,
+                epochs=epochs,
+                random_seed=random_seed,
+                early_stopping=early_stopping,
+                weekly_seasonality=False,
+                daily_seasonality=False,
+                impute_missing=True,
+                validate=True,
+                changepoints_range=1.0,
+                **params,
+            )
+        )
+        # train with full dataset without validation split
+        futures.append(client.submit(
+            train,
+            df=df,
+            country=region,
+            epochs=epochs,
+            random_seed=random_seed,
+            early_stopping=early_stopping,
+            weekly_seasonality=False,
+            daily_seasonality=False,
+            impute_missing=True,
+            validate=False,
+            n_forecasts=future_steps,
+            changepoints_range=1.0,
+            **params,
+        ))
+        results = client.gather(futures)
+
+    metrics = results[0][1]
+    m, metrics_final = results[1][0], results[1][1]
+
     fit_time = time.time() - start_time
 
     set_log_level("ERROR")

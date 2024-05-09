@@ -645,7 +645,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     cov_table = "index_daily_em_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
-    # prep ETF covariates  fund_etf_daily_em_view
+    # prep ETF covariates fund_etf_daily_em_view
     features = [
         "change_rate",
         "amt_change_rate",
