@@ -99,6 +99,9 @@ def fit_with_covar(
         min_date,
         alchemyEngine,
     )
+    if merged_df is None:
+        logger.info("skipping covariate: %s, %s, %s, %s", cov_table, cov_symbol, feature, min_date)
+        return None
 
     start_time = time.time()
     metrics = None
