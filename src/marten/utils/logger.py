@@ -20,12 +20,20 @@ class CustomFormatter(logging.Formatter):
         return super(CustomFormatter, self).format(record)
 
 
+class WorkerMessageFilter(logging.Filter):
+    def filter(self, record):
+        # Define the specific part of the message you want to check for
+        suppress_message_part = "Unmanaged memory use is high."
+        # Return False if the specific message part is in the log record's message, suppressing it
+        return suppress_message_part not in record.getMessage()
+
+
 def get_logger(name=None, role: Literal["client", "worker"] = "client") -> Logger:
     global logger
 
     if logger is not None:
         return logger
-    
+
     load_dotenv()
 
     level = os.getenv("LOG_LEVEL")
@@ -44,6 +52,10 @@ def get_logger(name=None, role: Literal["client", "worker"] = "client") -> Logge
             file_handler.setLevel(logging.INFO if level is None else level)
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
+
+            logging.getLogger("distributed.worker.memory").addFilter(
+                WorkerMessageFilter()
+            )
         elif role == 'worker':
             formatter = logging.Formatter(
                 "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
