@@ -26,7 +26,6 @@ class interbank_rate_list(Base):
     symbol = Column(Text, primary_key=True, nullable=False)
     market = Column(Text, nullable=False)
     symbol_type = Column(Text, nullable=False)
-    ex_dividend_date = Column(Date, nullable=False)
     indicator = Column(Text, nullable=False)
     last_modified = Column(
         DateTime(timezone=True), nullable=False, default=func.current_timestamp()
