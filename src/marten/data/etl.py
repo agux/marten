@@ -36,6 +36,7 @@ from marten.data.worker_func import (
     cn_bond_index,
     get_stock_bond_ratio_index,
     get_fund_dividend_events,
+    interbank_rate,
 )
 
 # module_path = os.getenv("LOCAL_AKSHARE_DEV_MODULE")
@@ -104,7 +105,7 @@ def main(_args):
     init()
 
     ## collect and await all task futures
-    
+
     run(get_fund_dividend_events, priority=1)
 
     run(etf_spot)
@@ -136,6 +137,8 @@ def main(_args):
     run(sge_spot_daily_hist, future_sge_spot)
 
     run(cn_bond_index)
+
+    run(interbank_rate)
 
     await_futures(futures)
     logger.info("Time taken: %s seconds", time.time() - t_start)

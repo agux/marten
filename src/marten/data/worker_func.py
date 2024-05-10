@@ -46,6 +46,8 @@ from marten.data.tabledef import (
     cn_bond_indices,
     fund_dividend_events,
     fund_portfolio_holdings,
+    interbank_rate_list,
+    interbank_rate_hist,
 )
 
 from marten.data.api.snowball import SnowballAPI
@@ -565,9 +567,7 @@ def calc_etf_metrics(symbol, end_date):
         )
 
         # To calculate max drawdown, get the cummulative_returns
-        df.loc[:, "cumulative_returns"] = (
-            np.cumprod(1 + df["change_rate"] / 100.0) - 1
-        )
+        df.loc[:, "cumulative_returns"] = np.cumprod(1 + df["change_rate"] / 100.0) - 1
         # Calculate the maximum cumulative return up to each point
         peak = np.maximum.accumulate(df["cumulative_returns"])
         # Calculate drawdown as the difference between the current value and the peak
@@ -595,7 +595,7 @@ def calc_etf_metrics(symbol, end_date):
             ),
             "fundcode": symbol,
         }
-        
+
         with alchemyEngine.begin() as conn:
             conn.execute(update_query, params)
 
@@ -1251,6 +1251,187 @@ def cn_bond_index():
     return len(df)
 
 
+def get_interbank_rate(symbol, market, symbol_type, indicator):
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+
+    df = ak.rate_interbank(
+        market=market, symbol=symbol_type, indicator=indicator
+    )
+
+    if df.empty:
+        return None
+
+    df = df.dropna(axis=1, how="all")
+    if df.empty:
+        return None
+
+    df.rename(
+        columns={"报告日": "date", "利率": "interest_rate", "涨跌": "change_rate"},
+        inplace=True,
+    )
+
+    with alchemyEngine.connect() as conn:
+        latest_date = get_max_for_column(
+            conn, symbol, "interbank_rate_hist", non_null_col="change_rate"
+        )
+
+    if latest_date is not None:
+        start_date = latest_date - timedelta(days=20)
+        df = df[df["date"] >= start_date]
+
+    df.insert(0, "symbol", symbol)
+
+    with alchemyEngine.begin() as conn:
+        update_on_conflict(interbank_rate_hist, conn, df, ["symbol", "date"])
+
+    return True
+
+def interbank_rate():
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+    logger.info("running interbank_rate()...")
+
+    # Define the data as a list of tuples
+    data = [
+        ("shibor_rmb_ovn", "上海银行同业拆借市场", "Shibor人民币", "隔夜"),
+        ("shibor_rmb_1wk", "上海银行同业拆借市场", "Shibor人民币", "1周"),
+        ("shibor_rmb_2wk", "上海银行同业拆借市场", "Shibor人民币", "2周"),
+        ("shibor_rmb_1mo", "上海银行同业拆借市场", "Shibor人民币", "1月"),
+        ("shibor_rmb_3mo", "上海银行同业拆借市场", "Shibor人民币", "3月"),
+        ("shibor_rmb_6mo", "上海银行同业拆借市场", "Shibor人民币", "6月"),
+        ("shibor_rmb_9mo", "上海银行同业拆借市场", "Shibor人民币", "9月"),
+        ("shibor_rmb_1yr", "上海银行同业拆借市场", "Shibor人民币", "1年"),
+        ("chibor_rmb_ovn", "中国银行同业拆借市场", "Chibor人民币", "隔夜"),
+        ("chibor_rmb_1w", "中国银行同业拆借市场", "Chibor人民币", "1周"),
+        ("chibor_rmb_2w", "中国银行同业拆借市场", "Chibor人民币", "2周"),
+        ("chibor_rmb_3w", "中国银行同业拆借市场", "Chibor人民币", "3周"),
+        ("chibor_rmb_1mo", "中国银行同业拆借市场", "Chibor人民币", "1月"),
+        ("chibor_rmb_2mo", "中国银行同业拆借市场", "Chibor人民币", "2月"),
+        ("chibor_rmb_3mo", "中国银行同业拆借市场", "Chibor人民币", "3月"),
+        ("chibor_rmb_4mo", "中国银行同业拆借市场", "Chibor人民币", "4月"),
+        ("chibor_rmb_6mo", "中国银行同业拆借市场", "Chibor人民币", "6月"),
+        ("chibor_rmb_9mo", "中国银行同业拆借市场", "Chibor人民币", "9月"),
+        ("chibor_rmb_1yr", "中国银行同业拆借市场", "Chibor人民币", "1年"),
+        ("libor_gbp_ovn", "伦敦银行同业拆借市场", "Libor英镑", "隔夜"),
+        ("libor_gbp_1w", "伦敦银行同业拆借市场", "Libor英镑", "1周"),
+        ("libor_gbp_1mo", "伦敦银行同业拆借市场", "Libor英镑", "1月"),
+        ("libor_gbp_2mo", "伦敦银行同业拆借市场", "Libor英镑", "2月"),
+        ("libor_gbp_3mo", "伦敦银行同业拆借市场", "Libor英镑", "3月"),
+        ("libor_gbp_8mo", "伦敦银行同业拆借市场", "Libor英镑", "8月"),
+        ("libor_usd_ovn", "伦敦银行同业拆借市场", "Libor美元", "隔夜"),
+        ("libor_usd_1w", "伦敦银行同业拆借市场", "Libor美元", "1周"),
+        ("libor_usd_1mo", "伦敦银行同业拆借市场", "Libor美元", "1月"),
+        ("libor_usd_2mo", "伦敦银行同业拆借市场", "Libor美元", "2月"),
+        ("libor_usd_3mo", "伦敦银行同业拆借市场", "Libor美元", "3月"),
+        ("libor_usd_8mo", "伦敦银行同业拆借市场", "Libor美元", "8月"),
+        ("libor_eur_ovn", "伦敦银行同业拆借市场", "Libor欧元", "隔夜"),
+        ("libor_eur_1w", "伦敦银行同业拆借市场", "Libor欧元", "1周"),
+        ("libor_eur_1mo", "伦敦银行同业拆借市场", "Libor欧元", "1月"),
+        ("libor_eur_2mo", "伦敦银行同业拆借市场", "Libor欧元", "2月"),
+        ("libor_eur_3mo", "伦敦银行同业拆借市场", "Libor欧元", "3月"),
+        ("libor_eur_8mo", "伦敦银行同业拆借市场", "Libor欧元", "8月"),
+        ("libor_jpy_ovn", "伦敦银行同业拆借市场", "Libor日元", "隔夜"),
+        ("libor_jpy_1w", "伦敦银行同业拆借市场", "Libor日元", "1周"),
+        ("libor_jpy_1mo", "伦敦银行同业拆借市场", "Libor日元", "1月"),
+        ("libor_jpy_2mo", "伦敦银行同业拆借市场", "Libor日元", "2月"),
+        ("libor_jpy_3mo", "伦敦银行同业拆借市场", "Libor日元", "3月"),
+        ("libor_jpy_8mo", "伦敦银行同业拆借市场", "Libor日元", "8月"),
+        ("euribor_eur_1w", "欧洲银行同业拆借市场", "Euribor欧元", "1周"),
+        ("euribor_eur_2w", "欧洲银行同业拆借市场", "Euribor欧元", "2周"),
+        ("euribor_eur_3w", "欧洲银行同业拆借市场", "Euribor欧元", "3周"),
+        ("euribor_eur_1mo", "欧洲银行同业拆借市场", "Euribor欧元", "1月"),
+        ("euribor_eur_2mo", "欧洲银行同业拆借市场", "Euribor欧元", "2月"),
+        ("euribor_eur_3mo", "欧洲银行同业拆借市场", "Euribor欧元", "3月"),
+        ("euribor_eur_4mo", "欧洲银行同业拆借市场", "Euribor欧元", "4月"),
+        ("euribor_eur_5mo", "欧洲银行同业拆借市场", "Euribor欧元", "5月"),
+        ("euribor_eur_6mo", "欧洲银行同业拆借市场", "Euribor欧元", "6月"),
+        ("euribor_eur_7mo", "欧洲银行同业拆借市场", "Euribor欧元", "7月"),
+        ("euribor_eur_8mo", "欧洲银行同业拆借市场", "Euribor欧元", "8月"),
+        ("euribor_eur_9mo", "欧洲银行同业拆借市场", "Euribor欧元", "9月"),
+        ("euribor_eur_10mo", "欧洲银行同业拆借市场", "Euribor欧元", "10月"),
+        ("euribor_eur_11mo", "欧洲银行同业拆借市场", "Euribor欧元", "11月"),
+        ("euribor_eur_1yr", "欧洲银行同业拆借市场", "Euribor欧元", "1年"),
+        ("hibor_hkd_ovn", "香港银行同业拆借市场", "Hibor港元", "隔夜"),
+        ("hibor_hkd_1w", "香港银行同业拆借市场", "Hibor港元", "1周"),
+        ("hibor_hkd_2w", "香港银行同业拆借市场", "Hibor港元", "2周"),
+        ("hibor_hkd_1mo", "香港银行同业拆借市场", "Hibor港元", "1月"),
+        ("hibor_hkd_2mo", "香港银行同业拆借市场", "Hibor港元", "2月"),
+        ("hibor_hkd_3mo", "香港银行同业拆借市场", "Hibor港元", "3月"),
+        ("hibor_hkd_4mo", "香港银行同业拆借市场", "Hibor港元", "4月"),
+        ("hibor_hkd_5mo", "香港银行同业拆借市场", "Hibor港元", "5月"),
+        ("hibor_hkd_6mo", "香港银行同业拆借市场", "Hibor港元", "6月"),
+        ("hibor_hkd_7mo", "香港银行同业拆借市场", "Hibor港元", "7月"),
+        ("hibor_hkd_8mo", "香港银行同业拆借市场", "Hibor港元", "8月"),
+        ("hibor_hkd_9mo", "香港银行同业拆借市场", "Hibor港元", "9月"),
+        ("hibor_hkd_10mo", "香港银行同业拆借市场", "Hibor港元", "10月"),
+        ("hibor_hkd_11mo", "香港银行同业拆借市场", "Hibor港元", "11月"),
+        ("hibor_hkd_1yr", "香港银行同业拆借市场", "Hibor港元", "1年"),
+        ("hibor_usd_ovn", "香港银行同业拆借市场", "Hibor美元", "隔夜"),
+        ("hibor_usd_1w", "香港银行同业拆借市场", "Hibor美元", "1周"),
+        ("hibor_usd_2w", "香港银行同业拆借市场", "Hibor美元", "2周"),
+        ("hibor_usd_1mo", "香港银行同业拆借市场", "Hibor美元", "1月"),
+        ("hibor_usd_2mo", "香港银行同业拆借市场", "Hibor美元", "2月"),
+        ("hibor_usd_3mo", "香港银行同业拆借市场", "Hibor美元", "3月"),
+        ("hibor_usd_4mo", "香港银行同业拆借市场", "Hibor美元", "4月"),
+        ("hibor_usd_5mo", "香港银行同业拆借市场", "Hibor美元", "5月"),
+        ("hibor_usd_6mo", "香港银行同业拆借市场", "Hibor美元", "6月"),
+        ("hibor_usd_7mo", "香港银行同业拆借市场", "Hibor美元", "7月"),
+        ("hibor_usd_8mo", "香港银行同业拆借市场", "Hibor美元", "8月"),
+        ("hibor_usd_9mo", "香港银行同业拆借市场", "Hibor美元", "9月"),
+        ("hibor_usd_10mo", "香港银行同业拆借市场", "Hibor美元", "10月"),
+        ("hibor_usd_11mo", "香港银行同业拆借市场", "Hibor美元", "11月"),
+        ("hibor_usd_1yr", "香港银行同业拆借市场", "Hibor美元", "1年"),
+        ("hibor_rmb_ovn", "香港银行同业拆借市场", "Hibor人民币", "隔夜"),
+        ("hibor_rmb_1w", "香港银行同业拆借市场", "Hibor人民币", "1周"),
+        ("hibor_rmb_2w", "香港银行同业拆借市场", "Hibor人民币", "2周"),
+        ("hibor_rmb_1mo", "香港银行同业拆借市场", "Hibor人民币", "1月"),
+        ("hibor_rmb_2mo", "香港银行同业拆借市场", "Hibor人民币", "2月"),
+        ("hibor_rmb_3mo", "香港银行同业拆借市场", "Hibor人民币", "3月"),
+        ("hibor_rmb_6mo", "香港银行同业拆借市场", "Hibor人民币", "6月"),
+        ("hibor_rmb_1yr", "香港银行同业拆借市场", "Hibor人民币", "1年"),
+        ("sibor_sgd_1mo", "新加坡银行同业拆借市场", "Sibor星元", "1月"),
+        ("sibor_sgd_2mo", "新加坡银行同业拆借市场", "Sibor星元", "2月"),
+        ("sibor_sgd_3mo", "新加坡银行同业拆借市场", "Sibor星元", "3月"),
+        ("sibor_sgd_6mo", "新加坡银行同业拆借市场", "Sibor星元", "6月"),
+        ("sibor_sgd_9mo", "新加坡银行同业拆借市场", "Sibor星元", "9月"),
+        ("sibor_sgd_1yr", "新加坡银行同业拆借市场", "Sibor星元", "1年"),
+        ("sibor_usd_1mo", "新加坡银行同业拆借市场", "Sibor美元", "1月"),
+        ("sibor_usd_2mo", "新加坡银行同业拆借市场", "Sibor美元", "2月"),
+        ("sibor_usd_3mo", "新加坡银行同业拆借市场", "Sibor美元", "3月"),
+        ("sibor_usd_6mo", "新加坡银行同业拆借市场", "Sibor美元", "6月"),
+        ("sibor_usd_9mo", "新加坡银行同业拆借市场", "Sibor美元", "9月"),
+        ("sibor_usd_1yr", "新加坡银行同业拆借市场", "Sibor美元", "1年"),
+    ]
+
+    # Create the DataFrame
+    df = pd.DataFrame(data, columns=["symbol", "market", "symbol_type", "indicator"])
+
+    with alchemyEngine.begin() as conn:
+        ignore_on_conflict(interbank_rate_list, conn, df, ["symbol"])
+
+    # submit tasks to get interbank rate for each symbol
+    futures = []
+    with worker_client() as client:
+        logger.info("starting tasks on function get_interbank_rate()...")
+        for symbol, market, symbol_type, indicator in data:
+            futures.append(
+                client.submit(
+                    get_interbank_rate,
+                    symbol,
+                    market,
+                    symbol_type,
+                    indicator,
+                    priority=1,
+                )
+            )
+            await_futures(futures, False)
+
+    await_futures(futures)
+
+    return len(df)
+
+
 def get_fund_dividend_events():
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
@@ -1312,7 +1493,7 @@ def get_stock_bond_ratio_index():
     if latest_date is not None:
         start_date = latest_date - timedelta(days=20)
         df = df[df["date"] >= start_date]
-    
+
     with alchemyEngine.begin() as conn:
         update_on_conflict(table_def_bond_metrics_em(), conn, df, ["date"])
 

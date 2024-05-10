@@ -9,7 +9,6 @@ from sqlalchemy import (
     String,
     Date,
     Numeric,
-    BigInteger,
     Integer,
     DateTime,
     PrimaryKeyConstraint,
@@ -19,6 +18,32 @@ Base = declarative_base()
 
 ## Important Node:
 ## All column names must align with SQL DDL (with lower-case characters)
+
+
+class interbank_rate_list(Base):
+    __tablename__ = "interbank_rate_list"
+
+    symbol = Column(Text, primary_key=True, nullable=False)
+    market = Column(Text, nullable=False)
+    symbol_type = Column(Text, nullable=False)
+    ex_dividend_date = Column(Date, nullable=False)
+    indicator = Column(Text, nullable=False)
+    last_modified = Column(
+        DateTime(timezone=True), nullable=False, default=func.current_timestamp()
+    )
+
+
+class interbank_rate_hist(Base):
+    __tablename__ = "interbank_rate_hist"
+    __table_args__ = (PrimaryKeyConstraint("symbol", "date"),)
+
+    symbol = Column(Text, nullable=False)
+    date = Column(Date, nullable=False)
+    interest_rate = Column(Numeric, nullable=False)
+    change_rate = Column(Numeric, nullable=False)
+    last_modified = Column(
+        DateTime(timezone=True), nullable=False, default=func.current_timestamp()
+    )
 
 
 class fund_portfolio_holdings(Base):

@@ -464,12 +464,14 @@ def _cleanup_stale_keys():
             )
         )
 
+
 def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, limit):
     global alchemyEngine, logger
 
     with alchemyEngine.connect() as conn:
-        results = conn.execute(text(
-            """
+        results = conn.execute(
+            text(
+                """
                 select hyper_params, loss_val
                 from hps_metrics
                 where model = :model
@@ -478,18 +480,21 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, limit):
                 order by loss_val
                 limit :limit
             """
-        ), {
-            "model": model,
-            "anchor_symbol": anchor_symbol,
-            "covar_set_id": covar_set_id,
-            "limit": limit,
-        })
+            ),
+            {
+                "model": model,
+                "anchor_symbol": anchor_symbol,
+                "covar_set_id": covar_set_id,
+                "limit": limit,
+            },
+        )
 
         tuples = []
         for row in results:
             tuples.append((json.loads(row[0]), row[1]))
 
         return tuples if len(tuples) > 0 else None
+
 
 def bayesopt(df, covar_set_id, args):
     global alchemyEngine, logger, random_seed, client, futures
@@ -524,6 +529,11 @@ def bayesopt(df, covar_set_id, args):
     warmstart_tuples = preload_warmstart_tuples(
         "NeuralProphet", args.symbol, covar_set_id, n_jobs
     )
+    if warmstart_tuples is not None:
+        logger.info(
+            "preloaded %s historical searched hyper-params for warm-start.",
+            len(warmstart_tuples),
+        )
 
     tuner = Tuner(
         space,
@@ -531,11 +541,11 @@ def bayesopt(df, covar_set_id, args):
         dict(
             initial_random=n_jobs,
             num_iteration=args.iteration,
-            initial_custom=warmstart_tuples
+            initial_custom=warmstart_tuples,
         ),
     )
     results = tuner.minimize()
-    logger.info('best parameters:', results['best_params'])
+    logger.info("best parameters:", results["best_params"])
     logger.info("best Loss_val:", results["best_objective"])
 
 
@@ -782,6 +792,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     cov_table = "currency_boc_safe_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
+    # SGE spot
     features = [
         "change_rate",
         "open_preclose_rate",
@@ -789,6 +800,11 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "spot_hist_sge_view"
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
+
+    # Interbank interest rates
+    features = ["change_rate"]
+    cov_table = "interbank_rate_hist"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
 
     # TODO prep options
