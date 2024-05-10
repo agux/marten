@@ -40,13 +40,14 @@ def merge_covar_df(
     
     # `cov_symbol` may contain special characters such as `.IXIC`, or `H-FIN`. The dot and hyphen is not allowed in column alias.
     # Convert common special characters often seen in stock / index symbols to valid replacements as PostgreSQL table column alias.
-    cov_symbol_sanitized = cov_symbol.replace(".", "_").replace("-", "_")
-    cov_symbol_sanitized = f"{feature}_{cov_symbol_sanitized}"
+    # cov_symbol_sanitized = cov_symbol.replace(".", "_").replace("-", "_")
+    # cov_symbol_sanitized = f"{feature}_{cov_symbol_sanitized}"
+    cov_symbol_sanitized = f"{feature}_{cov_symbol}"
 
     match cov_table:
         case "bond_metrics_em" | "bond_metrics_em_view" | "currency_boc_safe_view":
             query = f"""
-                select date ds, {feature} {cov_symbol_sanitized}
+                select date ds, {feature} "{cov_symbol_sanitized}"
                 from {cov_table}
                 where date >= %(min_date)s
                 order by date
@@ -56,7 +57,7 @@ def merge_covar_df(
             }
         case _:
             query = f"""
-                select date ds, {feature} {cov_symbol_sanitized}
+                select date ds, {feature} "{cov_symbol_sanitized}"
                 from {cov_table}
                 where symbol = %(cov_symbol)s
                 and date >= %(min_date)s
