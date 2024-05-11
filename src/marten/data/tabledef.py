@@ -20,6 +20,84 @@ Base = declarative_base()
 ## All column names must align with SQL DDL (with lower-case characters)
 
 
+class etf_cash_inflow(Base):
+    __tablename__ = "etf_cash_inflow"
+    __table_args__ = (PrimaryKeyConstraint("symbol", "date"),)
+
+    symbol = Column(
+        Text,
+        nullable=False,
+        comment="ETF symbol, the unique identifier also known as the ticker symbol. ('symbol')",
+    )
+    date = Column(Date, nullable=False, comment="The date of the data record. ('日期')")
+    close_price = Column(
+        Numeric,
+        nullable=False,
+        comment="Closing price of the ETF on the given date. ('收盘价')",
+    )
+    change_pct = Column(
+        Numeric,
+        nullable=False,
+        comment="Percentage change in the closing price compared to the previous trading day. ('涨跌幅')",
+    )
+    main_net_inflow = Column(
+        Numeric,
+        nullable=False,
+        comment="Net cash inflow from main investors (net amount). ('主力净流入-净额')",
+    )
+    main_net_inflow_pct = Column(
+        Numeric,
+        nullable=False,
+        comment="Net cash inflow from main investors as a percentage of total volume. ('主力净流入-净占比')",
+    )
+    ultra_large_net_inflow = Column(
+        Numeric,
+        nullable=False,
+        comment="Net cash inflow from ultra-large transactions (net amount). ('超大单净流入-净额')",
+    )
+    ultra_large_net_inflow_pct = Column(
+        Numeric,
+        nullable=False,
+        comment="Net cash inflow from ultra-large transactions as a percentage of total volume. ('超大单净流入-净占比')",
+    )
+    large_net_inflow = Column(
+        Numeric,
+        nullable=False,
+        comment="Net cash inflow from large transactions (net amount). ('大单净流入-净额')",
+    )
+    large_net_inflow_pct = Column(
+        Numeric,
+        nullable=False,
+        comment="Net cash inflow from large transactions as a percentage of total volume. ('大单净流入-净占比')",
+    )
+    medium_net_inflow = Column(
+        Numeric,
+        nullable=False,
+        comment="Net cash inflow from medium transactions (net amount). ('中单净流入-净额')",
+    )
+    medium_net_inflow_pct = Column(
+        Numeric,
+        nullable=False,
+        comment="Net cash inflow from medium transactions as a percentage of total volume. ('中单净流入-净占比')",
+    )
+    small_net_inflow = Column(
+        Numeric,
+        nullable=False,
+        comment="Net cash inflow from small transactions (net amount). ('小单净流入-净额')",
+    )
+    small_net_inflow_pct = Column(
+        Numeric,
+        nullable=False,
+        comment="Net cash inflow from small transactions as a percentage of total volume. ('小单净流入-净占比')",
+    )
+    last_modified = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=func.current_timestamp(),
+        comment="Timestamp of the last modification to the record. Automatically updated on each row change. ('last_modified')",
+    )
+
+
 class interbank_rate_list(Base):
     __tablename__ = "interbank_rate_list"
 

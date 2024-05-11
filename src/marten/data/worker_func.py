@@ -48,6 +48,7 @@ from marten.data.tabledef import (
     fund_portfolio_holdings,
     interbank_rate_list,
     interbank_rate_hist,
+    etf_cash_inflow,
 )
 
 from marten.data.api.snowball import SnowballAPI
@@ -777,12 +778,13 @@ def etf_list():
         futures = []
         with worker_client() as client:
             logger.info(
-                f"starting task on function get_etf_daily() and fund_holding()..."
+                "starting sub-tasks for each ETF. Length: %s", len(df)
             )
-            for symbol in df["symbol"]:
+            for symbol, exch in zip(df["symbol"], df["exch"]):
                 futures.append(client.submit(get_etf_daily, symbol, priority=1))
                 futures.append(client.submit(fund_holding, symbol, priority=1))
-                await_futures(futures, False)
+                futures.append(client.submit(cash_inflow, symbol, exch, priority=1))
+                await_futures(futures, False, multiplier=3)
 
         await_futures(futures)
 
@@ -1584,5 +1586,76 @@ def fund_holding(symbol):
         update_on_conflict(
             fund_portfolio_holdings, conn, df, ["symbol", "serial_number"]
         )
+
+    return len(df)
+
+def _get_market(alchemyEngine, symbol, asset_type):
+
+    with alchemyEngine.connect() as conn:
+        if asset_type.lower() == "etf":
+            results = conn.execute(text("""
+                select exch 
+                from fund_etf_list_sina 
+                where symbol = :symbol
+            """),{
+                "symbol": symbol,
+            })
+            row = results.fetchone()
+        
+    return row[0] if row is not None else None
+
+
+def cash_inflow(symbol, exch):
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+
+    try:
+        # the API can support other asset types such as ETF, stock.
+        df = ak.stock_individual_fund_flow(stock=symbol, market=exch)
+    except TypeError as e:
+        if "'NoneType' object is not subscriptable" in str(e):
+            logger.warning(
+                "ak.stock_individual_fund_flow(%s, %s) - data source could be empty: %s",
+                symbol,
+                exch,
+                str(e),
+            )
+            return 0
+
+    if df is None or df.empty:
+        return 0
+    
+    column_name_mapping = {
+        "日期": "date",
+        "收盘价": "close_price",
+        "涨跌幅": "change_pct",
+        "主力净流入-净额": "main_net_inflow",
+        "主力净流入-净占比": "main_net_inflow_pct",
+        "超大单净流入-净额": "ultra_large_net_inflow",
+        "超大单净流入-净占比": "ultra_large_net_inflow_pct",
+        "大单净流入-净额": "large_net_inflow",
+        "大单净流入-净占比": "large_net_inflow_pct",
+        "中单净流入-净额": "medium_net_inflow",
+        "中单净流入-净占比": "medium_net_inflow_pct",
+        "小单净流入-净额": "small_net_inflow",
+        "小单净流入-净占比": "small_net_inflow_pct",
+    }
+
+    # Rename the columns
+    df.rename(columns=column_name_mapping, inplace=True)
+
+    df.insert(0, "symbol", symbol)
+
+    with alchemyEngine.connect() as conn:
+        latest_date = get_max_for_column(
+            conn, symbol=symbol, table="etf_cash_inflow"
+        )
+
+    if latest_date is not None:
+        start_date = latest_date - timedelta(days=20)
+        df = df[df["date"] >= start_date]
+
+    with alchemyEngine.begin() as conn:
+        update_on_conflict(etf_cash_inflow, conn, df, ["symbol","date"])
 
     return len(df)
