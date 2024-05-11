@@ -475,8 +475,9 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, limit):
                 select hyper_params, loss_val
                 from hps_metrics
                 where model = :model
-                and anchor_symbol = :anchor_symbol
-                and covar_set_id = :covar_set_id
+                    and anchor_symbol = :anchor_symbol
+                    and covar_set_id = :covar_set_id
+                    and loss_val is not null
                 order by loss_val
                 limit :limit
             """
