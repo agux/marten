@@ -12,7 +12,7 @@ from tenacity import (
 )
 
 # import exchange_calendars as xcals
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from sqlalchemy import (
     text,
 )
@@ -1647,7 +1647,7 @@ def cash_inflow(symbol, exch):
     df.insert(0, "symbol", symbol)
 
     # check the data type of df["date"]. If its not a date, convert it to date
-    if not df['date'].apply(lambda x: isinstance(x, datetime.date)).all():
+    if not df['date'].apply(lambda x: isinstance(x, date)).all():
         df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
 
     with alchemyEngine.connect() as conn:
