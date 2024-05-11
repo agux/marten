@@ -1624,7 +1624,7 @@ def cash_inflow(symbol, exch):
 
     if df is None or df.empty:
         return 0
-    
+
     column_name_mapping = {
         "日期": "date",
         "收盘价": "close_price",
@@ -1645,6 +1645,10 @@ def cash_inflow(symbol, exch):
     df.rename(columns=column_name_mapping, inplace=True)
 
     df.insert(0, "symbol", symbol)
+
+    # check the data type of df["date"]. If its not a date, convert it to date
+    if not pd.to_datetime(df['date'], errors='coerce').notnull().all():
+        df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
 
     with alchemyEngine.connect() as conn:
         latest_date = get_max_for_column(
