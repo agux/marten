@@ -1255,16 +1255,27 @@ def get_interbank_rate(symbol, market, symbol_type, indicator):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
-    df = ak.rate_interbank(
-        market=market, symbol=symbol_type, indicator=indicator
-    )
+    try:
+        df = ak.rate_interbank(
+            market=market, symbol=symbol_type, indicator=indicator
+        )
+    except TypeError as e:
+        if "'NoneType' object is not subscriptable" in str(e):
+            logger.warning(
+                "ak.rate_interbank(%s, %s, %s) - data source could be empty: %s",
+                market,
+                symbol_type,
+                indicator,
+                str(e),
+            )
+            return 0
 
     if df.empty:
-        return None
+        return 0
 
     df = df.dropna(axis=1, how="all")
     if df.empty:
-        return None
+        return 0
 
     df.rename(
         columns={"报告日": "date", "利率": "interest_rate", "涨跌": "change_rate"},
@@ -1285,7 +1296,7 @@ def get_interbank_rate(symbol, market, symbol_type, indicator):
     with alchemyEngine.begin() as conn:
         update_on_conflict(interbank_rate_hist, conn, df, ["symbol", "date"])
 
-    return True
+    return len(df)
 
 def interbank_rate():
     worker = get_worker()

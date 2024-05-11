@@ -527,7 +527,7 @@ def bayesopt(df, covar_set_id, args):
         return client.gather(jobs)
 
     warmstart_tuples = preload_warmstart_tuples(
-        "NeuralProphet", args.symbol, covar_set_id, n_jobs
+        "NeuralProphet", args.symbol, covar_set_id, args.batch_size * args.iteration
     )
     if warmstart_tuples is not None:
         logger.info(
