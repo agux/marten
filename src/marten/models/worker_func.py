@@ -20,9 +20,11 @@ from tenacity import (
     wait_exponential,
     Retrying,
     retry_if_exception_type,
+    before_sleep,
 )
 
 from marten.utils.holidays import get_holiday_region
+from marten.utils.logger import get_logger
 
 nan_inf_replacement = 99999.99999
 
@@ -206,6 +208,11 @@ def save_covar_metrics(
                 },
             )
 
+def log_retry(retry_state):
+    get_logger().warning(
+        f"Retrying, attempt {retry_state.attempt_number} after exception: {retry_state.outcome.exception()}"
+    )
+
 def _fit_model(m, df, epochs, early_stopping, validate):
     if validate:
         train_df, test_df = m.split_df(
@@ -263,6 +270,7 @@ def train(
                 stop=stop_after_attempt(5),
                 wait=wait_exponential(multiplier=1, max=10),
                 retry=retry_if_exception_type(torch.cuda.OutOfMemoryError),
+                before_sleep=before_sleep(log_retry),
             ):
                 with attempt:
                     metrics = _fit_model(m, df, epochs, early_stopping, validate)
