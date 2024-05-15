@@ -287,6 +287,17 @@ def train(
                 ) from e
             else:
                 raise e
+        except torch.cuda.OutOfMemoryError as e:
+            # final attempt to train on CPU
+            # remove `accelerator` parameter from **kwargs
+            if 'accelerator' in kwargs and kwargs['accelerator'] == 'cpu':
+                kwargs.pop('accelerator')
+                m = NeuralProphet(**kwargs)
+                m.add_lagged_regressor(covars)
+                if country is not None:
+                    m.add_country_holidays(country_name=country)
+                metrics = _fit_model(m, df, epochs, early_stopping, validate)
+                return m, metrics
 
 
 def log_metrics_for_hyper_params(
