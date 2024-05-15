@@ -243,7 +243,7 @@ def _try_fitting(
             metrics = m.fit(
                 train_df,
                 validation_df=test_df,
-                progress="False",
+                progress=None,
                 epochs=epochs,
                 early_stopping=early_stopping,
                 freq="B",
@@ -251,7 +251,7 @@ def _try_fitting(
         else:
             metrics = m.fit(
                 df,
-                progress="False",
+                progress=None,
                 epochs=epochs,
                 early_stopping=early_stopping,
                 freq="B",
