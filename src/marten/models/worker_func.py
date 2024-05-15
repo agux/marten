@@ -4,6 +4,7 @@ import json
 import hashlib
 import warnings
 import math
+import torch
 
 from datetime import datetime, timedelta
 
@@ -18,6 +19,7 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
     Retrying,
+    retry_if_exception_type,
 )
 
 from marten.utils.holidays import get_holiday_region
@@ -204,6 +206,32 @@ def save_covar_metrics(
                 },
             )
 
+def _fit_model(m, df, epochs, early_stopping, validate):
+    if validate:
+        train_df, test_df = m.split_df(
+            df,
+            valid_p=1.0 / 10,
+            freq="B",
+        )
+        metrics = m.fit(
+            train_df,
+            validation_df=test_df,
+            progress=None,
+            epochs=epochs,
+            early_stopping=early_stopping,
+            freq="B",
+        )
+    else:
+        metrics = m.fit(
+            df,
+            progress=None,
+            epochs=epochs,
+            early_stopping=early_stopping,
+            freq="B",
+        )
+    
+    return metrics
+
 
 def train(
     df,
@@ -231,28 +259,13 @@ def train(
         if country is not None:
             m.add_country_holidays(country_name=country)
         try:
-            if validate:
-                train_df, test_df = m.split_df(
-                    df,
-                    valid_p=1.0 / 10,
-                    freq="B",
-                )
-                metrics = m.fit(
-                    train_df,
-                    validation_df=test_df,
-                    progress=None,
-                    epochs=epochs,
-                    early_stopping=early_stopping,
-                    freq="B",
-                )
-            else:
-                metrics = m.fit(
-                    df,
-                    progress=None,
-                    epochs=epochs,
-                    early_stopping=early_stopping,
-                    freq="B",
-                )
+            for attempt in Retrying(
+                stop=stop_after_attempt(5),
+                wait=wait_exponential(multiplier=1, max=10),
+                retry=retry_if_exception_type(torch.cuda.OutOfMemoryError),
+            ):
+                with attempt:
+                    metrics = _fit_model(m, df, epochs, early_stopping, validate)
             return m, metrics
         except ValueError as e:
             # check if the message `Inputs/targets with missing values detected` was inside the error
