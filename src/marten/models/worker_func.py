@@ -215,34 +215,8 @@ def log_retry(retry_state):
             f"Retrying, attempt {retry_state.attempt_number} after exception: {exception}"
         )
 
-def _fit_model(m, df, epochs, early_stopping, validate):
-    if validate:
-        train_df, test_df = m.split_df(
-            df,
-            valid_p=1.0 / 10,
-            freq="B",
-        )
-        metrics = m.fit(
-            train_df,
-            validation_df=test_df,
-            progress=None,
-            epochs=epochs,
-            early_stopping=early_stopping,
-            freq="B",
-        )
-    else:
-        metrics = m.fit(
-            df,
-            progress=None,
-            epochs=epochs,
-            early_stopping=early_stopping,
-            freq="B",
-        )
-    
-    return metrics
 
-
-def train(
+def _try_fitting(
     df,
     epochs=None,
     random_seed=7,
@@ -254,6 +228,55 @@ def train(
     set_log_level("ERROR")
     set_random_seed(random_seed)
 
+    m = NeuralProphet(**kwargs)
+    covars = [col for col in df.columns if col not in ("ds", "y")]
+    m.add_lagged_regressor(covars)
+    if country is not None:
+        m.add_country_holidays(country_name=country)
+    try:
+        if validate:
+            train_df, test_df = m.split_df(
+                df,
+                valid_p=1.0 / 10,
+                freq="B",
+            )
+            metrics = m.fit(
+                train_df,
+                validation_df=test_df,
+                progress="False",
+                epochs=epochs,
+                early_stopping=early_stopping,
+                freq="B",
+            )
+        else:
+            metrics = m.fit(
+                df,
+                progress="False",
+                epochs=epochs,
+                early_stopping=early_stopping,
+                freq="B",
+            )
+        return m, metrics
+    except ValueError as e:
+        # check if the message `Inputs/targets with missing values detected` was inside the error
+        if "Inputs/targets with missing values detected" in str(e):
+            # count how many 'nan' values in the `covars` columns respectively
+            nan_counts = df[covars].isna().sum().to_dict()
+            raise ValueError(
+                f"Skipping: too much missing values in the covariates: {nan_counts}"
+            ) from e
+        else:
+            raise e
+
+def train(
+    df,
+    epochs=None,
+    random_seed=7,
+    early_stopping=True,
+    country=None,
+    validate=True,
+    **kwargs,
+):
     with warnings.catch_warnings():
         # suppress swarming warning:
         # WARNING - (py.warnings._showwarnmsg) -
@@ -262,41 +285,35 @@ def train(
         # converted_ds = pd.to_datetime(ds_col, utc=True).view(dtype=np.int64)
         warnings.simplefilter("ignore", FutureWarning)
 
-        m = NeuralProphet(**kwargs)
-        covars = [col for col in df.columns if col not in ("ds", "y")]
-        m.add_lagged_regressor(covars)
-        if country is not None:
-            m.add_country_holidays(country_name=country)
         try:
             for attempt in Retrying(
-                stop=stop_after_attempt(5),
-                wait=wait_exponential(multiplier=1, max=10),
+                stop=stop_after_attempt(3),
+                wait=wait_exponential(multiplier=1, max=5),
                 retry=retry_if_exception_type(torch.cuda.OutOfMemoryError),
                 before_sleep=log_retry,
             ):
                 with attempt:
-                    metrics = _fit_model(m, df, epochs, early_stopping, validate)
+                    m, metrics = _try_fitting(df,
+                        epochs,
+                        random_seed,
+                        early_stopping,
+                        country,
+                        validate,
+                        **kwargs)
             return m, metrics
-        except ValueError as e:
-            # check if the message `Inputs/targets with missing values detected` was inside the error
-            if "Inputs/targets with missing values detected" in str(e):
-                # count how many 'nan' values in the `covars` columns respectively
-                nan_counts = df[covars].isna().sum().to_dict()
-                raise ValueError(
-                    f"Skipping: too much missing values in the covariates: {nan_counts}"
-                ) from e
-            else:
-                raise e
         except torch.cuda.OutOfMemoryError as e:
             # final attempt to train on CPU
             # remove `accelerator` parameter from **kwargs
-            if 'accelerator' in kwargs and kwargs['accelerator'] == 'cpu':
+            if kwargs.get("accelerator") in ("cpu", "auto"):
+                get_logger().warning("falling back to CPU due to torch.cuda.OutOfMemoryError")
                 kwargs.pop('accelerator')
-                m = NeuralProphet(**kwargs)
-                m.add_lagged_regressor(covars)
-                if country is not None:
-                    m.add_country_holidays(country_name=country)
-                metrics = _fit_model(m, df, epochs, early_stopping, validate)
+                m, metrics = _try_fitting(df,
+                        epochs,
+                        random_seed,
+                        early_stopping,
+                        country,
+                        validate,
+                        **kwargs)
                 return m, metrics
 
 
