@@ -209,9 +209,11 @@ def save_covar_metrics(
             )
 
 def log_retry(retry_state):
-    get_logger().warning(
-        f"Retrying, attempt {retry_state.attempt_number} after exception: {retry_state.outcome.exception()}"
-    )
+    if retry_state.outcome.failed:
+        exception = retry_state.outcome.exception()
+        get_logger().warning(
+            f"Retrying, attempt {retry_state.attempt_number} after exception: {exception}"
+        )
 
 def _fit_model(m, df, epochs, early_stopping, validate):
     if validate:
@@ -270,7 +272,7 @@ def train(
                 stop=stop_after_attempt(5),
                 wait=wait_exponential(multiplier=1, max=10),
                 retry=retry_if_exception_type(torch.cuda.OutOfMemoryError),
-                before_sleep=before_sleep(log_retry),
+                before_sleep=log_retry,
             ):
                 with attempt:
                     metrics = _fit_model(m, df, epochs, early_stopping, validate)
