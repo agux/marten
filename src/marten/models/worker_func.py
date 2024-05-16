@@ -20,7 +20,7 @@ from tenacity import (
     wait_exponential,
     Retrying,
     retry_if_exception_type,
-    before_sleep,
+    RetryError,
 )
 
 from marten.utils.holidays import get_holiday_region
@@ -311,20 +311,21 @@ def train(
                         validate,
                         **kwargs)
             return m, metrics
-        except torch.cuda.OutOfMemoryError as e:
-            # final attempt to train on CPU
-            # remove `accelerator` parameter from **kwargs
-            if kwargs.get("accelerator") in ("cpu", "auto"):
-                get_logger().warning("falling back to CPU due to torch.cuda.OutOfMemoryError")
-                kwargs.pop('accelerator')
-                m, metrics = _try_fitting(df,
-                        epochs,
-                        random_seed,
-                        early_stopping,
-                        country,
-                        validate,
-                        **kwargs)
-                return m, metrics
+        except RetryError as e:
+            if "finished raised OutOfMemoryError" in str(e):
+                # final attempt to train on CPU
+                # remove `accelerator` parameter from **kwargs
+                if kwargs.get("accelerator") in ("cpu", "auto"):
+                    get_logger().warning("falling back to CPU due to torch.cuda.OutOfMemoryError")
+                    kwargs.pop('accelerator')
+                    m, metrics = _try_fitting(df,
+                            epochs,
+                            random_seed,
+                            early_stopping,
+                            country,
+                            validate,
+                            **kwargs)
+                    return m, metrics
 
 
 def log_metrics_for_hyper_params(
