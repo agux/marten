@@ -331,6 +331,8 @@ def train(
                     "falling back to CPU due to torch.cuda.OutOfMemoryError"
                 )
                 return _train_with_cpu()
+            else:
+                raise e
 
 
 def log_metrics_for_hyper_params(
