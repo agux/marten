@@ -32,6 +32,24 @@ class GlobalProgressBar(ProgressBarBase):
             disable=not self.global_progress,
         )
 
+    def disable(self) -> None:
+        pass
+
+    def enable(self) -> None:
+        pass
+
+    def train_batch_idx(self) -> int:
+        pass
+
+    def val_batch_idx(self) -> int:
+        pass
+
+    def test_batch_idx(self) -> int:
+        pass
+
+    def predict_batch_idx(self) -> int:
+        pass
+
     # def on_train_epoch_start(self, trainer, pl_module):
     #     self.step_pb = tqdm(
     #         desc="Training",
