@@ -25,6 +25,7 @@ from tenacity import (
 
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
+from marten.utils.pl import GlobalProgressBar
 
 nan_inf_replacement = 99999.99999
 
@@ -215,6 +216,14 @@ def log_retry(retry_state):
             f"Retrying, attempt {retry_state.attempt_number} after exception: {exception}"
         )
 
+def _trainer_config():
+    #TODO: can we use custom trainer config to specify gpu and device?
+    config = {
+        "callbacks": [
+            GlobalProgressBar(False, False),    # suppress/disable progress bar display
+        ]
+    }
+    return config
 
 def _try_fitting(
     df,
@@ -228,7 +237,7 @@ def _try_fitting(
     set_log_level("ERROR")
     set_random_seed(random_seed)
 
-    m = NeuralProphet(**kwargs)
+    m = NeuralProphet(trainer_config=_trainer_config(), **kwargs)
     covars = [col for col in df.columns if col not in ("ds", "y")]
     m.add_lagged_regressor(covars)
     if country is not None:
@@ -243,7 +252,7 @@ def _try_fitting(
             metrics = m.fit(
                 train_df,
                 validation_df=test_df,
-                progress=None,
+                # progress=None,
                 epochs=epochs,
                 early_stopping=early_stopping,
                 freq="B",
@@ -251,7 +260,7 @@ def _try_fitting(
         else:
             metrics = m.fit(
                 df,
-                progress=None,
+                # progress=None,
                 epochs=epochs,
                 early_stopping=early_stopping,
                 freq="B",
