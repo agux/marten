@@ -237,8 +237,8 @@ def _try_fitting(
     set_log_level("ERROR")
     set_random_seed(random_seed)
 
-    # m = NeuralProphet(trainer_config=_trainer_config(), **kwargs)
-    m = NeuralProphet(**kwargs)
+    m = NeuralProphet(trainer_config=_trainer_config(), **kwargs)
+    # m = NeuralProphet(**kwargs)
     covars = [col for col in df.columns if col not in ("ds", "y")]
     m.add_lagged_regressor(covars)
     if country is not None:
