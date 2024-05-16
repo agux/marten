@@ -287,6 +287,18 @@ def train(
     validate=True,
     **kwargs,
 ):
+    def _train_with_cpu():
+        if kwargs.get("accelerator") in ("cpu", "auto"):
+            kwargs.pop('accelerator')
+            m, metrics = _try_fitting(df,
+                    epochs,
+                    random_seed,
+                    early_stopping,
+                    country,
+                    validate,
+                    **kwargs)
+            return m, metrics
+        
     with warnings.catch_warnings():
         # suppress swarming warning:
         # WARNING - (py.warnings._showwarnmsg) -
@@ -310,22 +322,15 @@ def train(
                         country,
                         validate,
                         **kwargs)
-            return m, metrics
+                    return m, metrics
         except RetryError as e:
-            if "finished raised OutOfMemoryError" in str(e):
+            if "OutOfMemoryError" in str(e):
                 # final attempt to train on CPU
                 # remove `accelerator` parameter from **kwargs
-                if kwargs.get("accelerator") in ("cpu", "auto"):
-                    get_logger().warning("falling back to CPU due to torch.cuda.OutOfMemoryError")
-                    kwargs.pop('accelerator')
-                    m, metrics = _try_fitting(df,
-                            epochs,
-                            random_seed,
-                            early_stopping,
-                            country,
-                            validate,
-                            **kwargs)
-                    return m, metrics
+                get_logger().warning(
+                    "falling back to CPU due to torch.cuda.OutOfMemoryError"
+                )
+                return _train_with_cpu()
 
 
 def log_metrics_for_hyper_params(
