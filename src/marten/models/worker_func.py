@@ -27,7 +27,7 @@ from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
 from marten.utils.pl import GlobalProgressBar
 
-nan_inf_replacement = 99999.99999
+LOSS_CAP = 99999.99999
 
 def merge_covar_df(
     anchor_symbol, anchor_df, cov_table, cov_symbol, feature, min_date, alchemyEngine
@@ -435,8 +435,8 @@ def log_metrics_for_hyper_params(
 
 
 def sanitize_loss(value):
-    global nan_inf_replacement
-    return nan_inf_replacement if math.isnan(value) or math.isinf(value) else value
+    global LOSS_CAP
+    return LOSS_CAP if math.isnan(value) or math.isinf(value) or abs(value) > LOSS_CAP else value
 
 
 def update_metrics_table(
