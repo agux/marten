@@ -237,8 +237,8 @@ def _try_fitting(
     set_log_level("ERROR")
     set_random_seed(random_seed)
 
-    m = NeuralProphet(trainer_config=_trainer_config(), **kwargs)
-    # m = NeuralProphet(**kwargs)
+    # m = NeuralProphet(trainer_config=_trainer_config(), **kwargs)
+    m = NeuralProphet(**kwargs)
     covars = [col for col in df.columns if col not in ("ds", "y")]
     m.add_lagged_regressor(covars)
     if country is not None:
@@ -253,7 +253,7 @@ def _try_fitting(
             metrics = m.fit(
                 train_df,
                 validation_df=test_df,
-                # progress=None,
+                progress=None,
                 epochs=epochs,
                 early_stopping=early_stopping,
                 freq="B",
@@ -261,7 +261,7 @@ def _try_fitting(
         else:
             metrics = m.fit(
                 df,
-                # progress=None,
+                progress=None,
                 epochs=epochs,
                 early_stopping=early_stopping,
                 freq="B",
@@ -298,7 +298,7 @@ def train(
                     validate,
                     **kwargs)
             return m, metrics
-        
+
     with warnings.catch_warnings():
         # suppress swarming warning:
         # WARNING - (py.warnings._showwarnmsg) -
@@ -332,6 +332,7 @@ def train(
                 )
                 return _train_with_cpu()
             else:
+                get_logger().exception("unhandled error!")
                 raise e
 
 
