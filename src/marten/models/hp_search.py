@@ -1031,7 +1031,7 @@ def get_hps_session(symbol, cutoff_date, resume):
                     "ts_date": cutoff_date,
                 },
             )
-        max_id = result.fetchone()[0]
+            max_id = result.fetchone()[0]
         if max_id is not None:
             return max_id
 
