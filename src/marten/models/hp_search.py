@@ -1050,7 +1050,7 @@ def get_hps_session(symbol, cutoff_date, resume):
                 "ts_date": cutoff_date,
             },
         )
-    return result.fetchone()[0]
+        return result.fetchone()[0]
 
 
 def main(args):
