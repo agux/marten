@@ -28,6 +28,7 @@ def configure_parser(parser):
             "Defaults to 100."
         ),
     )
+    # TODO: deprecate this or replace with hps_id?
     group2.add_argument(
         "--covar_set_id",
         action="store",
@@ -52,9 +53,10 @@ def configure_parser(parser):
         action="store",
         type=int,
         default=-1,
-        help=("Number or parallel workers (python processes) for training the model. "
-              "Defaults to using 80% of CPU cores available."
-        )
+        help=(
+            "Number or parallel workers (python processes) for training the model. "
+            "Defaults to using 80% of CPU cores available."
+        ),
     )
     parser.add_argument(
         "--batch_size",
@@ -92,9 +94,12 @@ def configure_parser(parser):
         "--accelerator", action="store_true", help="Use accelerator automatically"
     )
     parser.add_argument(
-        "--infer_holiday", action="store_true", 
-        help=("Infer holiday region based on anchor symbol's nature, "
-              "which will be utilized during covariate-searching and HP search.")
+        "--infer_holiday",
+        action="store_true",
+        help=(
+            "Infer holiday region based on anchor symbol's nature, "
+            "which will be utilized during covariate-searching and HP search."
+        ),
     )
     parser.add_argument(
         "--early_stopping",
@@ -102,10 +107,23 @@ def configure_parser(parser):
         help="Use early stopping during model fitting",
     )
     parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Continue from last covar calculation or HP search session. "
+            "If not specified, we'll start from scratch with latest time-series data, "
+            "which is the default behavior."
+        ),
+    )
+    parser.add_argument(
         "--method",
-        choices=['gs', 'bayesopt'],
+        choices=["gs", "bayesopt"],
         default="bayesopt",
-        help=("Search method to use. Available options are: gs (grid-search) and bayesopt (Bayesian optimization. This is the default)"),
+        help=(
+            "Search method to be used for HP search. "
+            "Available options are: gs (grid-search) "
+            "and bayesopt (Bayesian optimization. This is the default)"
+        ),
     )
     parser.add_argument(
         "--iteration",

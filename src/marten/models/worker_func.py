@@ -26,8 +26,10 @@ from tenacity import (
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
 from marten.utils.pl import GlobalProgressBar
+from marten.utils.neuralprophet import select_topk_features
 
 LOSS_CAP = 99999.99999
+
 
 def merge_covar_df(
     anchor_symbol, anchor_df, cov_table, cov_symbol, feature, min_date, alchemyEngine
@@ -40,14 +42,15 @@ def merge_covar_df(
         else:
             # using endogenous features as covariate
             merged_df = anchor_df[["ds", "y", feature]]
-        
+
         return merged_df
-    
+
     # `cov_symbol` may contain special characters such as `.IXIC`, or `H-FIN`. The dot and hyphen is not allowed in column alias.
     # Convert common special characters often seen in stock / index symbols to valid replacements as PostgreSQL table column alias.
     # cov_symbol_sanitized = cov_symbol.replace(".", "_").replace("-", "_")
     # cov_symbol_sanitized = f"{feature}_{cov_symbol_sanitized}"
     cov_symbol_sanitized = f"{feature}_{cov_symbol}"
+    cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
 
     match cov_table:
         case "bond_metrics_em" | "bond_metrics_em_view" | "currency_boc_safe_view":
@@ -55,10 +58,12 @@ def merge_covar_df(
                 select date ds, {feature} "{cov_symbol_sanitized}"
                 from {cov_table}
                 where date >= %(min_date)s
+                and date <= %(cutoff_date)s
                 order by date
             """
             params = {
                 "min_date": min_date,
+                "cutoff_date": cutoff_date,
             }
         case _:
             query = f"""
@@ -66,21 +71,21 @@ def merge_covar_df(
                 from {cov_table}
                 where symbol = %(cov_symbol)s
                 and date >= %(min_date)s
+                and date <= %(cutoff_date)s
                 order by date
             """
             params = {
                 "cov_symbol": cov_symbol,
                 "min_date": min_date,
+                "cutoff_date": cutoff_date,
             }
 
     with alchemyEngine.connect() as conn:
-        cov_symbol_df = pd.read_sql(
-            query, conn, params=params, parse_dates=["ds"]
-        )
+        cov_symbol_df = pd.read_sql(query, conn, params=params, parse_dates=["ds"])
 
     if cov_symbol_df.empty:
         return None
-    
+
     merged_df = pd.merge(anchor_df, cov_symbol_df, on="ds", how="left")
 
     return merged_df
@@ -112,7 +117,13 @@ def fit_with_covar(
     )
     if merged_df is None:
         # FIXME: sometimes merged_df is None even if there's data in table
-        logger.info("skipping covariate: %s, %s, %s, %s", cov_table, cov_symbol, feature, min_date)
+        logger.info(
+            "skipping covariate: %s, %s, %s, %s",
+            cov_table,
+            cov_symbol,
+            feature,
+            min_date,
+        )
         return None
 
     start_time = time.time()
@@ -150,17 +161,20 @@ def fit_with_covar(
     nan_count = merged_df.iloc[:, -1].isna().sum()
     # Assuming `nan_count` is a numpy.int64 value
     nan_count = int(nan_count)  # Convert to Python's native int type
-    save_covar_metrics(
-        anchor_symbol,
-        cov_table,
-        cov_symbol,
-        feature,
-        last_row,
-        fit_time,
-        timesteps,
-        nan_count,
-        alchemyEngine,
-    )
+    ts_cutoff_date = merged_df["ds"].max().strftime("%Y-%m-%d")
+    with alchemyEngine.begin() as conn:
+        save_covar_metrics(
+            anchor_symbol,
+            cov_table,
+            cov_symbol,
+            feature,
+            last_row,
+            fit_time,
+            timesteps,
+            nan_count,
+            ts_cutoff_date,
+            conn,
+        )
     return last_row
 
 
@@ -173,19 +187,18 @@ def save_covar_metrics(
     fit_time,
     timesteps,
     nan_count,
-    alchemyEngine,
+    ts_cutoff_date,
+    conn,
 ):
-    # Insert data into the table
-    with alchemyEngine.begin() as conn:
-        # Inserting DataFrame into the database table
-        for _, row in cov_metrics.iterrows():
-            conn.execute(
-                text(
-                    """
+    # Inserting DataFrame into the database table
+    for _, row in cov_metrics.iterrows():
+        conn.execute(
+            text(
+                """
                     INSERT INTO neuralprophet_corel 
-                    (symbol, cov_table, cov_symbol, feature, mae_val, rmse_val, loss_val, fit_time, timesteps, nan_count) 
-                    VALUES (:symbol, :cov_table, :cov_symbol, :feature, :mae_val, :rmse_val, :loss_val, :fit_time, :timesteps, :nan_count) 
-                    ON CONFLICT (symbol, cov_symbol, feature, cov_table) 
+                    (symbol, cov_table, cov_symbol, feature, mae_val, rmse_val, loss_val, fit_time, timesteps, nan_count, ts_date) 
+                    VALUES (:symbol, :cov_table, :cov_symbol, :feature, :mae_val, :rmse_val, :loss_val, :fit_time, :timesteps, :nan_count, :ts_date) 
+                    ON CONFLICT (symbol, cov_symbol, feature, cov_table, ts_date) 
                     DO UPDATE SET 
                         mae_val = EXCLUDED.mae_val, 
                         rmse_val = EXCLUDED.rmse_val, 
@@ -194,20 +207,22 @@ def save_covar_metrics(
                         timesteps = EXCLUDED.timesteps,
                         nan_count = EXCLUDED.nan_count
                 """
-                ),
-                {
-                    "symbol": anchor_symbol,
-                    "cov_table": cov_table,
-                    "cov_symbol": cov_symbol,
-                    "feature": feature,
-                    "mae_val": row["MAE_val"],
-                    "rmse_val": row["RMSE_val"],
-                    "loss_val": row["Loss_val"],
-                    "fit_time": (str(fit_time) + " seconds"),
-                    "timesteps": timesteps,
-                    "nan_count": nan_count,
-                },
-            )
+            ),
+            {
+                "symbol": anchor_symbol,
+                "cov_table": cov_table,
+                "cov_symbol": cov_symbol,
+                "feature": feature,
+                "ts_date": ts_cutoff_date,
+                "mae_val": row["MAE_val"],
+                "rmse_val": row["RMSE_val"],
+                "loss_val": row["Loss_val"],
+                "fit_time": (str(fit_time) + " seconds"),
+                "timesteps": timesteps,
+                "nan_count": nan_count,
+            },
+        )
+
 
 def log_retry(retry_state):
     if retry_state.outcome.failed:
@@ -216,14 +231,16 @@ def log_retry(retry_state):
             f"Retrying, attempt {retry_state.attempt_number} after exception: {exception}"
         )
 
+
 def _trainer_config():
-    #TODO: can we use custom trainer config to specify gpu and device?
+    # TODO: can we use custom trainer config to specify gpu and device?
     config = {
         "callbacks": [
-            GlobalProgressBar(False, False),    # suppress/disable progress bar display
+            GlobalProgressBar(False, False),  # suppress/disable progress bar display
         ]
     }
     return config
+
 
 def _try_fitting(
     df,
@@ -278,6 +295,7 @@ def _try_fitting(
         else:
             raise e
 
+
 def train(
     df,
     epochs=None,
@@ -289,14 +307,10 @@ def train(
 ):
     def _train_with_cpu():
         if kwargs.get("accelerator") in ("cpu", "auto"):
-            kwargs.pop('accelerator')
-            m, metrics = _try_fitting(df,
-                    epochs,
-                    random_seed,
-                    early_stopping,
-                    country,
-                    validate,
-                    **kwargs)
+            kwargs.pop("accelerator")
+            m, metrics = _try_fitting(
+                df, epochs, random_seed, early_stopping, country, validate, **kwargs
+            )
             return m, metrics
 
     with warnings.catch_warnings():
@@ -315,13 +329,15 @@ def train(
                 before_sleep=log_retry,
             ):
                 with attempt:
-                    m, metrics = _try_fitting(df,
+                    m, metrics = _try_fitting(
+                        df,
                         epochs,
                         random_seed,
                         early_stopping,
                         country,
                         validate,
-                        **kwargs)
+                        **kwargs,
+                    )
                     return m, metrics
         except RetryError as e:
             if "OutOfMemoryError" in str(e):
@@ -344,8 +360,11 @@ def log_metrics_for_hyper_params(
     random_seed,
     accelerator,
     covar_set_id,
+    hps_id,
     early_stopping,
     infer_holiday,
+    ranked_features,
+    topk_covar
 ):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
@@ -355,7 +374,7 @@ def log_metrics_for_hyper_params(
     # Otherwise we could proceed further code execution.
     param_str = json.dumps(params, sort_keys=True)
     hpid = hashlib.md5(param_str.encode("utf-8")).hexdigest()
-    if not new_metric_keys(anchor_symbol, hpid, param_str, covar_set_id, alchemyEngine):
+    if not new_metric_keys(anchor_symbol, hpid, param_str, covar_set_id, hps_id, alchemyEngine):
         logger.debug("Skip re-entry for %s: %s", anchor_symbol, param_str)
         with alchemyEngine.connect() as conn:
             result = conn.execute(
@@ -366,15 +385,14 @@ def log_metrics_for_hyper_params(
                         where model = :model
                         and anchor_symbol = :anchor_symbol
                         and hpid = :hpid
-                        and covar_set_id = :covar_set_id
+                        and hps_id = :hps_id
                     """
                 ),
                 {
                     "model": "NeuralProphet",
                     "anchor_symbol": anchor_symbol,
                     "hpid": hpid,
-                    # "hyper_params": param_str,
-                    "covar_set_id": covar_set_id,
+                    "hps_id": hps_id,
                 },
             )
             row = result.fetchone()
@@ -385,8 +403,13 @@ def log_metrics_for_hyper_params(
     start_time = time.time()
     metrics = None
     region = None
+
     if infer_holiday:
         region = get_holiday_region(alchemyEngine, anchor_symbol)
+
+    if topk_covar is not None:
+        df = select_topk_features(df, ranked_features, topk_covar)
+
     try:
         _, metrics = train(
             df,
@@ -423,7 +446,7 @@ def log_metrics_for_hyper_params(
     last_metric["MAE"] = sanitize_loss(last_metric["MAE"])
     last_metric["RMSE"] = sanitize_loss(last_metric["RMSE"])
     last_metric["Loss"] = sanitize_loss(last_metric["Loss"])
-    
+
     covars = [col for col in df.columns if col not in ("ds", "y")]
     logger.debug("params:%s\n#covars:%s\n%s", params, len(covars), last_metric)
 
@@ -436,6 +459,7 @@ def log_metrics_for_hyper_params(
         last_metric,
         fit_time,
         covar_set_id,
+        topk_covar
     )
 
     return last_metric["Loss_val"]
@@ -443,7 +467,11 @@ def log_metrics_for_hyper_params(
 
 def sanitize_loss(value):
     global LOSS_CAP
-    return LOSS_CAP if math.isnan(value) or math.isinf(value) or abs(value) > LOSS_CAP else value
+    return (
+        LOSS_CAP
+        if math.isnan(value) or math.isinf(value) or abs(value) > LOSS_CAP
+        else value
+    )
 
 
 def update_metrics_table(
@@ -455,6 +483,7 @@ def update_metrics_table(
     last_metric,
     fit_time,
     covar_set_id,
+    topk_covar,
 ):
     def action():
         with alchemyEngine.begin() as conn:
@@ -484,7 +513,8 @@ def update_metrics_table(
                         loss = :loss,
                         fit_time = :fit_time,
                         epochs = :epochs,
-                        tag = :tag
+                        tag = :tag,
+                        sub_topk = :sub_topk
                     WHERE
                         model = :model
                         AND anchor_symbol = :anchor_symbol
@@ -506,6 +536,7 @@ def update_metrics_table(
                     "loss": last_metric["Loss"],
                     "fit_time": (str(fit_time) + " seconds"),
                     "epochs": epochs,
+                    "sub_topk": topk_covar,
                 },
             )
 
@@ -516,21 +547,24 @@ def update_metrics_table(
             action()
 
 
-def new_metric_keys(anchor_symbol, hpid, hyper_params, covar_set_id, alchemyEngine):
+def new_metric_keys(
+    anchor_symbol, hpid, hyper_params, covar_set_id, hps_id, alchemyEngine
+):
     def action():
         try:
             with alchemyEngine.begin() as conn:
                 conn.execute(
                     text(
                         """
-                        INSERT INTO hps_metrics (model, anchor_symbol, hpid, hyper_params, covar_set_id) 
-                        VALUES (:model, :anchor_symbol, :hpid, :hyper_params, :covar_set_id)
+                        INSERT INTO hps_metrics (model, anchor_symbol, hpid, hyper_params, covar_set_id, hps_id) 
+                        VALUES (:model, :anchor_symbol, :hpid, :hyper_params, :covar_set_id, :hps_id)
                         """
                     ),
                     {
                         "model": "NeuralProphet",
                         "anchor_symbol": anchor_symbol,
                         "hpid": hpid,
+                        "hps_id": hps_id,
                         "hyper_params": hyper_params,
                         "covar_set_id": covar_set_id,
                     },
@@ -556,8 +590,10 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
         load_anchor_ts,
         augment_anchor_df_with_covars,
     )
+    from marten.utils.neuralprophet import layer_spec_to_list
     from types import SimpleNamespace
 
+    # TODO: how about cutoff date?
     query = """
         select
             *
@@ -571,7 +607,8 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
                     hyper_params,
                     loss_val,
                     covar_set_id,
-                    null nan_count
+                    null nan_count,
+                    sub_topk
                 from
                     hps_metrics
                 where
@@ -589,7 +626,8 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
                     null hyper_params,
                     loss_val,
                     null covar_set_id,
-                    nan_count
+                    nan_count,
+                    null sub_topk
                 from
                     neuralprophet_corel nc
                 where
@@ -631,20 +669,25 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
             (
                 "%s - found best setting in hps_metrics:\n"
                 "loss_val: %s\n"
-                "covar_set_id: %s"
+                "covar_set_id: %s\n"
+                "sub_topk: %s"
             ),
             symbol,
             best_setting["loss_val"],
             covar_set_id,
+            best_setting["sub_topk"],
         )
 
         hyperparams = json.loads(best_setting["hyper_params"])
-        df, _ = augment_anchor_df_with_covars(
+        df, _, ranked_features = augment_anchor_df_with_covars(
             df,
             SimpleNamespace(covar_set_id=covar_set_id, symbol=symbol),
             alchemyEngine,
             logger,
         )
+
+        if best_setting["sub_topk"] is not None:
+            df = select_topk_features(df, ranked_features, best_setting["sub_topk"])
     else:
         best_setting = best_setting.iloc[0]
         logger.info(
@@ -673,6 +716,16 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
             df["ds"].min().strftime("%Y-%m-%d"),
             alchemyEngine,
         )
+
+    if "ar_layers" not in hyperparams:
+        hyperparams["ar_layers"] = layer_spec_to_list(hyperparams["ar_layer_spec"])
+        hyperparams.pop("ar_layer_spec")
+    if "lagged_reg_layers" not in hyperparams:
+        hyperparams["lagged_reg_layers"] = layer_spec_to_list(
+            hyperparams["lagged_reg_layer_spec"]
+        )
+        hyperparams.pop("lagged_reg_layer_spec")
+
     return df, hyperparams, covar_set_id
 
 
@@ -790,7 +843,8 @@ def predict_best(
     futures = []
     with worker_client() as client:
         # train with validation
-        futures.append(client.submit(
+        futures.append(
+            client.submit(
                 train,
                 df=df,
                 country=region,
@@ -806,21 +860,23 @@ def predict_best(
             )
         )
         # train with full dataset without validation split
-        futures.append(client.submit(
-            train,
-            df=df,
-            country=region,
-            epochs=epochs,
-            random_seed=random_seed,
-            early_stopping=early_stopping,
-            weekly_seasonality=False,
-            daily_seasonality=False,
-            impute_missing=True,
-            validate=False,
-            n_forecasts=future_steps,
-            changepoints_range=1.0,
-            **params,
-        ))
+        futures.append(
+            client.submit(
+                train,
+                df=df,
+                country=region,
+                epochs=epochs,
+                random_seed=random_seed,
+                early_stopping=early_stopping,
+                weekly_seasonality=False,
+                daily_seasonality=False,
+                impute_missing=True,
+                validate=False,
+                n_forecasts=future_steps,
+                changepoints_range=1.0,
+                **params,
+            )
+        )
         results = client.gather(futures)
 
     metrics = results[0][1]

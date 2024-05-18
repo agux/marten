@@ -10,6 +10,7 @@ from dask.distributed import fire_and_forget
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
 from marten.utils.worker import await_futures, init_client
+from marten.utils.neuralprophet import layer_spec_to_list, select_topk_features
 from marten.models.worker_func import fit_with_covar, log_metrics_for_hyper_params
 
 from sqlalchemy import text
@@ -70,7 +71,7 @@ def _init_local_resource():
     return alchemyEngine, logger
 
 
-def load_anchor_ts(symbol, limit, alchemyEngine):
+def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None):
     ## support arbitrary types of symbol (could be from different tables, with different features available)
     tbl_cols_dict = {
         "index_daily_em_view": (
@@ -110,18 +111,26 @@ def load_anchor_ts(symbol, limit, alchemyEngine):
         SELECT {tbl_cols_dict[anchor_table]}
         FROM {anchor_table}
         where symbol = %(symbol)s
-        order by DS desc
     """
     params = {"symbol": symbol}
+
+    if cutoff_date is not None:
+        query += " and ds <= %(cutoff_date)s"
+        params["cutoff_date"] = cutoff_date
+
+    query += " order by DS desc"
+
     if limit > 0:
         query += " limit %(limit)s"
         params["limit"] = limit
+
     df = pd.read_sql(
         query,
         alchemyEngine,
         params=params,
         parse_dates=["ds"],
     )
+    # TODO: does the date sequence in the df affect NeuralProphet?
     # re-order rows by ds (which is a date column) descending (most recent date in the top row)
     df.sort_values(by="ds", ascending=False, inplace=True)
     return df, anchor_table
@@ -159,11 +168,15 @@ def _covar_symbols_from_table(anchor_symbol, min_date, table, feature):
     return cov_symbols
 
 
-def _pair_endogenous_covar_metrics(anchor_symbol, anchor_df, cov_table, features, args):
+def _pair_endogenous_covar_metrics(
+    anchor_symbol, anchor_df, cov_table, features, args, cutoff_date
+):
     global random_seed, client, futures
 
     # remove feature elements already exists in the neuralprophet_corel table.
-    features = _remove_measured_features(anchor_symbol, cov_table, features)
+    features = _remove_measured_features(
+        anchor_symbol, cov_table, features, cutoff_date
+    )
 
     if not features:
         return
@@ -215,11 +228,20 @@ def _pair_covar_metrics(
 def _load_covar_set(covar_set_id, alchemyEngine):
     query = """
         select
-            cov_symbol, cov_table, cov_feature feature
+            t1.cov_symbol cov_symbol, 
+            t1.cov_table cov_table, 
+            t1.cov_feature feature
         from
-            covar_set
+            covar_set t1
+        inner join neuralprophet_corel t2
+            on t1.symbol = t2.symbol
+            and t1.cov_table = t2.cov_table
+            and t1.cov_symbol = t2.cov_symbol
+            and t1.cov_feature = t2.feature
         where
-            id = %(covar_set_id)s
+            t1.id = %(covar_set_id)s
+        order by
+            t2.loss_val asc, t2.nan_count asc, t1.cov_table, t1.cov_symbol
     """
     params = {
         "covar_set_id": covar_set_id,
@@ -287,26 +309,30 @@ def _load_covars(
     if df.empty:
         return df, -1
 
-    with alchemyEngine.begin() as conn:
+    with alchemyEngine.connect() as conn:
         # check if the same set of covar features exists in `covar_set` table. If so, reuse the same set_id.
-        query = text(
-            """
-            select id, count(1) num
+        query = """
+            select id, count(*) num
             from covar_set
             where 
                 symbol = :symbol
-                and (cov_symbol, cov_table, cov_feature) IN :values
+                and id in (
+                    select id 
+                    from covar_set
+                    where
+                        symbol = :symbol
+                        (cov_symbol, cov_table, cov_feature) IN :values
+                )
             group by id
-            having count(1) = :num
-            order by id
+            having count(*) = :num
+            order by id desc
         """
-        )
         params = {
             "symbol": anchor_symbol,
             "values": tuple(df.itertuples(index=False, name=None)),
             "num": len(df),
         }
-        result = conn.execute(query, params)
+        result = conn.execute(text(query), params)
         first_row = result.first()
         covar_set_id = None
         if first_row is not None:
@@ -346,6 +372,8 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger):
         len(covars_df),
         covar_set_id,
     )
+
+    ranked_features = [f"{r["feature"]}_{r["cov_symbol"]}" for _, r in covars_df.iterrows()]
 
     # covars_df contain these columns: cov_symbol, cov_table, feature
     by_table_feature = covars_df.groupby(["cov_table", "feature"])
@@ -392,7 +420,7 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger):
     missing_values = missing_values[missing_values > 0]
     logger.info("count of missing values:\n%s", missing_values)
 
-    return merged_df, covar_set_id
+    return merged_df, covar_set_id, ranked_features
 
 
 def _get_layers(w_power=6, min_size=2, max_size=20):
@@ -409,15 +437,18 @@ def _get_layers(w_power=6, min_size=2, max_size=20):
     return layers
 
 
-def _search_space():
-    ar_layers, lagged_reg_layers = _get_layers(10, 1, 64), _get_layers(10, 1, 64)
+def _search_space(max_covars):
+    # ar_layers, lagged_reg_layers = _get_layers(10, 1, 64), _get_layers(10, 1, 64)
 
     ss = dict(
         batch_size=[None, 100, 200, 300, 400, 500],
-        n_lags=list(range(0, 61)),
-        yearly_seasonality=["auto"] + list(range(1, 61)),
-        ar_layers=[[]] + ar_layers,
-        lagged_reg_layers=[[]] + lagged_reg_layers,
+        n_lags=list(range(0, 60+1)),
+        yearly_seasonality=["auto"] + list(range(1, 60+1)),
+        # ar_layers=[[]] + ar_layers,
+        # lagged_reg_layers=[[]] + lagged_reg_layers,
+        ar_layer_spec=[None] + [(2**w, d) for w in range(1, 10+1) for d in range(1, 64+1)],
+        lagged_reg_layer_spec=[None] + [(w, d) for w in range(1, 10+1) for d in range(1, 64+1)],
+        topk_covar=list(range(2, max_covars+1))
     )
 
     return ss
@@ -448,7 +479,7 @@ def _init_search_grid():
     ]
     grid = ParameterGrid(param_grid)
     logger.info("size of grid: %d", len(grid))
-    return grid
+    return grid, param_grid
 
 
 def _cleanup_stale_keys():
@@ -465,7 +496,7 @@ def _cleanup_stale_keys():
         )
 
 
-def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, limit):
+def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
     global alchemyEngine, logger
 
     with alchemyEngine.connect() as conn:
@@ -477,6 +508,7 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, limit):
                 where model = :model
                     and anchor_symbol = :anchor_symbol
                     and covar_set_id = :covar_set_id
+                    and hps_id = :hps_id
                     and loss_val is not null
                 order by loss_val
                 limit :limit
@@ -486,6 +518,7 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, limit):
                 "model": model,
                 "anchor_symbol": anchor_symbol,
                 "covar_set_id": covar_set_id,
+                "hps_id": hps_id,
                 "limit": limit,
             },
         )
@@ -497,14 +530,16 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, limit):
         return tuples if len(tuples) > 0 else None
 
 
-def bayesopt(df, covar_set_id, args):
+def bayesopt(df, covar_set_id, hps_id, args, ranked_features):
     global alchemyEngine, logger, random_seed, client, futures
 
     _cleanup_stale_keys()
 
-    space = _search_space()
+    space = _search_space(args.max_covars)
 
-    df_future = client.scatter(df)
+    space_json = json.dumps(space, sort_keys=True)
+    args_json = json.dumps(vars(args), sort_keys=True)
+    update_hps_sessions(hps_id, "bayesopt", args_json, space_json)
 
     n_jobs = args.batch_size
 
@@ -512,23 +547,42 @@ def bayesopt(df, covar_set_id, args):
     def objective(params_batch):
         jobs = []
         for params in params_batch:
+            topk_covar = None
+            if "ar_layers" not in params:
+                params["ar_layers"] = layer_spec_to_list(params["ar_layer_spec"])
+                params.pop("ar_layer_spec")
+            if "lagged_reg_layers" not in params:
+                params["lagged_reg_layers"] = layer_spec_to_list(
+                    params["lagged_reg_layer_spec"]
+                )
+                params.pop("lagged_reg_layer_spec")
+            if "topk_covar" in params:
+                topk_covar = params["topk_covar"]
+                params.pop("topk_covar")
             future = client.submit(
                 log_metrics_for_hyper_params,
                 args.symbol,
-                df_future,
+                df,
                 params,
                 args.epochs,
                 random_seed,
                 "gpu" if args.accelerator else None,
                 covar_set_id,
+                hps_id,
                 args.early_stopping,
                 args.infer_holiday,
+                ranked_features,
+                topk_covar
             )
             jobs.append(future)
         return client.gather(jobs)
 
     warmstart_tuples = preload_warmstart_tuples(
-        "NeuralProphet", args.symbol, covar_set_id, args.batch_size * args.iteration
+        "NeuralProphet",
+        args.symbol,
+        covar_set_id,
+        hps_id,
+        args.batch_size * args.iteration,
     )
     if warmstart_tuples is not None:
         logger.info(
@@ -550,26 +604,44 @@ def bayesopt(df, covar_set_id, args):
     logger.info("best Loss_val:", results["best_objective"])
 
 
-def grid_search(df, covar_set_id, args):
+def grid_search(df, covar_set_id, hps_id, args, ranked_features):
     global alchemyEngine, logger, random_seed, client, futures
 
     _cleanup_stale_keys()
 
-    grid = _init_search_grid()
+    grid, raw_list = _init_search_grid()
 
-    df_future = client.scatter(df)
+    space_json = json.dumps(raw_list, sort_keys=True)
+    args_json = json.dumps(vars(args), sort_keys=True)
+    update_hps_sessions(hps_id, "grid_search", args_json, space_json)
+
     for params in grid:
+        topk_covar = None
+        if "ar_layers" not in params:
+                params["ar_layers"] = layer_spec_to_list(params["ar_layer_spec"])
+                params.pop("ar_layer_spec")
+        if "lagged_reg_layers" not in params:
+            params["lagged_reg_layers"] = layer_spec_to_list(
+                params["lagged_reg_layer_spec"]
+            )
+            params.pop("lagged_reg_layer_spec")
+        if "topk_covar" in params:
+            topk_covar = params["topk_covar"]
+            params.pop("topk_covar")
         future = client.submit(
             log_metrics_for_hyper_params,
             args.symbol,
-            df_future,
+            df,
             params,
             args.epochs,
             random_seed,
             "gpu" if args.accelerator else None,
             covar_set_id,
+            hps_id,
             args.early_stopping,
             args.infer_holiday,
+            ranked_features,
+            topk_covar
         )
         futures.append(future)
         # if too much pending task, then slow down for the tasks to be digested.
@@ -579,30 +651,59 @@ def grid_search(df, covar_set_id, args):
     # All tasks have completed at this point
 
 
-def _remove_measured_features(anchor_symbol, cov_table, features):
-    query = f"""
+def update_hps_sessions(id, method, search_params, search_space):
+    global alchemyEngine
+    update = """
+        update hps_sessions
+        set
+            "method" = :method,
+            search_params = :search_params,
+            search_space = :search_space
+        where
+            id = :id
+    """
+    params = {
+        "method": method,
+        "search_params": search_params,
+        "search_space": search_space,
+        "id": id,
+    }
+    with alchemyEngine.begin() as conn:
+        conn.execute(text(update), params)
+
+
+def _remove_measured_features(anchor_symbol, cov_table, features, ts_date=None):
+    query = """
         select feature
         from neuralprophet_corel
         where symbol = %(symbol)s
         and cov_table = %(cov_table)s
         and feature in %(features)s
     """
+    params = {
+        "symbol": anchor_symbol,
+        "cov_table": cov_table,
+        "features": tuple(features),
+    }
+    if ts_date is not None:
+        query += " and ts_date = %(ts_date)s"
+        params["ts_date"] = ts_date
     existing_features_pd = pd.read_sql(
         query,
         alchemyEngine,
-        params={
-            "symbol": anchor_symbol,
-            "cov_table": cov_table,
-            "features": tuple(features),
-        },
+        params=params,
     )
     # remove elements in the `features` list that exist in the existing_features_pd.
     features = list(set(features) - set(existing_features_pd["feature"]))
     return features
 
 
-def _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args):
-    features = _remove_measured_features(anchor_symbol, cov_table, features)
+def _covar_metric(
+    anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+):
+    features = _remove_measured_features(
+        anchor_symbol, cov_table, features, cutoff_date
+    )
     for feature in features:
 
         match cov_table:
@@ -634,11 +735,12 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
 
     anchor_symbol = args.symbol
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
+    cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
 
     # endogenous features of the anchor time series per se
     endogenous_features = [col for col in anchor_df.columns if col not in ("ds")]
     _pair_endogenous_covar_metrics(
-        anchor_symbol, anchor_df, anchor_table, endogenous_features, args
+        anchor_symbol, anchor_df, anchor_table, endogenous_features, args, cutoff_date
     )
 
     # for the rest of exogenous covariates, keep only the core features of anchor_df
@@ -654,7 +756,9 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "index_daily_em_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
+    _covar_metric(
+        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+    )
 
     # prep ETF covariates fund_etf_daily_em_view
     features = [
@@ -668,7 +772,9 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "fund_etf_daily_em_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
+    _covar_metric(
+        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+    )
 
     # prep bond covariates bond_metrics_em, cn_bond_indices_view
     features = [
@@ -694,7 +800,9 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "performance_benchmark_change_rate",
     ]
     cov_table = "bond_metrics_em_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
+    _covar_metric(
+        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+    )
 
     features = [
         "wealthindex_change",
@@ -713,7 +821,9 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "spotsettlementvolume_change_rate",
     ]
     cov_table = "cn_bond_indices_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
+    _covar_metric(
+        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+    )
 
     # prep US index covariates us_index_daily_sina
     features = [
@@ -725,7 +835,9 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "us_index_daily_sina_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
+    _covar_metric(
+        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+    )
 
     # prep HK index covariates hk_index_daily_sina
     features = [
@@ -735,7 +847,9 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "hk_index_daily_em_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
+    _covar_metric(
+        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+    )
 
     # prep CN bond: bond_zh_hs_daily_view
     features = [
@@ -746,7 +860,9 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "bond_zh_hs_daily_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
+    _covar_metric(
+        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+    )
 
     # prep CN stock features. Sync table & view column names
     features = [
@@ -760,7 +876,9 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "amt_change_rate",
     ]
     cov_table = "stock_zh_a_hist_em_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
+    _covar_metric(
+        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+    )
 
     # RMB exchange rate
     features = [
@@ -791,7 +909,9 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "mop_change_rate",
     ]
     cov_table = "currency_boc_safe_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
+    _covar_metric(
+        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+    )
 
     # SGE spot
     features = [
@@ -801,12 +921,16 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "spot_hist_sge_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
+    _covar_metric(
+        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+    )
 
     # Interbank interest rates
     features = ["change_rate"]
     cov_table = "interbank_rate_hist"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, min_date, args)
+    _covar_metric(
+        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+    )
 
     # TODO prep options
 
@@ -818,7 +942,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     # TODO cash inflow
 
 
-def univariate_baseline(anchor_df, args):
+def univariate_baseline(anchor_df, hps_id, args):
     global random_seed, client, default_params
     df = anchor_df[["ds", "y"]]
     df_future = client.scatter(df)
@@ -832,23 +956,119 @@ def univariate_baseline(anchor_df, args):
             random_seed,
             "gpu" if args.accelerator else None,
             0,
+            hps_id,
             args.early_stopping,
             args.infer_holiday,
+            None,
+            None
         )
     )
 
 
+def _covar_cutoff_date(symbol):
+    global alchemyEngine
+    with alchemyEngine.connect() as conn:
+        query = "SELECT max(ts_date) FROM neuralprophet_corel where symbol=:symbol"
+        result = conn.execute(text(query), {"symbol": symbol})
+        return result.fetchone()[0]
+
+
+def _hps_cutoff_date(symbol, model, method):
+    global alchemyEngine
+    with alchemyEngine.connect() as conn:
+        query = "SELECT max(ts_date) FROM hps_sessions where symbol=:symbol and model=:model and method=:method"
+        result = conn.execute(
+            text(query),
+            {
+                "symbol": symbol,
+                "model": model,
+                "method": method,
+            },
+        )
+        return result.fetchone()[0]
+
+
+def _get_cutoff_date(args):
+    global logger
+    resume = args.resume
+
+    today = time.strftime("%Y-%m-%d")
+
+    if not resume:
+        return today
+
+    covar_cutoff = today
+    hps_cutoff = today
+
+    if not args.hps_only:
+        cutoff_date = _covar_cutoff_date(args.symbol)
+        if cutoff_date is not None:
+            covar_cutoff = cutoff_date
+    if not args.covar_only:
+        cutoff_date = _hps_cutoff_date(args.symbol, "NeuralProphet", args.method)
+        if cutoff_date is not None:
+            hps_cutoff = cutoff_date
+
+    # return the smallest date between covar_cutoff and hps_cutoff
+    return min(covar_cutoff, hps_cutoff)
+
+
+def get_hps_session(symbol, cutoff_date, resume):
+    global alchemyEngine
+
+    if resume:
+        query = """
+            select max(id) 
+            from hps_sessions
+            where symbol = :symbol
+            and ts_date = :ts_date
+        """
+        with alchemyEngine.connect() as conn:
+            result = conn.execute(
+                text(query),
+                {
+                    "symbol": symbol,
+                    "ts_date": cutoff_date,
+                },
+            )
+        max_id = result.fetchone()[0]
+        if max_id is not None:
+            return max_id
+
+    with alchemyEngine.begin() as conn:
+        result = conn.execute(
+            text(
+                """
+                INSERT INTO hps_sessions (symbol, model, ts_date) 
+                VALUES (:symbol, :model, :ts_date)
+                RETURNING id
+                """
+            ),
+            {
+                "symbol": symbol,
+                "model": "NeuralProphet",
+                "ts_date": cutoff_date,
+            },
+        )
+    return result.fetchone()[0]
+
+
 def main(args):
-    global client, logger, futures, alchemyEngine, logger, random_seed
+    global client, logger, futures, alchemyEngine, random_seed
     t_start = time.time()
     try:
         init(args)
 
+        cutoff_date = _get_cutoff_date(args)
         anchor_df, anchor_table = load_anchor_ts(
-            args.symbol, args.timestep_limit, alchemyEngine
+            args.symbol, args.timestep_limit, alchemyEngine, cutoff_date
         )
+        cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
 
-        univariate_baseline(anchor_df, args)
+        hps_id = get_hps_session(args.symbol, cutoff_date, args.resume)
+        logger.info("HPS session ID: %s", hps_id)
+
+        univariate_baseline(anchor_df, hps_id, args)
 
         if not args.hps_only:
             t1_start = time.time()
@@ -865,13 +1085,16 @@ def main(args):
 
         if not args.covar_only:
             t2_start = time.time()
-            df, covar_set_id = augment_anchor_df_with_covars(
+            #TODO make good use of ranked_features together with topk HP search parameter
+            df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
                 anchor_df, args, alchemyEngine, logger
             )
+            df_future = client.scatter(df)
+            ranked_features_future = client.scatter(ranked_features)
             if args.method == "gs":
-                grid_search(df, covar_set_id, args)
+                grid_search(df_future, covar_set_id, hps_id, args, ranked_features_future)
             elif args.method == "bayesopt":
-                bayesopt(df, covar_set_id, args)
+                bayesopt(df_future, covar_set_id, hps_id, args, ranked_features_future)
             else:
                 raise ValueError(f"unsupported search method: {args.method}")
             logger.info(
