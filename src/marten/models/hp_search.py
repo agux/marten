@@ -1,5 +1,6 @@
 import os
 import time
+import datetime
 import argparse
 import json
 import multiprocessing
@@ -992,7 +993,7 @@ def _get_cutoff_date(args):
     global logger
     resume = args.resume
 
-    today = time.strftime("%Y-%m-%d")
+    today = datetime.date.today()
 
     if not resume:
         return today
