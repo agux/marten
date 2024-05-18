@@ -115,7 +115,7 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None):
     params = {"symbol": symbol}
 
     if cutoff_date is not None:
-        query += " and ds <= %(cutoff_date)s"
+        query += " and date <= %(cutoff_date)s"
         params["cutoff_date"] = cutoff_date
 
     query += " order by DS desc"
