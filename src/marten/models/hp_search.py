@@ -147,6 +147,7 @@ def _covar_symbols_from_table(anchor_symbol, anchor_df, table, feature, ts_date,
             {table} t
         where
             t.date in %(dates)s
+            and {feature} is not null
             and t.symbol <> %(anchor_symbol)s
             and t.symbol not in (
                 select
@@ -172,10 +173,11 @@ def _covar_symbols_from_table(anchor_symbol, anchor_df, table, feature, ts_date,
     }
     
     cov_symbols = pd.read_sql(query, alchemyEngine, params=params)
+    cov_symbols = cov_symbols[["symbol"]]
+    
+    logger.info("Identified %s candidate feature (%s) from table %s", len(cov_symbols), feature, table)
 
-    logger.info("Identified %s candidate feature (%s) from table %s", cov_symbols["num"], feature, table)
-
-    return cov_symbols[["symbol"]]
+    return cov_symbols
 
 
 def _pair_endogenous_covar_metrics(
@@ -716,7 +718,7 @@ def _covar_metric(
     )
     
     min_count = int(len(anchor_df)*(1-args.nan_limit))
-    
+
     for feature in features:
 
         match cov_table:
