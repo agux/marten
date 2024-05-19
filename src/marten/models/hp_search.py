@@ -309,7 +309,7 @@ def _load_covars(
         query += " and nan_count < %(nan_threshold)s"
         params["nan_threshold"] = nan_threshold
 
-    query += " ORDER BY loss_val asc, nan_count asc, cov_table, cov_symbol"
+    query += " ORDER BY ts_date desc, loss_val asc, nan_count asc, cov_table, cov_symbol"
     query += limit_clause
     df = pd.read_sql(
         query,
@@ -588,13 +588,15 @@ def bayesopt(df, covar_set_id, hps_id, args, ranked_features):
             jobs.append(future)
         return client.gather(jobs)
 
-    warmstart_tuples = preload_warmstart_tuples(
-        "NeuralProphet",
-        args.symbol,
-        covar_set_id,
-        hps_id,
-        args.batch_size * args.iteration,
-    )
+    warmstart_tuples=None
+    if args.resume:
+        warmstart_tuples = preload_warmstart_tuples(
+            "NeuralProphet",
+            args.symbol,
+            covar_set_id,
+            hps_id,
+            args.batch_size * args.iteration,
+        )
     if warmstart_tuples is not None:
         logger.info(
             "preloaded %s historical searched hyper-params for warm-start.",
@@ -1107,7 +1109,6 @@ def main(args):
 
         if not args.covar_only:
             t2_start = time.time()
-            #TODO make good use of ranked_features together with topk HP search parameter
             df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
                 anchor_df, args, alchemyEngine, logger
             )

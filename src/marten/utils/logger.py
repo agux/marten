@@ -62,12 +62,14 @@ def get_logger(name=None, role: Literal["client", "worker"] = "client") -> Logge
                 WorkerMessageFilter()
             )
         elif role == 'worker':
-            formatter = logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
+            pass
+            # formatter = logging.Formatter(
+            #     "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            #     datefmt="%Y-%m-%d %H:%M:%S",
+            # )
+
             # Disable propagation to the root logger
-            logger.propagate = False
+            # logger.propagate = False
 
 
     return logger
