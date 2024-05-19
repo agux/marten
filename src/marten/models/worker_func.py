@@ -173,7 +173,6 @@ def fit_with_covar(
             timesteps,
             nan_count,
             ts_cutoff_date,
-            last_row["epoch"] + 1,
             conn,
         )
     return last_row
@@ -189,11 +188,11 @@ def save_covar_metrics(
     timesteps,
     nan_count,
     ts_cutoff_date,
-    epochs,
     conn,
 ):
     # Inserting DataFrame into the database table
     for _, row in cov_metrics.iterrows():
+        epochs = row["epoch"] + 1
         conn.execute(
             text(
                 """

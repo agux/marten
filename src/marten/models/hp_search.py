@@ -137,7 +137,7 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None):
     return df, anchor_table
 
 
-def _covar_symbols_from_table(anchor_symbol, anchor_df, table, feature, ts_date, min_count):
+def _covar_symbols_from_table(anchor_symbol, dates, table, feature, ts_date, min_count):
     global alchemyEngine, logger, random_seed
     # get a list of symbols from the given table, of which metrics are not recorded yet
     query = f"""
@@ -168,13 +168,13 @@ def _covar_symbols_from_table(anchor_symbol, anchor_df, table, feature, ts_date,
         "anchor_symbol": anchor_symbol,
         "feature": feature,
         "ts_date": ts_date,
-        "dates": tuple(anchor_df["ds"]),
+        "dates": dates,
         "min_count": min_count,
     }
     
     cov_symbols = pd.read_sql(query, alchemyEngine, params=params)
     cov_symbols = cov_symbols[["symbol"]]
-    
+
     logger.info("Identified %s candidate feature (%s) from table %s", len(cov_symbols), feature, table)
 
     return cov_symbols
@@ -213,11 +213,10 @@ def _pair_endogenous_covar_metrics(
 
 
 def _pair_covar_metrics(
-    anchor_symbol, anchor_df, cov_table, cov_symbols, feature, args
+    anchor_symbol, anchor_df_future, cov_table, cov_symbols, feature, min_date, args
 ):
     global random_seed, client, futures
-    min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
-    anchor_df_future = client.scatter(anchor_df)
+    
     for symbol in cov_symbols["symbol"]:
         future = client.submit(
             fit_with_covar,
@@ -711,14 +710,16 @@ def _remove_measured_features(anchor_symbol, cov_table, features, ts_date=None):
 
 
 def _covar_metric(
-    anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+    anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
 ):
+    
+    min_date = min(dates).strftime("%Y-%m-%d")
+    cutoff_date = max(dates).strftime("%Y-%m-%d")
+
     features = _remove_measured_features(
         anchor_symbol, cov_table, features, cutoff_date
     )
     
-    min_count = int(len(anchor_df)*(1-args.nan_limit))
-
     for feature in features:
 
         match cov_table:
@@ -729,7 +730,7 @@ def _covar_metric(
                 cov_symbols = pd.DataFrame({"symbol": ["currency_exchange"]})
             case _:
                 cov_symbols = _covar_symbols_from_table(
-                    anchor_symbol, anchor_df, cov_table, feature, cutoff_date, min_count
+                    anchor_symbol, dates, cov_table, feature, cutoff_date, min_count
                 )
                 # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
                 cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
@@ -737,20 +738,24 @@ def _covar_metric(
         if not cov_symbols.empty and features:
             _pair_covar_metrics(
                 anchor_symbol,
-                anchor_df,
+                anchor_df_future,
                 cov_table,
                 cov_symbols,
                 feature,
+                min_date,
                 args,
             )
 
 
 def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
-    global random_seed
+    global random_seed, client
 
     anchor_symbol = args.symbol
-    min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
+    
+    # min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
     cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
+    min_count = int(len(anchor_df)*(1-args.nan_limit))
+    dates = tuple(anchor_df["ds"])
 
     # endogenous features of the anchor time series per se
     endogenous_features = [col for col in anchor_df.columns if col not in ("ds")]
@@ -760,6 +765,8 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
 
     # for the rest of exogenous covariates, keep only the core features of anchor_df
     anchor_df = anchor_df[["ds", "y"]]
+
+    anchor_df_future = client.scatter(anchor_df)
 
     # prep CN index covariates
     features = [
@@ -772,7 +779,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "index_daily_em_view"
     _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
     )
 
     # prep ETF covariates fund_etf_daily_em_view
@@ -788,7 +795,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "fund_etf_daily_em_view"
     _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
     )
 
     # prep bond covariates bond_metrics_em, cn_bond_indices_view
@@ -816,7 +823,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "bond_metrics_em_view"
     _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
     )
 
     features = [
@@ -837,7 +844,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "cn_bond_indices_view"
     _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
     )
 
     # prep US index covariates us_index_daily_sina
@@ -851,7 +858,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "us_index_daily_sina_view"
     _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
     )
 
     # prep HK index covariates hk_index_daily_sina
@@ -863,7 +870,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "hk_index_daily_em_view"
     _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
     )
 
     # prep CN bond: bond_zh_hs_daily_view
@@ -876,7 +883,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "bond_zh_hs_daily_view"
     _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
     )
 
     # prep CN stock features. Sync table & view column names
@@ -892,7 +899,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "stock_zh_a_hist_em_view"
     _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
     )
 
     # RMB exchange rate
@@ -925,7 +932,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "currency_boc_safe_view"
     _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
     )
 
     # SGE spot
@@ -937,14 +944,14 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "spot_hist_sge_view"
     _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
     )
 
     # Interbank interest rates
     features = ["change_rate"]
     cov_table = "interbank_rate_hist"
     _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, min_date, cutoff_date, args
+        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
     )
 
     # TODO prep options
