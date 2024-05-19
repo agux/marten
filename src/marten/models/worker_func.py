@@ -173,6 +173,7 @@ def fit_with_covar(
             timesteps,
             nan_count,
             ts_cutoff_date,
+            last_row["epoch"] + 1,
             conn,
         )
     return last_row
@@ -188,6 +189,7 @@ def save_covar_metrics(
     timesteps,
     nan_count,
     ts_cutoff_date,
+    epochs,
     conn,
 ):
     # Inserting DataFrame into the database table
@@ -196,8 +198,8 @@ def save_covar_metrics(
             text(
                 """
                     INSERT INTO neuralprophet_corel 
-                    (symbol, cov_table, cov_symbol, feature, mae_val, rmse_val, loss_val, fit_time, timesteps, nan_count, ts_date) 
-                    VALUES (:symbol, :cov_table, :cov_symbol, :feature, :mae_val, :rmse_val, :loss_val, :fit_time, :timesteps, :nan_count, :ts_date) 
+                    (symbol, cov_table, cov_symbol, feature, mae_val, rmse_val, loss_val, fit_time, timesteps, nan_count, ts_date, epochs) 
+                    VALUES (:symbol, :cov_table, :cov_symbol, :feature, :mae_val, :rmse_val, :loss_val, :fit_time, :timesteps, :nan_count, :ts_date, :epochs) 
                     ON CONFLICT (symbol, cov_symbol, feature, cov_table, ts_date) 
                     DO UPDATE SET 
                         mae_val = EXCLUDED.mae_val, 
@@ -205,7 +207,8 @@ def save_covar_metrics(
                         loss_val = EXCLUDED.loss_val,
                         fit_time = EXCLUDED.fit_time,
                         timesteps = EXCLUDED.timesteps,
-                        nan_count = EXCLUDED.nan_count
+                        nan_count = EXCLUDED.nan_count,
+                        epochs = EXCLUDED.epochs
                 """
             ),
             {
@@ -220,6 +223,7 @@ def save_covar_metrics(
                 "fit_time": (str(fit_time) + " seconds"),
                 "timesteps": timesteps,
                 "nan_count": nan_count,
+                "epochs": epochs,
             },
         )
 

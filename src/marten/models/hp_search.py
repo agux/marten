@@ -137,17 +137,17 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None):
     return df, anchor_table
 
 
-def _covar_symbols_from_table(anchor_symbol, min_date, table, feature):
+def _covar_symbols_from_table(anchor_symbol, anchor_df, table, feature, ts_date, min_count):
     global alchemyEngine, logger, random_seed
     # get a list of symbols from the given table, of which metrics are not recorded yet
     query = f"""
         select
-            distinct t.symbol
+            t.symbol symbol, count(*) num
         from
             {table} t
         where
-            t.symbol <> %(anchor_symbol)s
-            and t.date <= %(min_date)s
+            t.date in %(dates)s
+            and t.symbol <> %(anchor_symbol)s
             and t.symbol not in (
                 select
                     cov_symbol
@@ -157,16 +157,25 @@ def _covar_symbols_from_table(anchor_symbol, min_date, table, feature):
                     symbol = %(anchor_symbol)s
                     and cov_table = %(table)s
                     and feature = %(feature)s
+                    and ts_date = %(ts_date)s
             )
+        group by t.symbol
+        having count(*) >= %(min_count)s
     """
     params = {
         "table": table,
         "anchor_symbol": anchor_symbol,
         "feature": feature,
-        "min_date": min_date,
+        "ts_date": ts_date,
+        "dates": tuple(anchor_df["ds"]),
+        "min_count": min_count,
     }
+    
     cov_symbols = pd.read_sql(query, alchemyEngine, params=params)
-    return cov_symbols
+
+    logger.info("Identified %s candidate feature (%s) from table %s", cov_symbols["num"], feature, table)
+
+    return cov_symbols[["symbol"]]
 
 
 def _pair_endogenous_covar_metrics(
@@ -705,6 +714,9 @@ def _covar_metric(
     features = _remove_measured_features(
         anchor_symbol, cov_table, features, cutoff_date
     )
+    
+    min_count = int(len(anchor_df)*(1-args.nan_limit))
+    
     for feature in features:
 
         match cov_table:
@@ -715,7 +727,7 @@ def _covar_metric(
                 cov_symbols = pd.DataFrame({"symbol": ["currency_exchange"]})
             case _:
                 cov_symbols = _covar_symbols_from_table(
-                    anchor_symbol, min_date, cov_table, feature
+                    anchor_symbol, anchor_df, cov_table, feature, cutoff_date, min_count
                 )
                 # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
                 cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
