@@ -274,6 +274,7 @@ def _load_covars(
     feature=None,
     cutoff_date=None,
 ):
+    global logger
     sub_query = """
 		select
 			loss_val
@@ -324,6 +325,8 @@ def _load_covars(
     )
 
     if df.empty:
+        logger.warning("no covariates found for %s\nSQL: %s\nParameters:%s", 
+                       anchor_symbol, query, params)
         return df, -1
 
     with alchemyEngine.connect() as conn:
@@ -376,7 +379,7 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
     else:
         nan_threshold = round(len(df) * args.nan_limit, 0)
         covars_df, covar_set_id = _load_covars(
-            alchemyEngine, args.max_covars, args.symbol, nan_threshold, cutoff_date
+            alchemyEngine, args.max_covars, args.symbol, nan_threshold, cutoff_date=cutoff_date
         )
 
     if covars_df.empty:
@@ -1006,7 +1009,13 @@ def _covar_cutoff_date(symbol):
 def _hps_cutoff_date(symbol, model, method):
     global alchemyEngine
     with alchemyEngine.connect() as conn:
-        query = "SELECT max(ts_date) FROM hps_sessions where symbol=:symbol and model=:model and method=:method"
+        query = """
+            SELECT max(ts_date) 
+            FROM hps_sessions 
+            WHERE symbol=:symbol 
+                AND model=:model 
+                AND (method=:method OR method is null)
+        """
         result = conn.execute(
             text(query),
             {
