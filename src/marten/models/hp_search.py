@@ -341,7 +341,7 @@ def _load_covars(
                     from covar_set
                     where
                         symbol = :symbol
-                        (cov_symbol, cov_table, cov_feature) IN :values
+                        and (cov_symbol, cov_table, cov_feature) IN :values
                 )
             group by id
             having count(*) = :num
