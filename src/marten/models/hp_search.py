@@ -573,7 +573,7 @@ def bayesopt(df, covar_set_id, hps_id, args, ranked_features):
     args_dict = {k: v for k, v in vars(args).items() if not callable(v)}
     space_json = json.dumps(space, sort_keys=True)
     args_json = json.dumps(args_dict, sort_keys=True)
-    update_hps_sessions(hps_id, "bayesopt", args_json, space_json)
+    update_hps_sessions(hps_id, "bayesopt", args_json, space_json, covar_set_id)
 
     n_jobs = args.batch_size
 
@@ -581,18 +581,6 @@ def bayesopt(df, covar_set_id, hps_id, args, ranked_features):
     def objective(params_batch):
         jobs = []
         for params in params_batch:
-            topk_covar = None
-            if "ar_layers" not in params:
-                params["ar_layers"] = layer_spec_to_list(params["ar_layer_spec"])
-                params.pop("ar_layer_spec")
-            if "lagged_reg_layers" not in params:
-                params["lagged_reg_layers"] = layer_spec_to_list(
-                    params["lagged_reg_layer_spec"]
-                )
-                params.pop("lagged_reg_layer_spec")
-            if "topk_covar" in params:
-                topk_covar = params["topk_covar"]
-                params.pop("topk_covar")
             future = client.submit(
                 log_metrics_for_hyper_params,
                 args.symbol,
@@ -606,7 +594,6 @@ def bayesopt(df, covar_set_id, hps_id, args, ranked_features):
                 args.early_stopping,
                 args.infer_holiday,
                 ranked_features,
-                topk_covar
             )
             jobs.append(future)
         return client.gather(jobs)
@@ -652,18 +639,6 @@ def grid_search(df, covar_set_id, hps_id, args, ranked_features):
     update_hps_sessions(hps_id, "grid_search", args_json, space_json)
 
     for params in grid:
-        topk_covar = None
-        if "ar_layers" not in params:
-                params["ar_layers"] = layer_spec_to_list(params["ar_layer_spec"])
-                params.pop("ar_layer_spec")
-        if "lagged_reg_layers" not in params:
-            params["lagged_reg_layers"] = layer_spec_to_list(
-                params["lagged_reg_layer_spec"]
-            )
-            params.pop("lagged_reg_layer_spec")
-        if "topk_covar" in params:
-            topk_covar = params["topk_covar"]
-            params.pop("topk_covar")
         future = client.submit(
             log_metrics_for_hyper_params,
             args.symbol,
@@ -677,7 +652,6 @@ def grid_search(df, covar_set_id, hps_id, args, ranked_features):
             args.early_stopping,
             args.infer_holiday,
             ranked_features,
-            topk_covar
         )
         futures.append(future)
         # if too much pending task, then slow down for the tasks to be digested.
@@ -687,7 +661,7 @@ def grid_search(df, covar_set_id, hps_id, args, ranked_features):
     # All tasks have completed at this point
 
 
-def update_hps_sessions(id, method, search_params, search_space):
+def update_hps_sessions(id, method, search_params, search_space, covar_set_id):
     global alchemyEngine
     update = """
         update hps_sessions
@@ -695,6 +669,7 @@ def update_hps_sessions(id, method, search_params, search_space):
             "method" = :method,
             search_params = :search_params,
             search_space = :search_space
+            covar_set_id = :covar_set_id
         where
             id = :id
     """
@@ -702,6 +677,7 @@ def update_hps_sessions(id, method, search_params, search_space):
         "method": method,
         "search_params": search_params,
         "search_space": search_space,
+        "covar_set_id": covar_set_id,
         "id": id,
     }
     with alchemyEngine.begin() as conn:
@@ -1007,7 +983,6 @@ def univariate_baseline(anchor_df, hps_id, args):
             args.early_stopping,
             args.infer_holiday,
             None,
-            None
         )
     )
 

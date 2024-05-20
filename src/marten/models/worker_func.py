@@ -26,7 +26,7 @@ from tenacity import (
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
 from marten.utils.pl import GlobalProgressBar
-from marten.utils.neuralprophet import select_topk_features
+from marten.utils.neuralprophet import select_topk_features, layer_spec_to_list
 
 LOSS_CAP = 99999.99999
 
@@ -367,10 +367,14 @@ def log_metrics_for_hyper_params(
     early_stopping,
     infer_holiday,
     ranked_features,
-    topk_covar
 ):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
+
+    topk_covar = None
+    if "topk_covar" in params:
+        topk_covar = params["topk_covar"]
+        params.pop("topk_covar")
 
     # to support distributed processing, we try to insert a new record (with primary keys only)
     # into hps_metrics first. If we hit duplicated key error, return None.
@@ -402,6 +406,15 @@ def log_metrics_for_hyper_params(
             if row is not None:
                 loss_val = row[0]
             return loss_val
+
+    if "ar_layers" not in params:
+        params["ar_layers"] = layer_spec_to_list(params["ar_layer_spec"])
+        params.pop("ar_layer_spec")
+    if "lagged_reg_layers" not in params:
+        params["lagged_reg_layers"] = layer_spec_to_list(
+            params["lagged_reg_layer_spec"]
+        )
+        params.pop("lagged_reg_layer_spec")
 
     start_time = time.time()
     metrics = None
