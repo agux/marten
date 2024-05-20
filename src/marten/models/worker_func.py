@@ -687,6 +687,7 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
             SimpleNamespace(covar_set_id=covar_set_id, symbol=symbol),
             alchemyEngine,
             logger,
+            datetime.now().strftime("%Y%m%d"),
         )
 
         if best_setting["sub_topk"] is not None:

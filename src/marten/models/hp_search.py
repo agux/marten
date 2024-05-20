@@ -272,6 +272,7 @@ def _load_covars(
     nan_threshold=None,
     cov_table=None,
     feature=None,
+    cutoff_date=None,
 ):
     sub_query = """
 		select
@@ -282,6 +283,9 @@ def _load_covars(
 			symbol = %(anchor_symbol)s
 			and cov_symbol = %(anchor_symbol)s
 			and feature = 'y'
+            and ts_date <= %(ts_date)s
+			order by ts_date desc
+			limit 1
     """
     query = f"""
         select DISTINCT ON (ts_date, loss_val, nan_count, cov_table, cov_symbol)
@@ -295,6 +299,7 @@ def _load_covars(
     limit_clause = ""
     params = {
         "anchor_symbol": anchor_symbol,
+        "ts_date": cutoff_date,
     }
     if max_covars > 0:
         params["limit"] = max_covars
@@ -363,7 +368,7 @@ def _load_covars(
     return df, covar_set_id
 
 
-def augment_anchor_df_with_covars(df, args, alchemyEngine, logger):
+def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
     merged_df = df[["ds", "y"]]
     if args.covar_set_id is not None:
         covar_set_id = args.covar_set_id
@@ -371,7 +376,7 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger):
     else:
         nan_threshold = round(len(df) * args.nan_limit, 0)
         covars_df, covar_set_id = _load_covars(
-            alchemyEngine, args.max_covars, args.symbol, nan_threshold
+            alchemyEngine, args.max_covars, args.symbol, nan_threshold, cutoff_date
         )
 
     if covars_df.empty:
@@ -1043,10 +1048,19 @@ def get_hps_session(symbol, cutoff_date, resume):
 
     if resume:
         query = """
-            select max(id) 
-            from hps_sessions
-            where symbol = :symbol
-            and ts_date = :ts_date
+            select max(id) from (
+                select max(id) id
+                from hps_sessions
+                where symbol = :symbol
+                and ts_date = :ts_date
+                
+                union all
+                
+                select max(id) id
+                from hps_sessions
+                where symbol = :symbol
+                and search_space is null
+            )
         """
         with alchemyEngine.connect() as conn:
             result = conn.execute(
@@ -1091,7 +1105,7 @@ def main(args):
         cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
 
         hps_id = get_hps_session(args.symbol, cutoff_date, args.resume)
-        logger.info("HPS session ID: %s", hps_id)
+        logger.info("HPS session ID: %s, Cutoff date: %s", hps_id, cutoff_date)
 
         univariate_baseline(anchor_df, hps_id, args)
 
@@ -1111,7 +1125,7 @@ def main(args):
         if not args.covar_only:
             t2_start = time.time()
             df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
-                anchor_df, args, alchemyEngine, logger
+                anchor_df, args, alchemyEngine, logger, cutoff_date
             )
             df_future = client.scatter(df)
             ranked_features_future = client.scatter(ranked_features)
