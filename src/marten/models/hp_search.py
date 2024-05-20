@@ -527,6 +527,13 @@ def _cleanup_stale_keys():
             )
         )
 
+def hp_deserializer(dct):
+    tuple_props = ['ar_layer_spec', 'lagged_reg_layer_spec']
+
+    for key, value in dct.items():
+        if key in tuple_props and isinstance(value, list):
+            dct[key] = tuple(value)
+    return dct
 
 def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
     global alchemyEngine, logger
@@ -557,7 +564,7 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
 
         tuples = []
         for row in results:
-            tuples.append((json.loads(row[0]), row[1]))
+            tuples.append((json.loads(row[0], object_hook=hp_deserializer), row[1]))
 
         return tuples if len(tuples) > 0 else None
 
