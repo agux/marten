@@ -542,7 +542,7 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
         results = conn.execute(
             text(
                 """
-                select hyper_params, loss_val
+                select hyper_params, loss_val, sub_topk
                 from hps_metrics
                 where model = :model
                     and anchor_symbol = :anchor_symbol
@@ -564,7 +564,10 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
 
         tuples = []
         for row in results:
-            tuples.append((json.loads(row[0], object_hook=hp_deserializer), row[1]))
+            param_dict = json.loads(row[0], object_hook=hp_deserializer)
+            if "topk_covar" not in param_dict:
+                param_dict["topk_covar"] = row[2]
+            tuples.append((param_dict, row[1]))
 
         return tuples if len(tuples) > 0 else None
 
