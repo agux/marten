@@ -284,7 +284,7 @@ def _load_covars(
 			and feature = 'y'
     """
     query = f"""
-        select DISTINCT ON (loss_val, nan_count, cov_table, cov_symbol)
+        select DISTINCT ON (ts_date, loss_val, nan_count, cov_table, cov_symbol)
             cov_symbol, cov_table, feature
         from
             neuralprophet_corel
@@ -309,6 +309,7 @@ def _load_covars(
         query += " and nan_count < %(nan_threshold)s"
         params["nan_threshold"] = nan_threshold
 
+    # Note: SELECT DISTINCT ON expressions must match initial ORDER BY expressions
     query += " ORDER BY ts_date desc, loss_val asc, nan_count asc, cov_table, cov_symbol"
     query += limit_clause
     df = pd.read_sql(
