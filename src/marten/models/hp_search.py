@@ -370,6 +370,36 @@ def _load_covars(
 
     return df, covar_set_id
 
+def _load_covar_feature(cov_table, feature, symbols):
+    match cov_table:
+        case "bond_metrics_em" | "bond_metrics_em_view":
+            query = f"""
+                SELECT 'bond' ID, date DS, {feature} y
+                FROM {cov_table}
+                order by DS asc
+            """
+            table_feature_df = pd.read_sql(query, alchemyEngine, parse_dates=["ds"])
+        case "currency_boc_safe_view":
+            query = f"""
+                SELECT 'currency_exchange' ID, date DS, {feature} y
+                FROM {cov_table}
+                order by DS asc
+            """
+            table_feature_df = pd.read_sql(query, alchemyEngine, parse_dates=["ds"])
+        case _:
+            query = f"""
+                SELECT symbol ID, date DS, {feature} y
+                FROM {cov_table}
+                where symbol in %(symbols)s
+                order by ID, DS asc
+            """
+            params = {
+                "symbols": tuple(symbols),
+            }
+            table_feature_df = pd.read_sql(
+                query, alchemyEngine, params=params, parse_dates=["ds"]
+            )
+    return table_feature_df
 
 def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
     merged_df = df[["ds", "y"]]
@@ -401,26 +431,8 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
         ## load covariate time series from different tables and/or features
         cov_table = group1[0]
         feature = group1[1]
-        if cov_table != "bond_metrics_em" and cov_table != "bond_metrics_em_view":
-            query = f"""
-                SELECT symbol ID, date DS, {feature} y
-                FROM {cov_table}
-                where symbol in %(symbols)s
-                order by ID, DS asc
-            """
-            params = {
-                "symbols": tuple(sdf1["cov_symbol"]),
-            }
-            table_feature_df = pd.read_sql(
-                query, alchemyEngine, params=params, parse_dates=["ds"]
-            )
-        else:
-            query = f"""
-                SELECT 'bond' ID, date DS, {feature} y
-                FROM {cov_table}
-                order by DS asc
-            """
-            table_feature_df = pd.read_sql(query, alchemyEngine, parse_dates=["ds"])
+
+        table_feature_df = _load_covar_feature(cov_table, feature, sdf1["cov_symbol"])
 
         # merge and append the feature column of table_feature_df to merged_df, by matching dates
         # split table_feature_df by symbol column
