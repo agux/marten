@@ -569,8 +569,10 @@ def bayesopt(df, covar_set_id, hps_id, args, ranked_features):
 
     space = _search_space(args.max_covars)
 
+    # Convert args to a dictionary, excluding non-serializable items
+    args_dict = {k: v for k, v in vars(args).items() if not callable(v)}
     space_json = json.dumps(space, sort_keys=True)
-    args_json = json.dumps(vars(args), sort_keys=True)
+    args_json = json.dumps(args_dict, sort_keys=True)
     update_hps_sessions(hps_id, "bayesopt", args_json, space_json)
 
     n_jobs = args.batch_size
