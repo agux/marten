@@ -668,7 +668,7 @@ def update_hps_sessions(id, method, search_params, search_space, covar_set_id):
         set
             "method" = :method,
             search_params = :search_params,
-            search_space = :search_space
+            search_space = :search_space,
             covar_set_id = :covar_set_id
         where
             id = :id
