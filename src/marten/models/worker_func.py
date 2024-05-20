@@ -374,7 +374,7 @@ def log_metrics_for_hyper_params(
     topk_covar = None
     if "topk_covar" in params:
         topk_covar = params["topk_covar"]
-        params.pop("topk_covar")
+        # params.pop("topk_covar")
 
     # to support distributed processing, we try to insert a new record (with primary keys only)
     # into hps_metrics first. If we hit duplicated key error, return None.

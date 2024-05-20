@@ -570,6 +570,7 @@ def bayesopt(df, covar_set_id, hps_id, args, ranked_features):
     space = _search_space(args.max_covars)
 
     # Convert args to a dictionary, excluding non-serializable items
+    #FIXME: no need to update the table each time, especially in resume mode?
     args_dict = {k: v for k, v in vars(args).items() if not callable(v)}
     space_json = json.dumps(space, sort_keys=True)
     args_json = json.dumps(args_dict, sort_keys=True)
