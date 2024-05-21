@@ -742,6 +742,8 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
             hyperparams["lagged_reg_layer_spec"]
         )
         hyperparams.pop("lagged_reg_layer_spec")
+    if "topk_covar" in hyperparams:
+        hyperparams.pop("topk_covar")
 
     return df, hyperparams, covar_set_id
 

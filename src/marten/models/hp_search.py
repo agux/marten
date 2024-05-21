@@ -478,8 +478,9 @@ def _search_space(max_covars):
         yearly_seasonality=["auto"] + list(range(1, 60+1)),
         # ar_layers=[[]] + ar_layers,
         # lagged_reg_layers=[[]] + lagged_reg_layers,
-        ar_layer_spec=[None] + [(2**w, d) for w in range(1, 10+1) for d in range(1, 64+1)],
-        lagged_reg_layer_spec=[None] + [(w, d) for w in range(1, 10+1) for d in range(1, 64+1)],
+        # TODO: to reduce json de/serialization complexity, can we use list of 2-D lists instead of tuples?
+        ar_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
+        lagged_reg_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
         topk_covar=list(range(2, max_covars+1))
     )
 
@@ -564,9 +565,10 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
 
         tuples = []
         for row in results:
-            param_dict = json.loads(row[0], object_hook=hp_deserializer)
-            if "topk_covar" not in param_dict:
-                param_dict["topk_covar"] = row[2]
+            # param_dict = json.loads(row[0], object_hook=hp_deserializer)
+            param_dict = json.loads(row[0])
+            # if "topk_covar" not in param_dict:
+            #     param_dict["topk_covar"] = row[2]
             tuples.append((param_dict, row[1]))
 
         return tuples if len(tuples) > 0 else None
