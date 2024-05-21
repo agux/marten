@@ -478,7 +478,6 @@ def _search_space(max_covars):
         yearly_seasonality=["auto"] + list(range(1, 60+1)),
         # ar_layers=[[]] + ar_layers,
         # lagged_reg_layers=[[]] + lagged_reg_layers,
-        # TODO: to reduce json de/serialization complexity, can we use list of 2-D lists instead of tuples?
         ar_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
         lagged_reg_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
         topk_covar=list(range(2, max_covars+1))

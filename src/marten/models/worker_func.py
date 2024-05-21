@@ -309,12 +309,12 @@ def train(
     **kwargs,
 ):
     def _train_with_cpu():
-        if kwargs.get("accelerator") in ("cpu", "auto"):
+        if "accelerator" in kwargs and kwargs.get("accelerator") in ("cpu", "auto"):
             kwargs.pop("accelerator")
-            m, metrics = _try_fitting(
-                df, epochs, random_seed, early_stopping, country, validate, **kwargs
-            )
-            return m, metrics
+        m, metrics = _try_fitting(
+            df, epochs, random_seed, early_stopping, country, validate, **kwargs
+        )
+        return m, metrics
 
     with warnings.catch_warnings():
         # suppress swarming warning:
@@ -371,11 +371,6 @@ def log_metrics_for_hyper_params(
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
-    topk_covar = None
-    if "topk_covar" in params:
-        topk_covar = params["topk_covar"]
-        # params.pop("topk_covar")
-
     # to support distributed processing, we try to insert a new record (with primary keys only)
     # into hps_metrics first. If we hit duplicated key error, return None.
     # Otherwise we could proceed further code execution.
@@ -415,6 +410,11 @@ def log_metrics_for_hyper_params(
             params["lagged_reg_layer_spec"]
         )
         params.pop("lagged_reg_layer_spec")
+    
+    topk_covar = None
+    if "topk_covar" in params:
+        topk_covar = params["topk_covar"]
+        # params.pop("topk_covar")
 
     start_time = time.time()
     metrics = None
