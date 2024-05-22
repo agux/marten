@@ -11,7 +11,6 @@ from dask.distributed import fire_and_forget
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
 from marten.utils.worker import await_futures, init_client
-from marten.utils.neuralprophet import layer_spec_to_list, select_topk_features
 from marten.models.worker_func import fit_with_covar, log_metrics_for_hyper_params
 
 from sqlalchemy import text
@@ -329,7 +328,7 @@ def _load_covars(
                        anchor_symbol, query, params)
         return df, -1
 
-    with alchemyEngine.connect() as conn:
+    with alchemyEngine.begin() as conn: # need to use transaction for inserting new covar_set records.
         # check if the same set of covar features exists in `covar_set` table. If so, reuse the same set_id.
         query = """
             select id, count(*) num
