@@ -309,7 +309,7 @@ def train(
     **kwargs,
 ):
     def _train_with_cpu():
-        if "accelerator" in kwargs and kwargs.get("accelerator") in ("cpu", "auto"):
+        if "accelerator" in kwargs and kwargs.get("accelerator") in ("gpu", "auto"):
             kwargs.pop("accelerator")
         m, metrics = _try_fitting(
             df, epochs, random_seed, early_stopping, country, validate, **kwargs
