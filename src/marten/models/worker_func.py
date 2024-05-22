@@ -444,6 +444,7 @@ def log_metrics_for_hyper_params(
             validate=True,
             country=region,
             changepoints_range=1.0,
+            optimizer="AdamW" if "optimizer" not in params else params["optimizer"],
         )
     except ValueError as e:
         logger.warning(str(e))
