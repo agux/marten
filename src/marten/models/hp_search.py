@@ -480,7 +480,8 @@ def _search_space(max_covars):
         # lagged_reg_layers=[[]] + lagged_reg_layers,
         ar_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
         lagged_reg_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
-        topk_covar=list(range(2, max_covars+1))
+        topk_covar=list(range(2, max_covars+1)),
+        optimizer=["AdamW", "SGD"],
     )
 
     return ss
@@ -566,8 +567,11 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
         for row in results:
             # param_dict = json.loads(row[0], object_hook=hp_deserializer)
             param_dict = json.loads(row[0])
-            # if "topk_covar" not in param_dict:
-            #     param_dict["topk_covar"] = row[2]
+            # Fill in default values if not exists in historical HP
+            # To match the size of tensors in bayesopt
+            if "optimizer" not in param_dict:
+                param_dict["optimizer"] = "AdamW"
+
             tuples.append((param_dict, row[1]))
 
         return tuples if len(tuples) > 0 else None

@@ -28,7 +28,7 @@ from marten.utils.logger import get_logger
 from marten.utils.pl import GlobalProgressBar
 from marten.utils.neuralprophet import select_topk_features, layer_spec_to_list
 
-LOSS_CAP = 99999.99999
+LOSS_CAP = 99.99
 
 
 def merge_covar_df(
