@@ -3,6 +3,7 @@ import time
 import datetime
 import argparse
 import json
+import math
 import multiprocessing
 import pandas as pd
 from dotenv import load_dotenv
@@ -575,22 +576,8 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
 
         return tuples if len(tuples) > 0 else None
 
-
-def bayesopt(df, covar_set_id, hps_id, args, ranked_features):
-    global alchemyEngine, logger, random_seed, client, futures
-
-    _cleanup_stale_keys()
-
-    space = _search_space(args.max_covars)
-
-    # Convert args to a dictionary, excluding non-serializable items
-    #FIXME: no need to update the table each time, especially in resume mode?
-    args_dict = {k: v for k, v in vars(args).items() if not callable(v)}
-    space_json = json.dumps(space, sort_keys=True)
-    args_json = json.dumps(args_dict, sort_keys=True)
-    update_hps_sessions(hps_id, "bayesopt", args_json, space_json, covar_set_id)
-
-    n_jobs = args.batch_size
+def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args, iteration, resume):
+    global logger, client
 
     @scheduler.custom(n_jobs=n_jobs)
     def objective(params_batch):
@@ -612,15 +599,15 @@ def bayesopt(df, covar_set_id, hps_id, args, ranked_features):
             )
             jobs.append(future)
         return client.gather(jobs)
-
+    
     warmstart_tuples=None
-    if args.resume:
+    if resume:
         warmstart_tuples = preload_warmstart_tuples(
             "NeuralProphet",
             args.symbol,
             covar_set_id,
             hps_id,
-            args.batch_size * args.iteration,
+            args.batch_size * iteration,
         )
     if warmstart_tuples is not None:
         logger.info(
@@ -633,13 +620,46 @@ def bayesopt(df, covar_set_id, hps_id, args, ranked_features):
         objective,
         dict(
             initial_random=n_jobs,
-            num_iteration=args.iteration,
+            num_iteration=iteration,
             initial_custom=warmstart_tuples,
         ),
     )
     results = tuner.minimize()
     logger.info("best parameters:", results["best_params"])
     logger.info("best Loss_val:", results["best_objective"])
+
+
+def bayesopt(df, covar_set_id, hps_id, ranked_features):
+    global logger, args
+
+    _cleanup_stale_keys()
+
+    space = _search_space(args.max_covars)
+
+    # Convert args to a dictionary, excluding non-serializable items
+    #FIXME: no need to update the table each time, especially in resume mode?
+    args_dict = {k: v for k, v in vars(args).items() if not callable(v)}
+    space_json = json.dumps(space, sort_keys=True)
+    args_json = json.dumps(args_dict, sort_keys=True)
+    update_hps_sessions(hps_id, "bayesopt", args_json, space_json, covar_set_id)
+
+    n_jobs = args.batch_size
+
+    # split large iterations into smaller runs to avoid OOM / memory leak
+    mango_itr = 10
+    for i in range(0, math.ceil(args.iteration/mango_itr)):
+        itr = min(mango_itr, args.iteration - i*mango_itr)
+        _bayesopt_run(
+            df, 
+            n_jobs, 
+            covar_set_id, 
+            hps_id, 
+            ranked_features, 
+            space, 
+            args, 
+            itr, 
+            i>0 or args.resume
+        )
 
 
 def grid_search(df, covar_set_id, hps_id, args, ranked_features):
