@@ -662,8 +662,8 @@ def bayesopt(df, covar_set_id, hps_id, ranked_features):
         )
 
 
-def grid_search(df, covar_set_id, hps_id, args, ranked_features):
-    global alchemyEngine, logger, random_seed, client, futures
+def grid_search(df, covar_set_id, hps_id, ranked_features):
+    global alchemyEngine, logger, random_seed, client, futures, args
 
     _cleanup_stale_keys()
 
@@ -1163,9 +1163,9 @@ def main(args):
             df_future = client.scatter(df)
             ranked_features_future = client.scatter(ranked_features)
             if args.method == "gs":
-                grid_search(df_future, covar_set_id, hps_id, args, ranked_features_future)
+                grid_search(df_future, covar_set_id, hps_id, ranked_features_future)
             elif args.method == "bayesopt":
-                bayesopt(df_future, covar_set_id, hps_id, args, ranked_features_future)
+                bayesopt(df_future, covar_set_id, hps_id, ranked_features_future)
             else:
                 raise ValueError(f"unsupported search method: {args.method}")
             logger.info(
