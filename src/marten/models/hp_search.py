@@ -1125,8 +1125,9 @@ def get_hps_session(symbol, cutoff_date, resume):
         return result.fetchone()[0]
 
 
-def main(args):
-    global client, logger, futures, alchemyEngine, random_seed
+def main(_args):
+    global client, logger, futures, alchemyEngine, random_seed, args
+    args = _args
     t_start = time.time()
     try:
         init(args)
