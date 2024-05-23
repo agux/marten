@@ -308,9 +308,14 @@ def train(
     validate=True,
     **kwargs,
 ):
+    worker = get_worker()
+    logger = worker.logger
+
     def _train_with_cpu():
-        if "accelerator" in kwargs and kwargs.get("accelerator") in ("gpu", "auto"):
-            kwargs.pop("accelerator")
+        logger.warning("modifying **kwargs to train with cpu: %s", kwargs)
+        if "accelerator" in kwargs and kwargs["accelerator"] in ["gpu", "auto"]:
+            del kwargs["accelerator"]
+        logger.warning("**kwargs after modification: %s", kwargs)
         m, metrics = _try_fitting(
             df, epochs, random_seed, early_stopping, country, validate, **kwargs
         )
