@@ -589,6 +589,18 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
             # To match the size of tensors in bayesopt
             if "optimizer" not in param_dict:
                 param_dict["optimizer"] = "AdamW"
+            if "growth" not in param_dict:
+                param_dict["growth"] = "linear"
+            if "ar_reg" not in param_dict:
+                param_dict["ar_reg"] = 0
+            if "trend_reg" not in param_dict:
+                param_dict["trend_reg"] = 0
+            if "trend_reg_threshold" not in param_dict:
+                param_dict["trend_reg_threshold"] = False
+            if "seasonality_reg" not in param_dict:
+                param_dict["seasonality_reg"] = 0
+            if "seasonality_mode" not in param_dict:
+                param_dict["seasonality_mode"] = "additive"
 
             tuples.append((param_dict, row[1]))
 
