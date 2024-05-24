@@ -22,6 +22,8 @@ from sklearn.model_selection import ParameterGrid
 
 from mango import Tuner, scheduler
 
+from scipy.stats import uniform
+
 default_params = {
     # default hyperparameters. the order of keys MATTER (which affects the PK in table)
     "ar_layers": [],
@@ -423,7 +425,7 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
         covar_set_id,
     )
 
-    ranked_features = [f"{r["feature"]}_{r["cov_symbol"]}" for _, r in covars_df.iterrows()]
+    ranked_features = [f"{r["feature"]}::{r["cov_table"]}::{r["cov_symbol"]}" for _, r in covars_df.iterrows()]
 
     # covars_df contain these columns: cov_symbol, cov_table, feature
     by_table_feature = covars_df.groupby(["cov_table", "feature"])
@@ -438,7 +440,7 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
         # split table_feature_df by symbol column
         grouped = table_feature_df.groupby("id")
         for group2, sdf2 in grouped:
-            col_name = f"{feature}_{group2}"
+            col_name = f"{feature}::{cov_table}::{group2}"
             sdf2.rename(
                 columns={
                     "y": col_name,
@@ -472,17 +474,33 @@ def _get_layers(w_power=6, min_size=2, max_size=20):
 def _search_space(max_covars):
     # ar_layers, lagged_reg_layers = _get_layers(10, 1, 64), _get_layers(10, 1, 64)
 
-    ss = dict(
+    # ss = dict(
+    #     batch_size=[None, 100, 200, 300, 400, 500],
+    #     n_lags=list(range(0, 60+1)),
+    #     yearly_seasonality=["auto"] + list(range(1, 60+1)),
+    #     # ar_layers=[[]] + ar_layers,
+    #     # lagged_reg_layers=[[]] + lagged_reg_layers,
+    #     ar_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
+    #     lagged_reg_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
+    #     topk_covar=list(range(2, max_covars+1)),
+    #     optimizer=["AdamW", "SGD"],
+    # )
+
+    ss = f'''dict(
+        growth=["linear", "discontinuous"],
         batch_size=[None, 100, 200, 300, 400, 500],
         n_lags=list(range(0, 60+1)),
         yearly_seasonality=["auto"] + list(range(1, 60+1)),
-        # ar_layers=[[]] + ar_layers,
-        # lagged_reg_layers=[[]] + lagged_reg_layers,
         ar_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
+        ar_reg=uniform(0, 100),
         lagged_reg_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
-        topk_covar=list(range(2, max_covars+1)),
+        topk_covar=list(range(2, {max_covars}+1)),
         optimizer=["AdamW", "SGD"],
-    )
+        trend_reg=uniform(0, 100),
+        trend_reg_threshold=[True, False],
+        seasonality_reg=uniform(0, 100),
+        seasonality_mode=["additive", "multiplicative"],
+    )'''
 
     return ss
 
@@ -634,14 +652,14 @@ def bayesopt(df, covar_set_id, hps_id, ranked_features):
 
     _cleanup_stale_keys()
 
-    space = _search_space(args.max_covars)
+    space_str = _search_space(args.max_covars)
 
     # Convert args to a dictionary, excluding non-serializable items
     #FIXME: no need to update the table each time, especially in resume mode?
     args_dict = {k: v for k, v in vars(args).items() if not callable(v)}
-    space_json = json.dumps(space, sort_keys=True)
+    # space_json = json.dumps(space, sort_keys=True)
     args_json = json.dumps(args_dict, sort_keys=True)
-    update_hps_sessions(hps_id, "bayesopt", args_json, space_json, covar_set_id)
+    update_hps_sessions(hps_id, "bayesopt", args_json, space_str, covar_set_id)
 
     n_jobs = args.batch_size
 
@@ -655,7 +673,7 @@ def bayesopt(df, covar_set_id, hps_id, ranked_features):
             covar_set_id, 
             hps_id, 
             ranked_features, 
-            space, 
+            eval(space_str, {"uniform": uniform}),
             args, 
             itr, 
             i>0 or args.resume
