@@ -44,6 +44,13 @@ def configure_parser(parser):
         "--future_steps", action="store", type=int, default=60, help="Specify how many time steps (days) into the future will be predicted. Defaults to 60."
     )
     parser.add_argument(
+        "--topk",
+        action="store",
+        type=int,
+        default=3,
+        help="Use top-k best historical hyper-parameters to ensemble the prediction. Default is 3.",
+    )
+    parser.add_argument(
         "--early_stopping",
         action="store_true",
         help="Use early stopping during model fitting",

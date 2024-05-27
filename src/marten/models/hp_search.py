@@ -494,12 +494,13 @@ def _search_space(max_covars):
         ar_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
         ar_reg=uniform(0, 100),
         lagged_reg_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
-        topk_covar=list(range(2, {max_covars}+1)),
+        topk_covar=list(range(0, {max_covars}+1)),
         optimizer=["AdamW", "SGD"],
         trend_reg=uniform(0, 100),
         trend_reg_threshold=[True, False],
         seasonality_reg=uniform(0, 100),
         seasonality_mode=["additive", "multiplicative"],
+        normalize=["off", "standardize", "soft", "soft1"],
     )'''
 
     return ss
@@ -601,6 +602,8 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
                 param_dict["seasonality_reg"] = 0
             if "seasonality_mode" not in param_dict:
                 param_dict["seasonality_mode"] = "additive"
+            if "normalize" not in param_dict:
+                param_dict["normalize"] = "soft"
 
             tuples.append((param_dict, row[1]))
 
@@ -644,6 +647,8 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
             "preloaded %s historical searched hyper-params for warm-start.",
             len(warmstart_tuples),
         )
+    else:
+        logger.info("no available historical data for warm-start")
 
     tuner = Tuner(
         space,

@@ -381,7 +381,9 @@ def log_metrics_for_hyper_params(
     # Otherwise we could proceed further code execution.
     param_str = json.dumps(params, sort_keys=True)
     hpid = hashlib.md5(param_str.encode("utf-8")).hexdigest()
-    if not new_metric_keys(anchor_symbol, hpid, param_str, covar_set_id, hps_id, alchemyEngine):
+    if not new_metric_keys(
+        anchor_symbol, hpid, param_str, covar_set_id, hps_id, alchemyEngine
+    ):
         logger.debug("Skip re-entry for %s: %s", anchor_symbol, param_str)
         with alchemyEngine.connect() as conn:
             result = conn.execute(
@@ -415,7 +417,7 @@ def log_metrics_for_hyper_params(
             params["lagged_reg_layer_spec"]
         )
         params.pop("lagged_reg_layer_spec")
-    
+
     topk_covar = None
     if "topk_covar" in params:
         topk_covar = params["topk_covar"]
@@ -481,7 +483,7 @@ def log_metrics_for_hyper_params(
         last_metric,
         fit_time,
         covar_set_id,
-        topk_covar
+        topk_covar,
     )
 
     return last_metric["Loss_val"]
@@ -605,17 +607,15 @@ def new_metric_keys(
             return action()
 
 
-def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
+def get_best_prediction_setting(alchemyEngine, logger, symbol, df, topk, nth_top):
     # find the model setting with optimum performance, including univariate default setting.
     from marten.models.hp_search import (
         default_params,
-        load_anchor_ts,
         augment_anchor_df_with_covars,
     )
     from marten.utils.neuralprophet import layer_spec_to_list
     from types import SimpleNamespace
 
-    # TODO: how about cutoff date?
     query = """
         select
             *
@@ -626,18 +626,22 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
                     null cov_table,
                     null cov_symbol,
                     null feature,
-                    hyper_params,
-                    loss_val,
-                    covar_set_id,
+                    hm.hyper_params,
+                    hm.loss_val,
+                    hm.covar_set_id,
                     null nan_count,
-                    sub_topk
+                    hm.sub_topk,
+                    hs.ts_date
                 from
-                    hps_metrics
+                    hps_metrics hm
+                left join hps_sessions hs
+                on hm.hps_id = hs.id
                 where
-                    anchor_symbol = %(symbol)s
+                    hm.anchor_symbol = %(symbol)s
                 order by
-                    loss_val asc
-                limit 1
+                    hs.ts_date desc,
+                    hm.loss_val asc
+                limit %(limit)s
             )
         union all 
             (
@@ -649,30 +653,36 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
                     loss_val,
                     null covar_set_id,
                     nan_count,
-                    null sub_topk
+                    null sub_topk,
+                    ts_date
                 from
                     neuralprophet_corel nc
                 where
                     symbol = %(symbol)s
                 order by
+                    ts_date desc,
                     loss_val asc
-                limit 1
+                limit %(limit)s
             )
         )
         order by
+            ts_date desc,
             loss_val asc
-        limit 1
+        offset %(offset)s rows
+        fetch first 1 row only
     """
     params = {
         "symbol": symbol,
+        "limit": topk,
+        "offset": nth_top - 1,
     }
 
     with alchemyEngine.connect() as conn:
         best_setting = pd.read_sql(query, conn, params=params)
 
-    df, _ = load_anchor_ts(symbol, timestep_limit, alchemyEngine)
     hyperparams = None
     covar_set_id = None
+    new_df = None
     if best_setting.empty:
         logger.warn(
             (
@@ -683,7 +693,7 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
             symbol,
         )
         hyperparams = default_params
-        df = df[["ds", "y"]]
+        new_df = df[["ds", "y"]]
     elif best_setting["hyper_params"].iloc[0] is not None:
         best_setting = best_setting.iloc[0]
         covar_set_id = int(best_setting["covar_set_id"])
@@ -692,16 +702,18 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
                 "%s - found best setting in hps_metrics:\n"
                 "loss_val: %s\n"
                 "covar_set_id: %s\n"
-                "sub_topk: %s"
+                "sub_topk: %s\n"
+                "ts_date: %s"
             ),
             symbol,
             best_setting["loss_val"],
             covar_set_id,
             best_setting["sub_topk"],
+            best_setting["ts_date"],
         )
 
         hyperparams = json.loads(best_setting["hyper_params"])
-        df, _, ranked_features = augment_anchor_df_with_covars(
+        new_df, _, ranked_features = augment_anchor_df_with_covars(
             df,
             SimpleNamespace(covar_set_id=covar_set_id, symbol=symbol),
             alchemyEngine,
@@ -710,7 +722,7 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
         )
 
         if best_setting["sub_topk"] is not None:
-            df = select_topk_features(df, ranked_features, best_setting["sub_topk"])
+            new_df = select_topk_features(df, ranked_features, best_setting["sub_topk"])
     else:
         best_setting = best_setting.iloc[0]
         logger.info(
@@ -720,7 +732,8 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
                 "cov_table: %s\n"
                 "cov_symbol: %s\n"
                 "feature: %s\n"
-                "nan_count: %s"
+                "nan_count: %s\n",
+                "ts_date: %s",
             ),
             symbol,
             best_setting["loss_val"],
@@ -728,9 +741,10 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
             best_setting["cov_symbol"],
             best_setting["feature"],
             best_setting["nan_count"],
+            best_setting["ts_date"],
         )
         hyperparams = default_params
-        df = merge_covar_df(
+        new_df = merge_covar_df(
             symbol,
             df[["ds", "y"]],
             best_setting["cov_table"],
@@ -751,12 +765,21 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, timestep_limit):
     if "topk_covar" in hyperparams:
         hyperparams.pop("topk_covar")
 
-    return df, hyperparams, covar_set_id
+    return new_df, hyperparams, covar_set_id
 
 
 # Function to check if a date is a holiday and return the holiday name
 def check_holiday(date, country_holidays):
     return country_holidays.get(date) if date in country_holidays else None
+
+
+def trim_forecasts_by_dates(forecast):
+    future_date = forecast.iloc[-1]["ds"]
+    days_count = (future_date - datetime.now()).days + 1
+    start_date = future_date - timedelta(days=days_count * 2)
+    forecast = forecast[forecast["ds"] >= start_date]
+
+    return forecast
 
 
 def save_forecast_snapshot(
@@ -824,10 +847,7 @@ def save_forecast_snapshot(
         snapshot_id = result.fetchone()[0]
 
         ## save to ft_yearly_params table
-        future_date = forecast.iloc[-1]["ds"]
-        days_count = (future_date - datetime.now()).days + 1
-        start_date = future_date - timedelta(days=days_count * 2)
-        forecast = forecast[forecast["ds"] >= start_date]
+        forecast = trim_forecasts_by_dates(forecast)
 
         country_holidays = get_country_holidays(region)
 
@@ -844,100 +864,189 @@ def save_forecast_snapshot(
 
 
 def predict_best(
-    symbol,
-    early_stopping,
-    timestep_limit,
-    epochs,
-    random_seed,
-    future_steps,
+    symbol, early_stopping, timestep_limit, epochs, random_seed, future_steps, topk
 ):
+    from marten.models.hp_search import (
+        load_anchor_ts,
+    )
+
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
-    df, params, covar_set_id = get_best_prediction_setting(
-        alchemyEngine, logger, symbol, timestep_limit
-    )
-    logger.info(
-        "%s - using hyper-parameters:\n%s", symbol, json.dumps(params, sort_keys=True)
-    )
+    df, _ = load_anchor_ts(symbol, timestep_limit, alchemyEngine)
+
     region = get_holiday_region(alchemyEngine, symbol)
     logger.info("%s - inferred holiday region: %s", symbol, region)
 
     # use the best performing setting to fit and then predict
     start_time = time.time()
     futures = []
+    merged_df = None
+    results = None
     with worker_client() as client:
-        # train with validation
-        futures.append(
-            client.submit(
-                train,
-                df=df,
-                country=region,
-                epochs=epochs,
-                random_seed=random_seed,
-                early_stopping=early_stopping,
-                weekly_seasonality=False,
-                daily_seasonality=False,
-                impute_missing=True,
-                validate=True,
-                changepoints_range=1.0,
-                **params,
+        for i in range(1, topk + 1):
+            merged_df, params, covar_set_id = get_best_prediction_setting(
+                alchemyEngine, logger, symbol, df, topk, i
             )
-        )
-        # train with full dataset without validation split
-        futures.append(
-            client.submit(
-                train,
-                df=df,
-                country=region,
-                epochs=epochs,
-                random_seed=random_seed,
-                early_stopping=early_stopping,
-                weekly_seasonality=False,
-                daily_seasonality=False,
-                impute_missing=True,
-                validate=False,
-                n_forecasts=future_steps,
-                changepoints_range=1.0,
-                **params,
+            logger.info(
+                "%s - using hyper-parameters for top-%s setting:\n%s",
+                symbol,
+                i,
+                json.dumps(params, sort_keys=True),
             )
-        )
+            # train with validation
+            futures.append(
+                client.submit(
+                    train,
+                    df=merged_df,
+                    country=region,
+                    epochs=epochs,
+                    random_seed=random_seed,
+                    early_stopping=early_stopping,
+                    weekly_seasonality=False,
+                    daily_seasonality=False,
+                    impute_missing=True,
+                    validate=True,
+                    changepoints_range=1.0,
+                    **params,
+                )
+            )
+            # train with full dataset without validation split
+            futures.append(
+                client.submit(
+                    train,
+                    df=merged_df,
+                    country=region,
+                    epochs=epochs,
+                    random_seed=random_seed,
+                    early_stopping=early_stopping,
+                    weekly_seasonality=False,
+                    daily_seasonality=False,
+                    impute_missing=True,
+                    validate=False,
+                    n_forecasts=future_steps,
+                    changepoints_range=1.0,
+                    **params,
+                )
+            )
         results = client.gather(futures)
 
-    metrics = results[0][1]
-    m, metrics_final = results[1][0], results[1][1]
+    top_forecasts = []
+    agg_loss = []
+    snapshot_ids = []
 
-    fit_time = time.time() - start_time
+    for i in range(0, topk * 2, 2):
+        metrics = results[i][1]
+        m, metrics_final = results[i + 1][0], results[i + 1][1]
+        agg_loss.append(metrics.iloc[-1]["Loss_val"] + metrics_final.iloc[-1]["Loss"])
 
-    set_log_level("ERROR")
-    set_random_seed(random_seed)
+        fit_time = time.time() - start_time
 
-    future = m.make_future_dataframe(
-        df, n_historic_predictions=True, periods=future_steps
-    )
-    forecast = m.predict(future)
+        set_log_level("ERROR")
+        set_random_seed(random_seed)
 
-    n_covars = len([col for col in df.columns if col not in ("ds", "y")])
+        future = m.make_future_dataframe(
+            merged_df, n_historic_predictions=True, periods=future_steps
+        )
+        forecast = m.predict(future)
+        top_forecasts.append(forecast)
 
-    # save the snapshot and yearly seasonality coefficients to tables.
-    snapshot_id, n_yearly_seasonality = save_forecast_snapshot(
+        n_covars = len([col for col in merged_df.columns if col not in ("ds", "y")])
+
+        # save the snapshot and yearly seasonality coefficients to tables.
+        snapshot_id, n_yearly_seasonality = save_forecast_snapshot(
+            alchemyEngine,
+            symbol,
+            json.dumps(params, sort_keys=True),
+            covar_set_id,
+            metrics,
+            metrics_final,
+            forecast,
+            fit_time,
+            region,
+            random_seed,
+            future_steps,
+            n_covars,
+        )
+        snapshot_ids.append(snapshot_id)
+
+        logger.info(
+            "%s - estimated %s yearly-seasonality coefficients. snapshot_id: %s",
+            symbol,
+            n_yearly_seasonality,
+            snapshot_id,
+        )
+
+    if topk <= 1:
+        return
+
+    sum_loss = sum(agg_loss)
+    weights = [sum(agg_loss[:i] + agg_loss[i + 1 :]) / sum_loss for i in range(0, topk)]
+
+    save_ensemble_snapshot(
         alchemyEngine,
         symbol,
-        json.dumps(params, sort_keys=True),
-        covar_set_id,
-        metrics,
-        metrics_final,
-        forecast,
-        fit_time,
+        top_forecasts,
+        weights,
         region,
+        snapshot_ids,
         random_seed,
         future_steps,
-        n_covars,
     )
 
-    logger.info(
-        "%s - estimated %s yearly-seasonality coefficients. snapshot_id: %s",
-        symbol,
-        n_yearly_seasonality,
-        snapshot_id,
+
+def save_ensemble_snapshot(
+    alchemyEngine, symbol, top_forecasts, weights, region, snapshot_ids, random_seed, future_steps
+):
+    ens_df = None
+    hyper_params = json.dumps(
+        [{"snapshot_id": sid, "weight": w} for sid, w in zip(snapshot_ids, weights)],
+        sort_keys=True,
     )
+
+    for df, w in zip(top_forecasts, weights):
+        df = trim_forecasts_by_dates(df)
+
+        df = df[["ds", "trend", "season_yearly"]]
+        df.rename(columns={"ds": "date"}, inplace=True)
+        df[["trend", "season_yearly"]] = df[["trend", "season_yearly"]] * w
+
+        if ens_df is None:
+            ens_df = df
+            country_holidays = get_country_holidays(region)
+            ens_df.loc[:, "symbol"] = symbol
+            ens_df.loc[:, "holiday"] = ens_df["date"].apply(
+                lambda x: check_holiday(x, country_holidays)
+            )
+        else:
+            ens_df = ens_df.add(df)
+
+    with alchemyEngine.begin() as conn:
+        result = conn.execute(
+            text(
+                """
+                insert
+                    into
+                    predict_snapshots
+                    (
+                        model,symbol,hyper_params,
+                        region,random_seed,future_steps
+                    )
+                values(
+                    :model,:symbol,:hyper_params,
+                    :region,:random_seed,:future_steps
+                ) RETURNING id
+                """
+            ),
+            {
+                "model": "NeuralProphet_Ensemble",
+                "symbol": symbol,
+                "hyper_params": hyper_params,
+                "region": region,
+                "random_seed": random_seed,
+                "future_steps": future_steps,
+            },
+        )
+        snapshot_id = result.fetchone()[0]
+        ens_df.loc[:, "snapshot_id"] = snapshot_id
+        ens_df.to_sql("forecast_params", conn, if_exists="append", index=False)

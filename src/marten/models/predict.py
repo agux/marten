@@ -39,6 +39,7 @@ def main(args):
             args.epochs,
             args.random_seed,
             args.future_steps,
+            args.topk
         )
         futures.append(future)
 
