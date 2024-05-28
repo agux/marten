@@ -240,21 +240,40 @@ def _pair_covar_metrics(
 
 def _load_covar_set(covar_set_id, alchemyEngine):
     query = """
-        select
-            t1.cov_symbol cov_symbol, 
-            t1.cov_table cov_table, 
-            t1.cov_feature feature
-        from
-            covar_set t1
-        inner join neuralprophet_corel t2
-            on t1.symbol = t2.symbol
-            and t1.cov_table = t2.cov_table
-            and t1.cov_symbol = t2.cov_symbol
-            and t1.cov_feature = t2.feature
-        where
-            t1.id = %(covar_set_id)s
-        order by
-            t2.loss_val asc, t2.nan_count asc, t1.cov_table, t1.cov_symbol
+        WITH ranked_data AS (
+            SELECT
+                t1.cov_symbol,
+                t1.cov_table,
+                t1.cov_feature,
+                t2.ts_date,
+                t2.loss_val,
+                t2.nan_count,
+                ROW_NUMBER() OVER (
+                    PARTITION BY t1.symbol, t1.cov_table, t1.cov_symbol, t1.cov_feature
+                    ORDER BY t2.ts_date DESC, t2.loss_val ASC, t2.nan_count ASC
+                ) AS rnk
+            FROM
+                covar_set t1
+            JOIN
+                neuralprophet_corel t2
+            ON
+                t1.symbol = t2.symbol
+                AND t1.cov_table = t2.cov_table
+                AND t1.cov_symbol = t2.cov_symbol
+                AND t1.cov_feature = t2.feature
+            WHERE
+                t1.id = %(covar_set_id)s
+        )
+        SELECT
+            cov_symbol,
+            cov_table,
+            cov_feature
+        FROM
+            ranked_data
+        WHERE
+            rnk = 1
+        ORDER BY
+            loss_val ASC, nan_count ASC, cov_table, cov_symbol
     """
     params = {
         "covar_set_id": covar_set_id,
