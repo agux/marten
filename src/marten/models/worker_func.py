@@ -723,7 +723,9 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, df, topk, nth_top
         )
 
         if best_setting["sub_topk"] is not None:
-            new_df = select_topk_features(df, ranked_features, best_setting["sub_topk"])
+            new_df = select_topk_features(
+                new_df, ranked_features, best_setting["sub_topk"]
+            )
     else:
         best_setting = best_setting.iloc[0]
         logger.info(
