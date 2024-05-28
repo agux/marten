@@ -219,7 +219,7 @@ def save_covar_metrics(
                 "mae_val": row["MAE_val"],
                 "rmse_val": row["RMSE_val"],
                 "loss_val": row["Loss_val"],
-                "fit_time": (str(fit_time) + " seconds"),
+                "fit_time": (str(fit_time) + " seconds") if fit_time is not None else None,
                 "timesteps": timesteps,
                 "nan_count": nan_count,
                 "epochs": epochs,
@@ -558,7 +558,7 @@ def update_metrics_table(
                     "mae": last_metric["MAE"],
                     "rmse": last_metric["RMSE"],
                     "loss": last_metric["Loss"],
-                    "fit_time": (str(fit_time) + " seconds"),
+                    "fit_time": (str(fit_time) + " seconds") if fit_time is not None else None,
                     "epochs": epochs,
                     "sub_topk": topk_covar,
                 },
@@ -837,7 +837,7 @@ def save_forecast_snapshot(
                 "predict_diff_mean": mean_diff,
                 "predict_diff_stddev": std_diff,
                 "epochs": metric["epoch"] + 1,
-                "fit_time": f"{str(fit_time)} seconds",
+                "fit_time": f"{str(fit_time)} seconds" if fit_time is not None else None,
                 "mae_final": metric_final["MAE"],
                 "rmse_final": metric_final["RMSE"],
                 "loss_final": metric_final["Loss"],
@@ -987,9 +987,9 @@ def predict_best(
         forecast, metrics_final = results[i + 1][0], results[i + 1][1]
         agg_loss.append(metrics.iloc[-1]["Loss_val"] + metrics_final.iloc[-1]["Loss"])
 
-        # fit_time = time.time() - start_time
+        fit_time = time.time() - start_time
         # TODO do we want to record the accurate fit time?
-        fit_time = None
+        # fit_time = None
 
         top_forecasts.append(forecast)
 
