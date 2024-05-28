@@ -15,9 +15,10 @@ def init(args):
     global client
     client = init_client(
         __name__,
-        min(
-            len(args.symbols),
-            int(multiprocessing.cpu_count() * 0.9) if args.worker < 1 else args.worker,
+        (
+            min(len(args.symbols), int(multiprocessing.cpu_count() * 0.9))
+            if args.worker < 1
+            else args.worker
         ),
         dashboard_port=args.dashboard_port,
     )

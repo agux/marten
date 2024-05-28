@@ -987,9 +987,9 @@ def predict_best(
         forecast, metrics_final = results[i + 1][0], results[i + 1][1]
         agg_loss.append(metrics.iloc[-1]["Loss_val"] + metrics_final.iloc[-1]["Loss"])
 
-        fit_time = time.time() - start_time
+        # fit_time = time.time() - start_time
         # TODO do we want to record the accurate fit time?
-        # fit_time = None
+        fit_time = None
 
         top_forecasts.append(forecast)
 
