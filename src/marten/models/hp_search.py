@@ -244,7 +244,7 @@ def _load_covar_set(covar_set_id, alchemyEngine):
             SELECT
                 t1.cov_symbol,
                 t1.cov_table,
-                t1.cov_feature,
+                t1.cov_feature feature,
                 t2.ts_date,
                 t2.loss_val,
                 t2.nan_count,
@@ -267,7 +267,7 @@ def _load_covar_set(covar_set_id, alchemyEngine):
         SELECT
             cov_symbol,
             cov_table,
-            cov_feature
+            feature
         FROM
             ranked_data
         WHERE
