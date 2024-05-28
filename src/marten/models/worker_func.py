@@ -885,7 +885,6 @@ def train_predict(
         early_stopping=early_stopping,
         validate=validate,
         n_forecasts=future_steps,
-        changepoints_range=1.0,
         **kwargs,
     )
 
