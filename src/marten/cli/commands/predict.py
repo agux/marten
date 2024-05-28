@@ -7,8 +7,8 @@ def configure_parser(parser):
         "--epochs",
         action="store",
         type=int,
-        default=500,
-        help="Maximum epochs for model fitting. Defaults to 500",
+        default=5000,
+        help="Maximum epochs for model fitting. Defaults to 5000",
     )
     parser.add_argument(
         "--worker",

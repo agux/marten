@@ -372,7 +372,7 @@ def _load_covars(
 
     return df, covar_set_id
 
-def _load_covar_feature(cov_table, feature, symbols):
+def _load_covar_feature(alchemyEngine, cov_table, feature, symbols):
     match cov_table:
         case "bond_metrics_em" | "bond_metrics_em_view":
             query = f"""
@@ -434,7 +434,7 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
         cov_table = group1[0]
         feature = group1[1]
 
-        table_feature_df = _load_covar_feature(cov_table, feature, sdf1["cov_symbol"])
+        table_feature_df = _load_covar_feature(alchemyEngine, cov_table, feature, sdf1["cov_symbol"])
 
         # merge and append the feature column of table_feature_df to merged_df, by matching dates
         # split table_feature_df by symbol column
