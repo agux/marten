@@ -884,6 +884,7 @@ def predict_best(
     # use the best performing setting to fit and then predict
     start_time = time.time()
     futures = []
+    dfs = []
     merged_df = None
     results = None
     with worker_client() as client:
@@ -891,6 +892,7 @@ def predict_best(
             merged_df, params, covar_set_id = get_best_prediction_setting(
                 alchemyEngine, logger, symbol, df, topk, i
             )
+            dfs.append(merged_df)
             logger.info(
                 "%s - using hyper-parameters for top-%s setting:\n%s",
                 symbol,
@@ -938,7 +940,7 @@ def predict_best(
     agg_loss = []
     snapshot_ids = []
 
-    for i in range(0, topk * 2, 2):
+    for i, df in zip(range(0, topk * 2, 2), dfs):
         metrics = results[i][1]
         m, metrics_final = results[i + 1][0], results[i + 1][1]
         agg_loss.append(metrics.iloc[-1]["Loss_val"] + metrics_final.iloc[-1]["Loss"])
@@ -949,12 +951,12 @@ def predict_best(
         set_random_seed(random_seed)
 
         future = m.make_future_dataframe(
-            merged_df, n_historic_predictions=True, periods=future_steps
+            df, n_historic_predictions=True, periods=future_steps
         )
         forecast = m.predict(future)
         top_forecasts.append(forecast)
 
-        n_covars = len([col for col in merged_df.columns if col not in ("ds", "y")])
+        n_covars = len([col for col in df.columns if col not in ("ds", "y")])
 
         # save the snapshot and yearly seasonality coefficients to tables.
         snapshot_id, n_yearly_seasonality = save_forecast_snapshot(
