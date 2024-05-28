@@ -1022,7 +1022,7 @@ def save_ensemble_snapshot(
         df = df[["ds", "trend", "season_yearly"]]
         df.rename(columns={"ds": "date"}, inplace=True)
         df[["trend", "season_yearly"]] = df[["trend", "season_yearly"]] * w
-        df.set_index("date", inplace=True)
+        # df.set_index("date", inplace=True)
 
         if ens_df is None:
             ens_df = df
@@ -1034,7 +1034,7 @@ def save_ensemble_snapshot(
         else:
             ens_df[["trend", "season_yearly"]] += df[["trend", "season_yearly"]]
 
-    ens_df.reset_index(inplace=True)
+    # ens_df.reset_index(inplace=True)
 
     with alchemyEngine.begin() as conn:
         result = conn.execute(
