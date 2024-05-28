@@ -866,6 +866,40 @@ def save_forecast_snapshot(
     return snapshot_id, len(forecast_params)
 
 
+def train_predict(
+    df,
+    epochs,
+    random_seed,
+    early_stopping,
+    country,
+    validate,
+    future_steps,
+    **kwargs,
+):
+
+    m, metrics = train(
+        df=df,
+        country=country,
+        epochs=epochs,
+        random_seed=random_seed,
+        early_stopping=early_stopping,
+        validate=validate,
+        n_forecasts=future_steps,
+        changepoints_range=1.0,
+        **kwargs,
+    )
+
+    set_log_level("ERROR")
+    set_random_seed(random_seed)
+
+    future = m.make_future_dataframe(
+        df, n_historic_predictions=True, periods=future_steps
+    )
+    forecast = m.predict(future)
+
+    return forecast, metrics
+
+
 def predict_best(
     symbol, early_stopping, timestep_limit, epochs, random_seed, future_steps, topk
 ):
@@ -885,6 +919,8 @@ def predict_best(
     start_time = time.time()
     futures = []
     dfs = []
+    params_list = []
+    covarset_id_list = []
     merged_df = None
     results = None
     with worker_client() as client:
@@ -893,11 +929,14 @@ def predict_best(
                 alchemyEngine, logger, symbol, df, topk, i
             )
             dfs.append(merged_df)
+            params_json = json.dumps(params, sort_keys=True)
+            params_list.append(params_json)
+            covarset_id_list.append(covar_set_id)
             logger.info(
                 "%s - using hyper-parameters for top-%s setting:\n%s",
                 symbol,
                 i,
-                json.dumps(params, sort_keys=True),
+                params_json,
             )
             # train with validation
             futures.append(
@@ -919,7 +958,7 @@ def predict_best(
             # train with full dataset without validation split
             futures.append(
                 client.submit(
-                    train,
+                    train_predict,
                     df=merged_df,
                     country=region,
                     epochs=epochs,
@@ -929,7 +968,7 @@ def predict_best(
                     daily_seasonality=False,
                     impute_missing=True,
                     validate=False,
-                    n_forecasts=future_steps,
+                    future_steps=future_steps,
                     changepoints_range=1.0,
                     **params,
                 )
@@ -940,20 +979,17 @@ def predict_best(
     agg_loss = []
     snapshot_ids = []
 
-    for i, df in zip(range(0, topk * 2, 2), dfs):
+    for i, df, params_json, cid in zip(
+        range(0, topk * 2, 2), dfs, params_list, covarset_id_list
+    ):
         metrics = results[i][1]
-        m, metrics_final = results[i + 1][0], results[i + 1][1]
+        forecast, metrics_final = results[i + 1][0], results[i + 1][1]
         agg_loss.append(metrics.iloc[-1]["Loss_val"] + metrics_final.iloc[-1]["Loss"])
 
-        fit_time = time.time() - start_time
+        # fit_time = time.time() - start_time
+        # TODO do we want to record the accurate fit time?
+        fit_time = None
 
-        set_log_level("ERROR")
-        set_random_seed(random_seed)
-
-        future = m.make_future_dataframe(
-            df, n_historic_predictions=True, periods=future_steps
-        )
-        forecast = m.predict(future)
         top_forecasts.append(forecast)
 
         n_covars = len([col for col in df.columns if col not in ("ds", "y")])
@@ -962,8 +998,8 @@ def predict_best(
         snapshot_id, n_yearly_seasonality = save_forecast_snapshot(
             alchemyEngine,
             symbol,
-            json.dumps(params, sort_keys=True),
-            covar_set_id,
+            params_json,
+            cid,
             metrics,
             metrics_final,
             forecast,
