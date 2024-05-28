@@ -219,7 +219,9 @@ def save_covar_metrics(
                 "mae_val": row["MAE_val"],
                 "rmse_val": row["RMSE_val"],
                 "loss_val": row["Loss_val"],
-                "fit_time": (str(fit_time) + " seconds") if fit_time is not None else None,
+                "fit_time": (
+                    (str(fit_time) + " seconds") if fit_time is not None else None
+                ),
                 "timesteps": timesteps,
                 "nan_count": nan_count,
                 "epochs": epochs,
@@ -558,7 +560,9 @@ def update_metrics_table(
                     "mae": last_metric["MAE"],
                     "rmse": last_metric["RMSE"],
                     "loss": last_metric["Loss"],
-                    "fit_time": (str(fit_time) + " seconds") if fit_time is not None else None,
+                    "fit_time": (
+                        (str(fit_time) + " seconds") if fit_time is not None else None
+                    ),
                     "epochs": epochs,
                     "sub_topk": topk_covar,
                 },
@@ -837,7 +841,9 @@ def save_forecast_snapshot(
                 "predict_diff_mean": mean_diff,
                 "predict_diff_stddev": std_diff,
                 "epochs": metric["epoch"] + 1,
-                "fit_time": f"{str(fit_time)} seconds" if fit_time is not None else None,
+                "fit_time": (
+                    f"{str(fit_time)} seconds" if fit_time is not None else None
+                ),
                 "mae_final": metric_final["MAE"],
                 "rmse_final": metric_final["RMSE"],
                 "loss_final": metric_final["Loss"],
@@ -900,7 +906,14 @@ def train_predict(
 
 
 def predict_best(
-    symbol, early_stopping, timestep_limit, epochs, random_seed, future_steps, topk, accelerator
+    symbol,
+    early_stopping,
+    timestep_limit,
+    epochs,
+    random_seed,
+    future_steps,
+    topk,
+    accelerator,
 ):
     from marten.models.hp_search import (
         load_anchor_ts,
@@ -924,6 +937,7 @@ def predict_best(
     results = None
     with worker_client() as client:
         for i in range(1, topk + 1):
+            # TODO improve performance by multi-processing the `get_best_prediction_setting()`
             merged_df, params, covar_set_id = get_best_prediction_setting(
                 alchemyEngine, logger, symbol, df, topk, i
             )
@@ -937,11 +951,12 @@ def predict_best(
                 i,
                 params_json,
             )
+            df_future = client.scatter(merged_df)
             # train with validation
             futures.append(
                 client.submit(
                     train,
-                    df=merged_df,
+                    df=df_future,
                     country=region,
                     epochs=epochs,
                     random_seed=random_seed,
@@ -959,7 +974,7 @@ def predict_best(
             futures.append(
                 client.submit(
                     train_predict,
-                    df=merged_df,
+                    df=df_future,
                     country=region,
                     epochs=epochs,
                     random_seed=random_seed,
@@ -1023,7 +1038,7 @@ def predict_best(
         return
 
     sum_loss = sum(agg_loss)
-    weights = [1. - (loss / sum_loss * 2.) for loss in agg_loss]
+    weights = [(1.0 - (loss / sum_loss)) / (topk - 1.0) for loss in agg_loss]
 
     save_ensemble_snapshot(
         alchemyEngine,
