@@ -981,7 +981,7 @@ def predict_best(
         return
 
     sum_loss = sum(agg_loss)
-    weights = [sum(agg_loss[:i] + agg_loss[i + 1 :]) / sum_loss for i in range(0, topk)]
+    weights = [1 - (loss / sum_loss * 2) for loss in agg_loss]
 
     save_ensemble_snapshot(
         alchemyEngine,
@@ -996,7 +996,14 @@ def predict_best(
 
 
 def save_ensemble_snapshot(
-    alchemyEngine, symbol, top_forecasts, weights, region, snapshot_ids, random_seed, future_steps
+    alchemyEngine,
+    symbol,
+    top_forecasts,
+    weights,
+    region,
+    snapshot_ids,
+    random_seed,
+    future_steps,
 ):
     ens_df = None
     hyper_params = json.dumps(
