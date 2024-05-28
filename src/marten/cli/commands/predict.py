@@ -56,6 +56,9 @@ def configure_parser(parser):
         help="Use early stopping during model fitting",
     )
     parser.add_argument(
+        "--accelerator", action="store_true", help="Use accelerator automatically"
+    )
+    parser.add_argument(
         "--dashboard_port",
         action="store",
         type=int,

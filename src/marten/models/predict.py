@@ -39,7 +39,8 @@ def main(args):
             args.epochs,
             args.random_seed,
             args.future_steps,
-            args.topk
+            args.topk,
+            "gpu" if args.accelerator else None,
         )
         futures.append(future)
 

@@ -900,7 +900,7 @@ def train_predict(
 
 
 def predict_best(
-    symbol, early_stopping, timestep_limit, epochs, random_seed, future_steps, topk
+    symbol, early_stopping, timestep_limit, epochs, random_seed, future_steps, topk, accelerator
 ):
     from marten.models.hp_search import (
         load_anchor_ts,
@@ -951,6 +951,7 @@ def predict_best(
                     impute_missing=True,
                     validate=True,
                     changepoints_range=1.0,
+                    accelerator=accelerator,
                     **params,
                 )
             )
@@ -969,6 +970,7 @@ def predict_best(
                     validate=False,
                     future_steps=future_steps,
                     changepoints_range=1.0,
+                    accelerator=accelerator,
                     **params,
                 )
             )
@@ -1021,7 +1023,7 @@ def predict_best(
         return
 
     sum_loss = sum(agg_loss)
-    weights = [1 - (loss / sum_loss * 2) for loss in agg_loss]
+    weights = [1. - (loss / sum_loss * 2.) for loss in agg_loss]
 
     save_ensemble_snapshot(
         alchemyEngine,
