@@ -23,10 +23,13 @@ from tenacity import (
     RetryError,
 )
 
+from marten.utils.worker import await_futures
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
 from marten.utils.pl import GlobalProgressBar
 from marten.utils.neuralprophet import select_topk_features, layer_spec_to_list
+
+from types import SimpleNamespace
 
 LOSS_CAP = 99.99
 
@@ -618,7 +621,6 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, df, topk, nth_top
         augment_anchor_df_with_covars,
     )
     from marten.utils.neuralprophet import layer_spec_to_list
-    from types import SimpleNamespace
 
     query = """
         select
@@ -928,7 +930,7 @@ def predict_best(
     logger.info("%s - inferred holiday region: %s", symbol, region)
 
     # use the best performing setting to fit and then predict
-    start_time = time.time()
+    # start_time = time.time()
     futures = []
     dfs = []
     params_list = []
@@ -1117,3 +1119,173 @@ def save_ensemble_snapshot(
         snapshot_id = result.fetchone()[0]
         ens_df.loc[:, "snapshot_id"] = snapshot_id
         ens_df.to_sql("forecast_params", conn, if_exists="append", index=False)
+
+
+def init_hps(hps, args):
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+
+    args.resume = False
+    args.hps_only = False
+    args.covar_only = False
+    args.infer_holiday = True
+
+    hps.logger = logger
+    hps.alchemyEngine = alchemyEngine
+    hps.args = args
+    with worker_client() as client:
+        hps.client = client
+
+    return args
+
+
+def count_topk_hp(hps_id, base_loss):
+    worker = get_worker()
+    alchemyEngine = worker.alchemyEngine
+
+    with alchemyEngine.connect() as conn:
+        result = conn.execute(
+            text(
+                """
+                    select count(*)
+                    from hps_metrics
+                    where 
+                        hps_id = :hp_id
+                        and loss_val <= :base_loss
+                """
+            ),
+            {
+                "hps_id": hps_id,
+                "base_loss": base_loss,
+            },
+        )
+        return result.fetchone()[0]
+
+
+def fast_bayesopt(df, covar_set_id, hps_id, ranked_features, base_loss, args):
+    worker = get_worker()
+    logger = worker.logger
+
+    from scipy.stats import uniform
+    from marten.models.hp_search import (
+        _cleanup_stale_keys,
+        _search_space,
+        _bayesopt_run,
+        update_hps_sessions,
+    )
+
+    _cleanup_stale_keys()
+
+    space_str = _search_space(args.max_covars)
+
+    # Convert args to a dictionary, excluding non-serializable items
+    args_dict = {k: v for k, v in vars(args).items() if not callable(v)}
+    args_json = json.dumps(args_dict, sort_keys=True)
+    update_hps_sessions(hps_id, "fast_bayesopt", args_json, space_str, covar_set_id)
+
+    n_jobs = args.batch_size
+
+    # split large iterations into smaller runs to avoid OOM / memory leak
+    i = 0
+    while True:
+        logger.info("running bayesopt mini-iteration %s", i)
+        min_loss = _bayesopt_run(
+            df,
+            n_jobs,
+            covar_set_id,
+            hps_id,
+            ranked_features,
+            eval(space_str, {"uniform": uniform}),
+            args,
+            args.mini_itr,
+            i > 0,
+        )
+        i += 1
+        if min_loss > base_loss:
+            continue
+
+        topk_count = count_topk_hp(hps_id, base_loss)
+
+        if topk_count > args.topk:
+            logger.info(
+                "Found %s HP with Loss_val less than %s. Best score: %s, stopping bayesopt.",
+                topk_count,
+                base_loss,
+                min_loss,
+            )
+            return topk_count
+        else:
+            logger.info(
+                "Found %s HP with Loss_val less than %s. Best score: %s",
+                topk_count,
+                base_loss,
+                min_loss,
+            )
+
+
+def predict_adhoc(args):
+    import marten.models.hp_search as hps
+    from marten.models.hp_search import (
+        load_anchor_ts,
+        get_hps_session,
+        univariate_baseline,
+        prep_covar_baseline_metrics,
+        augment_anchor_df_with_covars,
+    )
+
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+
+    args = init_hps(hps, args)
+    anchor_df, anchor_table = load_anchor_ts(
+        args.symbol, args.timestep_limit, alchemyEngine, datetime.date.today()
+    )
+    cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
+
+    hps_id = get_hps_session(args.symbol, cutoff_date, False)
+    logger.info("HPS session ID: %s, Cutoff date: %s", hps_id, cutoff_date)
+
+    # run covariate loss calculation in batch
+    t1_start = time.time()
+    base_loss_fut = univariate_baseline(anchor_df, hps_id, args)
+    prep_covar_baseline_metrics(anchor_df, anchor_table, args)
+    await_futures(hps.futures)
+    logger.info(
+        "%s covariate baseline metric computation completed. Time taken: %s seconds",
+        args.symbol,
+        time.time() - t1_start,
+    )
+
+    # run HP search using Bayeopt and check whether needed HP(s) are found
+    t2_start = time.time()
+    df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
+        anchor_df, args, alchemyEngine, logger, cutoff_date
+    )
+    with worker_client() as client:
+        df_future = client.scatter(df)
+        ranked_features_future = client.scatter(ranked_features)
+        fast_bayesopt(
+            df_future,
+            covar_set_id,
+            hps_id,
+            ranked_features_future,
+            base_loss_fut * args.loss_quantile,
+        )
+    logger.info(
+        "%s hyper-parameter search completed. Time taken: %s seconds",
+        args.symbol,
+        time.time() - t2_start,
+    )
+    await_futures(hps.futures)
+
+    # predict
+    predict_best(
+        args.symbol,
+        args.early_stopping,
+        args.timestep_limit,
+        args.epochs,
+        args.random_seed,
+        args.future_steps,
+        args.topk,
+        args.accelerator,
+    )

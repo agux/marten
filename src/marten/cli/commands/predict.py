@@ -31,6 +31,17 @@ def configure_parser(parser):
         ),
     )
     parser.add_argument(
+        "--max_covars",
+        action="store",
+        type=int,
+        default=1000,
+        help=(
+            "Limit the maximum number of top-covariates to be included for training and prediction. "
+            "If it's less than 1, we'll use all covariates with loss_val less than univariate baseline. "
+            "Defaults to 1000."
+        ),
+    )
+    parser.add_argument(
         "--random_seed",
         action="store",
         type=int,
@@ -51,9 +62,59 @@ def configure_parser(parser):
         help="Use top-k best historical hyper-parameters to ensemble the prediction. Default is 3.",
     )
     parser.add_argument(
+        "--batch_size",
+        action="store",
+        type=int,
+        default=500,
+        help=(
+            "Batch size for each iteration of the Bayesian optimized search. "
+            "Defaults to 500"
+        ),
+    )
+    parser.add_argument(
+        "--mini_itr",
+        action="store",
+        type=int,
+        default=20,
+        help=(
+            "Mini-iteration for an inner Bayes Optimization run "
+            "until `topk` HP of which Loss_val is less than baseline. "
+            "Defaults to 20"
+        ),
+    )
+    parser.add_argument(
         "--early_stopping",
         action="store_true",
         help="Use early stopping during model fitting",
+    )
+    parser.add_argument(
+        "--adhoc",
+        action="store_true",
+        help=("Perform adhoc prediction. "
+              "Re-calculate the covariate validation loss and perform HP search using latest historical data. "
+              "The search will be stopped once `topk` HP has been found for ensemble predictions."),
+    )
+    parser.add_argument(
+        "--loss_quantile",
+        action="store",
+        type=float,
+        default=0.98,
+        help=(
+            "During Bayesian HP search, only those with loss_val below `baseline_loss_val * loss_quantile` "
+            "will be considered qualified HP for ensemble prediction. "
+            "Defaults to 0.98"
+        ),
+    )
+    parser.add_argument(
+        "--nan_limit",
+        action="store",
+        type=float,
+        default=0.05,
+        help=(
+            "Limit the ratio of NaN (missing data) in covariates. "
+            "Only those with NaN rate lower than the limit ratio can be selected during multivariate HP searching. "
+            "Defaults to 0.5%."
+        ),
     )
     parser.add_argument(
         "--accelerator", action="store_true", help="Use accelerator automatically"

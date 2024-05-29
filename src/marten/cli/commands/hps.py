@@ -24,7 +24,7 @@ def configure_parser(parser):
         default=100,
         help=(
             "Limit the maximum number of top-covariates to be included for training and prediction. "
-            "If it's less than 1, we'll use all covariates with loss_val less than univariate baseline."
+            "If it's less than 1, we'll use all covariates with loss_val less than univariate baseline. "
             "Defaults to 100."
         ),
     )

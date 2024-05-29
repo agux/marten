@@ -3,7 +3,7 @@ import multiprocessing
 
 from marten.utils.logger import get_logger
 from marten.utils.worker import await_futures, init_client
-from marten.models.worker_func import predict_best
+from marten.models.worker_func import predict_best, predict_adhoc
 
 from types import SimpleNamespace
 
@@ -32,17 +32,23 @@ def main(args):
 
     futures = []
     for symbol in args.symbols:
-        future = client.submit(
-            predict_best,
-            symbol,
-            args.early_stopping,
-            args.timestep_limit,
-            args.epochs,
-            args.random_seed,
-            args.future_steps,
-            args.topk,
-            "gpu" if args.accelerator else None,
-        )
+        if args.adhoc:
+            future = client.submit(
+                predict_adhoc,
+                args
+            )
+        else:
+            future = client.submit(
+                predict_best,
+                symbol,
+                args.early_stopping,
+                args.timestep_limit,
+                args.epochs,
+                args.random_seed,
+                args.future_steps,
+                args.topk,
+                "gpu" if args.accelerator else None,
+            )
         futures.append(future)
 
     await_futures(futures)

@@ -7,7 +7,6 @@ import math
 import multiprocessing
 import pandas as pd
 from dotenv import load_dotenv
-from dask.distributed import fire_and_forget
 
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
@@ -42,9 +41,9 @@ futures = []
 
 
 def init(args):
-    global alchemyEngine, logger, random_seed, client
+    global client
 
-    alchemyEngine, logger = _init_local_resource()
+    _init_local_resource()
 
     client = init_client(
         __name__,
@@ -54,25 +53,26 @@ def init(args):
 
 
 def _init_local_resource():
+    global logger, alchemyEngine
     # NeuralProphet: Disable logging messages unless there is an error
     set_log_level("ERROR")
 
-    load_dotenv()  # take environment variables from .env.
+    if alchemyEngine is None:
+        load_dotenv()  # take environment variables from .env.
 
-    DB_USER = os.getenv("DB_USER")
-    DB_PASSWORD = os.getenv("DB_PASSWORD")
-    DB_HOST = os.getenv("DB_HOST")
-    DB_PORT = os.getenv("DB_PORT")
-    DB_NAME = os.getenv("DB_NAME")
+        DB_USER = os.getenv("DB_USER")
+        DB_PASSWORD = os.getenv("DB_PASSWORD")
+        DB_HOST = os.getenv("DB_HOST")
+        DB_PORT = os.getenv("DB_PORT")
+        DB_NAME = os.getenv("DB_NAME")
 
-    db_url = (
-        f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    )
-    alchemyEngine = get_database_engine(db_url)
-    logger = get_logger(__name__)
+        db_url = (
+            f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+        )
+        alchemyEngine = get_database_engine(db_url)
 
-    return alchemyEngine, logger
-
+    if logger is None:
+        logger = get_logger(__name__)
 
 def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None):
     ## support arbitrary types of symbol (could be from different tables, with different features available)
@@ -678,9 +678,12 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
             initial_custom=warmstart_tuples,
         ),
     )
+    
     results = tuner.minimize()
     logger.info("best parameters:", results["best_params"])
     logger.info("best Loss_val:", results["best_objective"])
+
+    return results["best_objective"]
 
 
 def bayesopt(df, covar_set_id, hps_id, ranked_features):
@@ -1058,21 +1061,20 @@ def univariate_baseline(anchor_df, hps_id, args):
     global random_seed, client, default_params
     df = anchor_df[["ds", "y"]]
     df_future = client.scatter(df)
-    fire_and_forget(
-        client.submit(
-            log_metrics_for_hyper_params,
-            args.symbol,
-            df_future,
-            default_params,
-            args.epochs,
-            random_seed,
-            "gpu" if args.accelerator else None,
-            0,
-            hps_id,
-            args.early_stopping,
-            args.infer_holiday,
-            None,
-        )
+
+    return client.submit(
+        log_metrics_for_hyper_params,
+        args.symbol,
+        df_future,
+        default_params,
+        args.epochs,
+        random_seed,
+        "gpu" if args.accelerator else None,
+        0,
+        hps_id,
+        args.early_stopping,
+        args.infer_holiday,
+        None,
     )
 
 
@@ -1195,7 +1197,7 @@ def main(_args):
         hps_id = get_hps_session(args.symbol, cutoff_date, args.resume)
         logger.info("HPS session ID: %s, Cutoff date: %s", hps_id, cutoff_date)
 
-        univariate_baseline(anchor_df, hps_id, args)
+        futures.append(univariate_baseline(anchor_df, hps_id, args))
 
         if not args.hps_only:
             t1_start = time.time()
