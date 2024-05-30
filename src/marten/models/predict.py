@@ -35,6 +35,7 @@ def main(args):
         if args.adhoc:
             future = client.submit(
                 predict_adhoc,
+                symbol,
                 args
             )
         else:

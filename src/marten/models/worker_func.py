@@ -1121,10 +1121,11 @@ def save_ensemble_snapshot(
         ens_df.to_sql("forecast_params", conn, if_exists="append", index=False)
 
 
-def init_hps(hps, args):
+def init_hps(hps, symbol, args):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
+    args.symbol = symbol
     args.resume = False
     args.hps_only = False
     args.covar_only = False
@@ -1223,7 +1224,7 @@ def fast_bayesopt(df, covar_set_id, hps_id, ranked_features, base_loss, args):
             )
 
 
-def predict_adhoc(args):
+def predict_adhoc(symbol, args):
     import marten.models.hp_search as hps
     from marten.models.hp_search import (
         load_anchor_ts,
@@ -1236,7 +1237,7 @@ def predict_adhoc(args):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
-    args = init_hps(hps, args)
+    args = init_hps(hps, symbol, args)
     anchor_df, anchor_table = load_anchor_ts(
         args.symbol, args.timestep_limit, alchemyEngine, datetime.date.today()
     )
