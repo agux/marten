@@ -1239,7 +1239,7 @@ def predict_adhoc(symbol, args):
 
     args = init_hps(hps, symbol, args)
     anchor_df, anchor_table = load_anchor_ts(
-        args.symbol, args.timestep_limit, alchemyEngine, datetime.date.today()
+        args.symbol, args.timestep_limit, alchemyEngine, datetime.today()
     )
     cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
 
