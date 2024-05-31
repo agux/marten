@@ -812,6 +812,10 @@ def _covar_metric(
     features = _remove_measured_features(
         anchor_symbol, cov_table, features, cutoff_date
     )
+
+    if len(features) == 0:
+        logger.info("no new features in %s need to be calculated for %s on cutoff date %s", cov_table, anchor_symbol, cutoff_date)
+        return
     
     for feature in features:
 
