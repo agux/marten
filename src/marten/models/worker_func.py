@@ -1277,13 +1277,16 @@ def predict_adhoc(symbol, args):
     )
 
     # run HP search using Bayeopt and check whether needed HP(s) are found
-    logger.info("Starting Bayesian optimization search for hyper-parameters")
+    base_loss = float(base_loss_fut.result()) * args.loss_quantile
+    logger.info(
+        "Starting Bayesian optimization search for hyper-parameters. Loss_val threshold: %s",
+        base_loss,
+    )
     t2_start = time.time()
     df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
         anchor_df, args, alchemyEngine, logger, cutoff_date
     )
     update_covar_set_id(alchemyEngine, hps_id, covar_set_id)
-    base_loss = float(base_loss_fut.result()) * args.loss_quantile
     with worker_client() as client:
         df_future = client.scatter(df)
         ranked_features_future = client.scatter(ranked_features)
