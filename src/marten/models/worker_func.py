@@ -1267,20 +1267,21 @@ def predict_adhoc(symbol, args):
     # run covariate loss calculation in batch
     logger.info("Starting covariate loss calculation")
     t1_start = time.time()
-    base_loss_fut = univariate_baseline(anchor_df, hps_id, args)
+    univ_loss_fut = univariate_baseline(anchor_df, hps_id, args)
     prep_covar_baseline_metrics(anchor_df, anchor_table, args)
     await_futures(hps.futures)
+    univ_loss = univ_loss_fut.result()
     logger.info(
         "%s covariate baseline metric computation completed. Time taken: %s seconds",
         args.symbol,
-        time.time() - t1_start,
+        round(time.time() - t1_start, 3),
     )
 
     # run HP search using Bayeopt and check whether needed HP(s) are found
-    base_loss = float(base_loss_fut.result()) * args.loss_quantile
+    base_loss = float(univ_loss) * args.loss_quantile
     logger.info(
         "Starting Bayesian optimization search for hyper-parameters. Loss_val threshold: %s",
-        base_loss,
+        round(base_loss, 3),
     )
     t2_start = time.time()
     df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
@@ -1301,7 +1302,7 @@ def predict_adhoc(symbol, args):
     logger.info(
         "%s hyper-parameter search completed. Time taken: %s seconds",
         args.symbol,
-        time.time() - t2_start,
+        round(time.time() - t2_start, 3),
     )
     await_futures(hps.futures)
 
@@ -1321,5 +1322,5 @@ def predict_adhoc(symbol, args):
     logger.info(
         "%s prediction completed. Time taken: %s seconds",
         args.symbol,
-        time.time() - t3_start,
+        round(time.time() - t3_start, 3),
     )
