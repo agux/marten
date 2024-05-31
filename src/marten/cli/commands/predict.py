@@ -88,6 +88,15 @@ def configure_parser(parser):
         help="Use early stopping during model fitting",
     )
     parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Continue from last adhoc prediction process. "
+            "If not specified, we'll start from scratch with latest time-series data, "
+            "which is the default behavior."
+        ),
+    )
+    parser.add_argument(
         "--adhoc",
         action="store_true",
         help=("Perform adhoc prediction. "

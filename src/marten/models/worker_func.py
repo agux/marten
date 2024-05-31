@@ -1126,7 +1126,6 @@ def init_hps(hps, symbol, args):
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
     args.symbol = symbol
-    args.resume = False
     args.hps_only = False
     args.covar_only = False
     args.infer_holiday = True
@@ -1224,9 +1223,20 @@ def fast_bayesopt(df, covar_set_id, hps_id, ranked_features, base_loss, args):
             )
 
 
+def update_covar_set_id(alchemyEngine, hps_id, covar_set_id):
+    sql = """
+        update hps_sessions
+        set covar_set_id = :covar_set_id
+        where hps_id = :hps_id
+    """
+    with alchemyEngine.begin() as conn:
+        conn.execute(text(sql), {"hps_id": hps_id, "covar_set_id": covar_set_id})
+
+
 def predict_adhoc(symbol, args):
     import marten.models.hp_search as hps
     from marten.models.hp_search import (
+        _get_cutoff_date,
         load_anchor_ts,
         get_hps_session,
         univariate_baseline,
@@ -1238,15 +1248,23 @@ def predict_adhoc(symbol, args):
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
     args = init_hps(hps, symbol, args)
+    cutoff_date = _get_cutoff_date(args)
     anchor_df, anchor_table = load_anchor_ts(
-        args.symbol, args.timestep_limit, alchemyEngine, datetime.today()
+        args.symbol, args.timestep_limit, alchemyEngine, cutoff_date
     )
     cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
 
-    hps_id = get_hps_session(args.symbol, cutoff_date, False)
-    logger.info("HPS session ID: %s, Cutoff date: %s", hps_id, cutoff_date)
+    hps_id, covar_set_id = get_hps_session(args.symbol, cutoff_date, args.resume)
+    args.covar_set_id = covar_set_id
+    logger.info(
+        "HPS session ID: %s, Cutoff date: %s, CovarSet ID: %s",
+        hps_id,
+        cutoff_date,
+        covar_set_id,
+    )
 
     # run covariate loss calculation in batch
+    logger.info("Starting covariate loss calculation")
     t1_start = time.time()
     base_loss_fut = univariate_baseline(anchor_df, hps_id, args)
     prep_covar_baseline_metrics(anchor_df, anchor_table, args)
@@ -1258,10 +1276,12 @@ def predict_adhoc(symbol, args):
     )
 
     # run HP search using Bayeopt and check whether needed HP(s) are found
+    logger.info("Starting Bayesian optimization search for hyper-parameters")
     t2_start = time.time()
     df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
         anchor_df, args, alchemyEngine, logger, cutoff_date
     )
+    update_covar_set_id(alchemyEngine, hps_id, covar_set_id)
     with worker_client() as client:
         df_future = client.scatter(df)
         ranked_features_future = client.scatter(ranked_features)
@@ -1280,6 +1300,8 @@ def predict_adhoc(symbol, args):
     await_futures(hps.futures)
 
     # predict
+    logger.info("Starting adhoc prediction")
+    t3_start = time.time()
     predict_best(
         args.symbol,
         args.early_stopping,
@@ -1289,4 +1311,9 @@ def predict_adhoc(symbol, args):
         args.future_steps,
         args.topk,
         args.accelerator,
+    )
+    logger.info(
+        "%s prediction completed. Time taken: %s seconds",
+        args.symbol,
+        time.time() - t3_start,
     )

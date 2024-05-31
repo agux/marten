@@ -1160,8 +1160,20 @@ def get_hps_session(symbol, cutoff_date, resume):
                 },
             )
             max_id = result.fetchone()[0]
-        if max_id is not None:
-            return max_id
+            if max_id is not None:
+                query_covar_set_id = """
+                    select covar_set_id
+                    from hps_sessions
+                    where id = :id
+                """
+                result = conn.execute(
+                    text(query_covar_set_id),
+                    {
+                        "id": max_id,
+                    },
+                )
+                covar_set_id = result.fetchone()[0]
+                return max_id, covar_set_id
 
     with alchemyEngine.begin() as conn:
         result = conn.execute(
@@ -1178,7 +1190,7 @@ def get_hps_session(symbol, cutoff_date, resume):
                 "ts_date": cutoff_date,
             },
         )
-        return result.fetchone()[0]
+        return result.fetchone()[0], None
 
 
 def main(_args):
@@ -1194,8 +1206,9 @@ def main(_args):
         )
         cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
 
-        hps_id = get_hps_session(args.symbol, cutoff_date, args.resume)
-        logger.info("HPS session ID: %s, Cutoff date: %s", hps_id, cutoff_date)
+        #TODO: make use of the returned covar_set_id to resume?
+        hps_id, _ = get_hps_session(args.symbol, cutoff_date, args.resume)
+        logger.info("HPS session ID: %s, Cutoff date: %s, CovarSet ID: %s", hps_id, cutoff_date, covar_set_id)
 
         futures.append(univariate_baseline(anchor_df, hps_id, args))
 
