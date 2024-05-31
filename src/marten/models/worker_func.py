@@ -1228,7 +1228,7 @@ def update_covar_set_id(alchemyEngine, hps_id, covar_set_id):
     sql = """
         update hps_sessions
         set covar_set_id = :covar_set_id
-        where hps_id = :hps_id
+        where id = :hps_id
     """
     with alchemyEngine.begin() as conn:
         conn.execute(text(sql), {"hps_id": hps_id, "covar_set_id": covar_set_id})
