@@ -1291,7 +1291,7 @@ def predict_adhoc(symbol, args):
             covar_set_id,
             hps_id,
             ranked_features_future,
-            base_loss_fut * args.loss_quantile,
+            base_loss_fut.result() * args.loss_quantile,
         )
     logger.info(
         "%s hyper-parameter search completed. Time taken: %s seconds",
