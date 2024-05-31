@@ -1233,6 +1233,22 @@ def update_covar_set_id(alchemyEngine, hps_id, covar_set_id):
     with alchemyEngine.begin() as conn:
         conn.execute(text(sql), {"hps_id": hps_id, "covar_set_id": covar_set_id})
 
+def _univariate_default_hp(anchor_df, args, hps_id):
+    from marten.models.hp_search import default_params
+    df = anchor_df[["ds", "y"]]
+    return log_metrics_for_hyper_params(
+        args.symbol,
+        df,
+        default_params,
+        args.epochs,
+        args.random_seed,
+        "gpu" if args.accelerator else None,
+        0,
+        hps_id,
+        args.early_stopping,
+        args.infer_holiday,
+        None,
+    )
 
 def predict_adhoc(symbol, args):
     import marten.models.hp_search as hps
@@ -1267,10 +1283,10 @@ def predict_adhoc(symbol, args):
     # run covariate loss calculation in batch
     logger.info("Starting covariate loss calculation")
     t1_start = time.time()
-    univ_loss_fut = univariate_baseline(anchor_df, hps_id, args)
+    # univ_loss_fut = univariate_baseline(anchor_df, hps_id, args)
+    univ_loss = _univariate_default_hp(anchor_df, args, hps_id)
     prep_covar_baseline_metrics(anchor_df, anchor_table, args)
     await_futures(hps.futures)
-    univ_loss = univ_loss_fut.result()
     logger.info(
         "%s covariate baseline metric computation completed. Time taken: %s seconds",
         args.symbol,
