@@ -59,6 +59,7 @@ client = None
 prog_args = None
 futures = []
 
+
 def init():
     global alchemyEngine, client, logger, prog_args
     logger.info("Using akshare version: %s", ak.__version__)
@@ -71,14 +72,34 @@ def init():
     DB_PORT = os.getenv("DB_PORT")
     DB_NAME = os.getenv("DB_NAME")
 
+    workers = (
+        prog_args.worker
+        if os.getenv("ETL_WORKERS") is None
+        else os.getenv("ETL_WORKERS")
+    )
+    threads = (
+        prog_args.threads
+        if os.getenv("ETL_THREADS") is None
+        else os.getenv("ETL_THREADS")
+    )
+    port = (
+        prog_args.dashboard_port
+        if os.getenv("ETL_DASHBOARD_PORT") is None
+        else os.getenv("ETL_DASHBOARD_PORT")
+    )
+
     db_url = (
         f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     )
-    alchemyEngine = get_database_engine(db_url, pool_size=prog_args.threads)
+    alchemyEngine = get_database_engine(db_url, pool_size=threads)
 
     client = init_client(
-        __name__, prog_args.worker, prog_args.threads, prog_args.dashboard_port
+        __name__,
+        workers,
+        threads,
+        port,
     )
+
 
 def run(task, *args, **kwargs):
     global prog_args, client, futures
@@ -92,7 +113,9 @@ def run(task, *args, **kwargs):
         futures.append(future)
         return future
     elif name in prog_args.include and name in prog_args.exclude:
-        raise ValueError(f"Conflicting options: {name} is given in both --include and --exclude arguments.")
+        raise ValueError(
+            f"Conflicting options: {name} is given in both --include and --exclude arguments."
+        )
     else:
         return None
 

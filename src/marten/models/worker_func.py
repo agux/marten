@@ -1256,7 +1256,6 @@ def predict_adhoc(symbol, args):
         _get_cutoff_date,
         load_anchor_ts,
         get_hps_session,
-        univariate_baseline,
         prep_covar_baseline_metrics,
         augment_anchor_df_with_covars,
     )
