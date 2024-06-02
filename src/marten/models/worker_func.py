@@ -114,14 +114,6 @@ def fit_with_covar(
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
-    logger.debug(
-        "running fit_with_covar:\nanchor_symbol:%s\ncov_table:%s\ncov_symbol:%s\nfeature:%s\n",
-        anchor_symbol,
-        cov_table,
-        cov_symbol,
-        feature,
-    )
-
     merged_df = merge_covar_df(
         anchor_symbol,
         anchor_df,

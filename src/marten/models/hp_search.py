@@ -186,7 +186,7 @@ def _covar_symbols_from_table(anchor_symbol, dates, table, feature, ts_date, min
 def _pair_endogenous_covar_metrics(
     anchor_symbol, anchor_df, cov_table, features, args, cutoff_date
 ):
-    global random_seed, client, futures
+    global random_seed, client, futures, logger
 
     # remove feature elements already exists in the neuralprophet_corel table.
     features = _remove_measured_features(
@@ -199,6 +199,13 @@ def _pair_endogenous_covar_metrics(
     anchor_df_future = client.scatter(anchor_df)
 
     for feature in features:
+        logger.debug(
+            "submitting fit_with_covar:\nanchor_symbol:%s\ncov_table:%s\ncov_symbol:%s\nfeature:%s",
+            anchor_symbol,
+            cov_table,
+            anchor_symbol,
+            feature,
+        )
         future = client.submit(
             fit_with_covar,
             anchor_symbol,
@@ -222,6 +229,13 @@ def _pair_covar_metrics(
     global random_seed, client, futures
     
     for symbol in cov_symbols["symbol"]:
+        logger.debug(
+            "submitting fit_with_covar:\nanchor_symbol:%s\ncov_table:%s\ncov_symbol:%s\nfeature:%s",
+            anchor_symbol,
+            cov_table,
+            symbol,
+            feature,
+        )
         future = client.submit(
             fit_with_covar,
             anchor_symbol,
