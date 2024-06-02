@@ -848,7 +848,7 @@ def _covar_metric(
                 # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
                 cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
 
-        if not cov_symbols.empty and features:
+        if not cov_symbols.empty:
             _pair_covar_metrics(
                 anchor_symbol,
                 anchor_df_future,
