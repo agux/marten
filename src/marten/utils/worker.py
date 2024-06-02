@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 
 from datetime import datetime, timedelta
 
+from pprint import pformat
+
 
 class LocalWorkerPlugin(WorkerPlugin):
     def __init__(self, logger_name):
@@ -22,12 +24,10 @@ class LocalWorkerPlugin(WorkerPlugin):
         DB_PORT = os.getenv("DB_PORT")
         DB_NAME = os.getenv("DB_NAME")
 
-        db_url = (
-            f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-        )
+        db_url = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
         worker.alchemyEngine = get_database_engine(db_url)
-        worker.logger = get_logger(self.logger_name, role='worker')
+        worker.logger = get_logger(self.logger_name, role="worker")
 
 
 def init_client(name, worker=-1, threads=1, dashboard_port=None):
@@ -39,12 +39,14 @@ def init_client(name, worker=-1, threads=1, dashboard_port=None):
         processes=True,
         dashboard_address=":8787" if dashboard_port is None else f":{dashboard_port}",
         # memory_limit="2GB",
-        memory_limit=None, # no limit
+        memory_limit=None,  # no limit
     )
     client = Client(cluster)
     client.register_plugin(LocalWorkerPlugin(name))
     client.forward_logging()
-    get_logger(name).info("dask dashboard can be accessed at: %s", cluster.dashboard_link)
+    get_logger(name).info(
+        "dask dashboard can be accessed at: %s", cluster.dashboard_link
+    )
 
     return client
 
@@ -110,7 +112,28 @@ def handle_task_timeout(futures, task_timeout, shared_vars):
             pass
 
 
-def await_futures(futures, until_all_completed=True, task_timeout=None, shared_vars=None, multiplier=1):
+def _get_future_details(future):
+    details = {
+        "Key": future.key,
+        "Status": future.status,
+        "Function": getattr(future, "function", "N/A"),
+        "Arguments": getattr(future, "args", "N/A"),
+        "Keywords": getattr(future, "kwargs", "N/A"),
+    }
+    if future.status == "error":
+        details["Exception"] = future.exception()
+        details["Traceback"] = future.traceback()
+    return future
+
+
+def log_futures(futures):
+    for f in futures:
+        get_logger().debug(pformat(_get_future_details(f)))
+
+
+def await_futures(
+    futures, until_all_completed=True, task_timeout=None, shared_vars=None, multiplier=1
+):
     num = num_undone(futures, shared_vars)
     get_logger().debug("undone futures: %s", num)
     if until_all_completed:
@@ -124,7 +147,8 @@ def await_futures(futures, until_all_completed=True, task_timeout=None, shared_v
                 time.sleep(random_seconds(2 ** (num - 1), 2**num, 128))
                 num = num_undone(futures, shared_vars)
                 get_logger().debug("undone futures: %s", num)
-    elif num > multiprocessing.cpu_count()*multiplier:
+                log_futures(futures)
+    elif num > multiprocessing.cpu_count() * multiplier:
         delta = num - multiprocessing.cpu_count() * multiplier
         time.sleep(random_seconds(2 ** (delta - 1), 2**delta, 128))
 
