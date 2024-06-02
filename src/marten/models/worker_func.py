@@ -1155,7 +1155,7 @@ def init_hps(hps, symbol, args, client):
     args.hps_only = False
     args.covar_only = False
     args.infer_holiday = True
-    args.method = "bayesopt"
+    args.method = "fast_bayesopt"
 
     hps.logger = logger
     hps.alchemyEngine = alchemyEngine
