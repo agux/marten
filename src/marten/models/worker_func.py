@@ -27,7 +27,11 @@ from marten.utils.worker import await_futures
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
 from marten.utils.pl import GlobalProgressBar
-from marten.utils.neuralprophet import select_topk_features, layer_spec_to_list, select_device
+from marten.utils.neuralprophet import (
+    select_topk_features,
+    layer_spec_to_list,
+    select_device,
+)
 
 from types import SimpleNamespace
 
@@ -109,6 +113,15 @@ def fit_with_covar(
     # Local import of get_worker to avoid circular import issue?
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
+
+    logger.debug(
+        "running fit_with_covar:\nanchor_symbol:%s\ncov_table:%s\ncov_symbol:%s\nfeature:%s\n",
+        anchor_symbol,
+        cov_table,
+        cov_symbol,
+        feature,
+    )
+
     merged_df = merge_covar_df(
         anchor_symbol,
         anchor_df,
@@ -1233,8 +1246,10 @@ def update_covar_set_id(alchemyEngine, hps_id, covar_set_id):
     with alchemyEngine.begin() as conn:
         conn.execute(text(sql), {"hps_id": hps_id, "covar_set_id": covar_set_id})
 
+
 def _univariate_default_hp(anchor_df, args, hps_id):
     from marten.models.hp_search import default_params
+
     df = anchor_df[["ds", "y"]]
     return log_metrics_for_hyper_params(
         args.symbol,
@@ -1249,6 +1264,7 @@ def _univariate_default_hp(anchor_df, args, hps_id):
         args.infer_holiday,
         None,
     )
+
 
 def predict_adhoc(symbol, args):
     import marten.models.hp_search as hps
@@ -1285,7 +1301,7 @@ def predict_adhoc(symbol, args):
     # univ_loss_fut = univariate_baseline(anchor_df, hps_id, args)
     univ_loss = _univariate_default_hp(anchor_df, args, hps_id)
     prep_covar_baseline_metrics(anchor_df, anchor_table, args)
-    #FIXME the process could be stuck in the following call
+    # FIXME the process could be stuck in the following call
     logger.debug("waiting dask futures: %s", len(hps.futures))
     await_futures(hps.futures, hard_wait=True)
     logger.info(
