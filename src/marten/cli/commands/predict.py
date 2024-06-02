@@ -107,11 +107,11 @@ def configure_parser(parser):
         "--loss_quantile",
         action="store",
         type=float,
-        default=0.98,
+        default=0.9,
         help=(
             "During Bayesian HP search, only those with loss_val below `baseline_loss_val * loss_quantile` "
             "will be considered qualified HP for ensemble prediction. "
-            "Defaults to 0.98"
+            "Defaults to 0.9"
         ),
     )
     parser.add_argument(

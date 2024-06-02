@@ -20,6 +20,7 @@ from tenacity import (
     wait_exponential,
     Retrying,
     retry_if_exception_type,
+    retry_if_exception,
     RetryError,
 )
 
@@ -320,6 +321,12 @@ def _try_fitting(
             raise e
 
 
+def should_retry(exception):
+    return isinstance(exception, torch.cuda.OutOfMemoryError) or (
+        isinstance(exception, RuntimeError) and "out of memory" in str(exception)
+    )
+
+
 def train(
     df,
     epochs=None,
@@ -351,10 +358,13 @@ def train(
         warnings.simplefilter("ignore", FutureWarning)
 
         try:
+            if select_device("accelerator" in kwargs) is None:
+                return _train_with_cpu()
+
             for attempt in Retrying(
-                stop=stop_after_attempt(3),
+                stop=stop_after_attempt(1),
                 wait=wait_exponential(multiplier=1, max=5),
-                retry=retry_if_exception_type(torch.cuda.OutOfMemoryError),
+                retry=retry_if_exception(should_retry),
                 before_sleep=log_retry,
             ):
                 with attempt:
@@ -369,7 +379,7 @@ def train(
                     )
                     return m, metrics
         except RetryError as e:
-            if "OutOfMemoryError" in str(e):
+            if "OutOfMemoryError" in str(e) or "out of memory" in str(e):
                 # final attempt to train on CPU
                 # remove `accelerator` parameter from **kwargs
                 get_logger().warning(
