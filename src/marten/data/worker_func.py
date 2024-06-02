@@ -999,9 +999,10 @@ def get_stock_daily(symbol):
     if stock_zh_a_hist_df.empty:
         return None
 
-    stock_zh_a_hist_df.insert(0, "symbol", symbol)
+    # stock_zh_a_hist_df.insert(0, "symbol", symbol)
     stock_zh_a_hist_df.rename(
         columns={
+            "股票代码": "symbol",
             "日期": "date",
             "开盘": "open",
             "收盘": "close",
