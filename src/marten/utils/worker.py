@@ -59,9 +59,12 @@ def get_result(future):
         get_logger().exception(e)
         pass
 
+
 def get_results(futures):
     for f in futures:
+        get_logger().debug("getting result for %s", f)
         get_result(f)
+
 
 def num_undone(futures, shared_vars):
     undone = 0
