@@ -72,17 +72,17 @@ def init():
     DB_PORT = os.getenv("DB_PORT")
     DB_NAME = os.getenv("DB_NAME")
 
-    workers = (
+    workers = int(
         prog_args.worker
         if os.getenv("ETL_WORKERS") is None
         else os.getenv("ETL_WORKERS")
     )
-    threads = (
+    threads = int(
         prog_args.threads
         if os.getenv("ETL_THREADS") is None
         else os.getenv("ETL_THREADS")
     )
-    port = (
+    port = int(
         prog_args.dashboard_port
         if os.getenv("ETL_DASHBOARD_PORT") is None
         else os.getenv("ETL_DASHBOARD_PORT")
