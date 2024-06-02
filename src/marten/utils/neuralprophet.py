@@ -17,4 +17,4 @@ def select_topk_features(df, ranked_features, k):
     return df[columns_to_keep]
 
 def select_device(accelerator):
-    return ("gpu" if accelerator and torch.cuda.utilization() < 95 else None)
+    return ("gpu" if accelerator and torch.cuda.utilization() < 95  and torch.cuda.memory_usage() < 95 else None)
