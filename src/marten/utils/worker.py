@@ -62,7 +62,7 @@ def get_result(future):
 
 def get_results(futures):
     for f in futures:
-        get_logger().debug("getting result for %s", f)
+        get_logger().debug("getting result for %s", _get_future_details(f))
         get_result(f)
 
 
@@ -129,7 +129,7 @@ def _get_future_details(future):
     if future.status == "error":
         details["Exception"] = future.exception()
         details["Traceback"] = future.traceback()
-    return future
+    return details
 
 
 def log_futures(futures):
@@ -138,7 +138,7 @@ def log_futures(futures):
 
 
 def await_futures(
-    futures, until_all_completed=True, task_timeout=None, shared_vars=None, multiplier=1
+    futures, until_all_completed=True, task_timeout=None, shared_vars=None, multiplier=1, hard_wait=False
 ):
     num = num_undone(futures, shared_vars)
     get_logger().debug("undone futures: %s", num)
@@ -151,7 +151,8 @@ def await_futures(
             get_logger().debug("waiting until all futures complete: %s", num)
             while num > 0:
                 time.sleep(random_seconds(2 ** (num - 1), 2**num, 128))
-                get_results(futures)
+                if hard_wait:
+                    get_results(futures)
                 num = num_undone(futures, shared_vars)
                 get_logger().debug("undone futures: %s", num)
                 log_futures(futures)

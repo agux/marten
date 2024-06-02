@@ -1287,7 +1287,7 @@ def predict_adhoc(symbol, args):
     prep_covar_baseline_metrics(anchor_df, anchor_table, args)
     #FIXME the process could be stuck in the following call
     logger.debug("waiting dask futures: %s", len(hps.futures))
-    await_futures(hps.futures)
+    await_futures(hps.futures, hard_wait=True)
     logger.info(
         "%s covariate baseline metric computation completed. Time taken: %s seconds",
         args.symbol,
