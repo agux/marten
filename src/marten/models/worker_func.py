@@ -1315,7 +1315,6 @@ def predict_adhoc(symbol, args):
         # univ_loss_fut = univariate_baseline(anchor_df, hps_id, args)
         univ_loss = _univariate_default_hp(anchor_df, args, hps_id)
         prep_covar_baseline_metrics(anchor_df, anchor_table, args)
-        # FIXME the process is stuck in the following call
         logger.debug("waiting dask futures: %s", len(hps.futures))
         await_futures(hps.futures, hard_wait=True)
 
