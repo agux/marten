@@ -213,6 +213,7 @@ def _pair_endogenous_covar_metrics(
             args.infer_holiday,
         )
         futures.append(future)
+        await_futures(futures, False)
 
 
 def _pair_covar_metrics(
