@@ -27,6 +27,8 @@ services:
     command: >
       postgres
       -c max_connections=1024
+      -c shared_buffers=32GB
+      -c work_mem=64MB
     networks:
       - pchn_network
 
