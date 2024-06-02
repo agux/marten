@@ -27,7 +27,7 @@ from marten.utils.worker import await_futures
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
 from marten.utils.pl import GlobalProgressBar
-from marten.utils.neuralprophet import select_topk_features, layer_spec_to_list
+from marten.utils.neuralprophet import select_topk_features, layer_spec_to_list, select_device
 
 from types import SimpleNamespace
 
@@ -1242,7 +1242,7 @@ def _univariate_default_hp(anchor_df, args, hps_id):
         default_params,
         args.epochs,
         args.random_seed,
-        "gpu" if args.accelerator else None,
+        select_device(args.accelerator),
         0,
         hps_id,
         args.early_stopping,
@@ -1285,6 +1285,7 @@ def predict_adhoc(symbol, args):
     # univ_loss_fut = univariate_baseline(anchor_df, hps_id, args)
     univ_loss = _univariate_default_hp(anchor_df, args, hps_id)
     prep_covar_baseline_metrics(anchor_df, anchor_table, args)
+    #FIXME the process could be stuck in the following call
     await_futures(hps.futures)
     logger.info(
         "%s covariate baseline metric computation completed. Time taken: %s seconds",

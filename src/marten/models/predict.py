@@ -3,6 +3,7 @@ import multiprocessing
 
 from marten.utils.logger import get_logger
 from marten.utils.worker import await_futures, init_client
+from marten.utils.neuralprophet import select_device
 from marten.models.worker_func import predict_best, predict_adhoc
 
 from types import SimpleNamespace
@@ -48,7 +49,7 @@ def main(args):
                 args.random_seed,
                 args.future_steps,
                 args.topk,
-                "gpu" if args.accelerator else None,
+                select_device(args.accelerator),
             )
         futures.append(future)
 

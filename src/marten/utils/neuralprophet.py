@@ -1,3 +1,5 @@
+import torch
+
 def layer_spec_to_list(spec):
     if spec is None:
         return []
@@ -13,3 +15,6 @@ def select_topk_features(df, ranked_features, k):
     top_k_features = ranked_features[:k]
     columns_to_keep = ['ds', 'y'] + top_k_features
     return df[columns_to_keep]
+
+def select_device(accelerator):
+    return ("gpu" if accelerator and torch.cuda.utilization() < 95 else None)

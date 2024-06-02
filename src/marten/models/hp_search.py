@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
 from marten.utils.worker import await_futures, init_client
+from marten.utils.neuralprophet import select_device
 from marten.models.worker_func import fit_with_covar, log_metrics_for_hyper_params
 
 from sqlalchemy import text
@@ -207,7 +208,7 @@ def _pair_endogenous_covar_metrics(
             None,
             random_seed,
             feature,
-            "gpu" if args.accelerator else None,
+            select_device(args.accelerator),
             args.early_stopping,
             args.infer_holiday,
         )
@@ -229,7 +230,7 @@ def _pair_covar_metrics(
             min_date,
             random_seed,
             feature,
-            "gpu" if args.accelerator else None,
+            select_device(args.accelerator),
             args.early_stopping,
             args.infer_holiday,
         )
@@ -642,7 +643,7 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
                 params,
                 args.epochs,
                 random_seed,
-                "gpu" if args.accelerator else None,
+                select_device(args.accelerator),
                 covar_set_id,
                 hps_id,
                 args.early_stopping,
@@ -738,7 +739,7 @@ def grid_search(df, covar_set_id, hps_id, ranked_features):
             params,
             args.epochs,
             random_seed,
-            "gpu" if args.accelerator else None,
+            select_device(args.accelerator),
             covar_set_id,
             hps_id,
             args.early_stopping,
@@ -1073,7 +1074,7 @@ def univariate_baseline(anchor_df, hps_id, args):
         default_params,
         args.epochs,
         random_seed,
-        "gpu" if args.accelerator else None,
+        select_device(args.accelerator),
         0,
         hps_id,
         args.early_stopping,
