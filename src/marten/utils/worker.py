@@ -32,6 +32,7 @@ class LocalWorkerPlugin(WorkerPlugin):
 
 def init_client(name, worker=-1, threads=1, dashboard_port=None):
     cluster = LocalCluster(
+        host="0.0.0.0",
         n_workers=worker if worker > 0 else multiprocessing.cpu_count(),
         threads_per_worker=threads,
         processes=True,
