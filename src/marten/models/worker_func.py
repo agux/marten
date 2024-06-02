@@ -66,6 +66,8 @@ def merge_covar_df(
                 from {cov_table}
                 where date >= %(min_date)s
                 and date <= %(cutoff_date)s
+                and {feature} is not null
+                and {feature} <> 'nan'
                 order by date
             """
             params = {
@@ -79,6 +81,8 @@ def merge_covar_df(
                 where symbol = %(cov_symbol)s
                 and date >= %(min_date)s
                 and date <= %(cutoff_date)s
+                and {feature} is not null
+                and {feature} <> 'nan'
                 order by date
             """
             params = {
@@ -123,6 +127,13 @@ def fit_with_covar(
         min_date,
         alchemyEngine,
     )
+    
+    covar_col = f"{feature}_{cov_symbol}"
+    nan_count = merged_df[covar_col].isna().sum()
+    if nan_count >= len(anchor_df)*0.5:
+        logger.info("too much missing values in %s: %s, skipping", covar_col, nan_count)
+        return None
+
     if merged_df is None:
         # FIXME: sometimes merged_df is None even if there's data in table
         logger.info(
