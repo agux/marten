@@ -33,6 +33,7 @@ class LocalWorkerPlugin(WorkerPlugin):
 def init_client(name, worker=-1, threads=1, dashboard_port=None):
     cluster = LocalCluster(
         host="0.0.0.0",
+        scheduler_port=8786,
         n_workers=worker if worker > 0 else multiprocessing.cpu_count(),
         threads_per_worker=threads,
         processes=True,
@@ -111,16 +112,18 @@ def handle_task_timeout(futures, task_timeout, shared_vars):
 
 def await_futures(futures, until_all_completed=True, task_timeout=None, shared_vars=None, multiplier=1):
     num = num_undone(futures, shared_vars)
-
+    get_logger().debug("undone futures: %s", num)
     if until_all_completed:
         if task_timeout is not None and shared_vars is not None:
             while num is not None and num > 0:
                 time.sleep(random_seconds(2 ** (num - 1), 2**num, 128))
                 num = handle_task_timeout(futures, task_timeout, shared_vars)
         else:
+            get_logger().debug("waiting until all futures complete: %s", num)
             while num > 0:
                 time.sleep(random_seconds(2 ** (num - 1), 2**num, 128))
                 num = num_undone(futures, shared_vars)
+                get_logger().debug("undone futures: %s", num)
     elif num > multiprocessing.cpu_count()*multiplier:
         delta = num - multiprocessing.cpu_count() * multiplier
         time.sleep(random_seconds(2 ** (delta - 1), 2**delta, 128))
