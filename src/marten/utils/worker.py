@@ -59,6 +59,9 @@ def get_result(future):
         get_logger().exception(e)
         pass
 
+def get_results(futures):
+    for f in futures:
+        get_result(f)
 
 def num_undone(futures, shared_vars):
     undone = 0
@@ -145,6 +148,7 @@ def await_futures(
             get_logger().debug("waiting until all futures complete: %s", num)
             while num > 0:
                 time.sleep(random_seconds(2 ** (num - 1), 2**num, 128))
+                get_results(futures)
                 num = num_undone(futures, shared_vars)
                 get_logger().debug("undone futures: %s", num)
                 log_futures(futures)
