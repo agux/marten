@@ -16,8 +16,18 @@ def configure_parser(parser):
         type=int,
         default=-1,
         help=(
-            "Number or parallel workers (python processes) for model fitting and prediction. "
+            "Number of parallel workers (python processes). "
             "Defaults to the number of symbols provided, or the number of cpu cores, whichever is smaller."
+        ),
+    )
+    parser.add_argument(
+        "--threads",
+        action="store",
+        type=int,
+        default=1,
+        help=(
+            "Number of threads per worker (python processes)"
+            "Defaults to 1"
         ),
     )
     parser.add_argument(

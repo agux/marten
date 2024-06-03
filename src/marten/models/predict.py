@@ -21,6 +21,7 @@ def init(args):
             if args.worker < 1
             else args.worker
         ),
+        threads=args.threads,
         dashboard_port=args.dashboard_port,
         args=args,
     )

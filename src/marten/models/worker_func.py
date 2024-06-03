@@ -316,7 +316,7 @@ def _try_fitting(
 
 def should_retry(exception):
     return isinstance(exception, torch.cuda.OutOfMemoryError) or (
-        isinstance(exception, RuntimeError) and "out of memory" in str(exception)
+        "out of memory" in str(exception)
     )
 
 
@@ -387,7 +387,7 @@ def train(
                 )
                 return _train_with_cpu()
             else:
-                get_logger().exception("unhandled error!")
+                get_logger().exception(f"unhandled error: {str(e)}")
                 raise e
 
 
