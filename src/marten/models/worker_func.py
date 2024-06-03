@@ -1225,7 +1225,7 @@ def fast_bayesopt(df, covar_set_id, hps_id, ranked_features, base_loss, args):
             eval(space_str, {"uniform": uniform}),
             args,
             args.mini_itr,
-            i > 0,
+            args.resume or i > 0,
         )
         i += 1
         if min_loss > base_loss:
