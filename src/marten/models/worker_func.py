@@ -495,12 +495,15 @@ def log_metrics_for_hyper_params(
     fit_time = time.time() - start_time
     last_metric = metrics.iloc[-1]
 
-    last_metric.loc[:,"Loss_val"] = sanitize_loss(last_metric["Loss_val"])
-    last_metric.loc[:,"MAE_val"] = sanitize_loss(last_metric["MAE_val"])
-    last_metric.loc[:, "RMSE_val"] = sanitize_loss(last_metric["RMSE_val"])
-    last_metric.loc[:,"MAE"] = sanitize_loss(last_metric["MAE"])
-    last_metric.loc[:,"RMSE"] = sanitize_loss(last_metric["RMSE"])
-    last_metric.loc[:, "Loss"] = sanitize_loss(last_metric["Loss"])
+    # Suppress the SettingWithCopyWarning
+    pd.options.mode.chained_assignment = None
+
+    last_metric["Loss_val"] = sanitize_loss(last_metric["Loss_val"])
+    last_metric["MAE_val"] = sanitize_loss(last_metric["MAE_val"])
+    last_metric["RMSE_val"] = sanitize_loss(last_metric["RMSE_val"])
+    last_metric["MAE"] = sanitize_loss(last_metric["MAE"])
+    last_metric["RMSE"] = sanitize_loss(last_metric["RMSE"])
+    last_metric["Loss"] = sanitize_loss(last_metric["Loss"])
 
     covars = [col for col in df.columns if col not in ("ds", "y")]
     logger.debug("params:%s\n#covars:%s\n%s", params, len(covars), last_metric)
