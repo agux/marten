@@ -20,6 +20,12 @@ else
   exit 1
 fi
 
+# Check if the remote port is connectable using nc
+if ! nc -z -w5 $DASK_SCHEDULER_IP $DASK_SCHEDULER_PORT; then
+  echo "Error: Cannot connect to $DASK_SCHEDULER_IP on port $DASK_SCHEDULER_PORT"
+  exit 1
+fi
+
 # Load pyenv into the shell session.
 # export PYENV_ROOT="$HOME/.pyenv"
 # export PATH="$PYENV_ROOT/bin:$PATH"
