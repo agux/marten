@@ -13,8 +13,9 @@ from pprint import pformat
 
 
 class LocalWorkerPlugin(WorkerPlugin):
-    def __init__(self, logger_name):
+    def __init__(self, logger_name, args):
         self.logger_name = logger_name
+        self.args = args
 
     def setup(self, worker):
         load_dotenv()  # take environment variables from .env.
@@ -28,9 +29,10 @@ class LocalWorkerPlugin(WorkerPlugin):
 
         worker.alchemyEngine = get_database_engine(db_url)
         worker.logger = get_logger(self.logger_name, role="worker")
+        worker.args = self.args
 
 
-def init_client(name, worker=-1, threads=1, dashboard_port=None):
+def init_client(name, worker=-1, threads=1, dashboard_port=None, args=None):
     cluster = LocalCluster(
         host="0.0.0.0",
         scheduler_port=8786,
@@ -42,7 +44,7 @@ def init_client(name, worker=-1, threads=1, dashboard_port=None):
         memory_limit=None,  # no limit
     )
     client = Client(cluster)
-    client.register_plugin(LocalWorkerPlugin(name))
+    client.register_plugin(LocalWorkerPlugin(name, args))
     client.forward_logging()
     get_logger(name).info(
         "dask dashboard can be accessed at: %s", cluster.dashboard_link

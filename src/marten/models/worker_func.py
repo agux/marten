@@ -334,13 +334,13 @@ def train(
     **kwargs,
 ):
     worker = get_worker()
-    logger = worker.logger
+    logger, args = worker.logger, worker.args
 
     def _train_with_cpu():
         logger.warning("modifying **kwargs to train with cpu: %s", kwargs)
         if "accelerator" in kwargs and kwargs["accelerator"] in ["gpu", "auto"]:
             del kwargs["accelerator"]
-        logger.warning("**kwargs after modification: %s", kwargs)
+        logger.debug("**kwargs after modification: %s", kwargs)
         m, metrics = _try_fitting(
             df, epochs, random_seed, early_stopping, country, validate, **kwargs
         )
@@ -355,7 +355,14 @@ def train(
         warnings.simplefilter("ignore", FutureWarning)
 
         try:
-            if select_device("accelerator" in kwargs) is None:
+            if (
+                select_device(
+                    "accelerator" in kwargs,
+                    getattr(args, "gpu_util_threshold", None),
+                    getattr(args, "gpu_ram_threshold", None),
+                )
+                is None
+            ):
                 return _train_with_cpu()
 
             for attempt in Retrying(
@@ -1267,7 +1274,11 @@ def _univariate_default_hp(anchor_df, args, hps_id):
         default_params,
         args.epochs,
         args.random_seed,
-        select_device(args.accelerator),
+        select_device(
+            args.accelerator,
+            getattr(args, "gpu_util_threshold", None),
+            getattr(args, "gpu_ram_threshold", None),
+        ),
         0,
         hps_id,
         args.early_stopping,

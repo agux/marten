@@ -15,9 +15,10 @@ def configure_parser(parser):
         action="store",
         type=int,
         default=-1,
-        help=("Number or parallel workers (python processes) for model fitting and prediction. "
-              "Defaults to the number of symbols provided, or the number of cpu cores, whichever is smaller."
-        )
+        help=(
+            "Number or parallel workers (python processes) for model fitting and prediction. "
+            "Defaults to the number of symbols provided, or the number of cpu cores, whichever is smaller."
+        ),
     )
     parser.add_argument(
         "--timestep_limit",
@@ -52,7 +53,11 @@ def configure_parser(parser):
         ),
     )
     parser.add_argument(
-        "--future_steps", action="store", type=int, default=60, help="Specify how many time steps (days) into the future will be predicted. Defaults to 60."
+        "--future_steps",
+        action="store",
+        type=int,
+        default=60,
+        help="Specify how many time steps (days) into the future will be predicted. Defaults to 60.",
     )
     parser.add_argument(
         "--topk",
@@ -60,6 +65,28 @@ def configure_parser(parser):
         type=int,
         default=3,
         help="Use top-k best historical hyper-parameters to ensemble the prediction. Default is 3.",
+    )
+    parser.add_argument(
+        "--gpu_util_threshold",
+        action="store",
+        type=int,
+        default=80,
+        help=(
+            "When accelerator is switched on, "
+            "it will fall back to CPU when GPU processor utilization is over the given percentage. "
+            "Default is 80."
+        ),
+    )
+    parser.add_argument(
+        "--gpu_ram_threshold",
+        action="store",
+        type=int,
+        default=80,
+        help=(
+            "When accelerator is switched on, "
+            "it will fall back to CPU when GPU vRAM utilization is over the given percentage. "
+            "Default is 80."
+        ),
     )
     parser.add_argument(
         "--batch_size",
@@ -99,9 +126,11 @@ def configure_parser(parser):
     parser.add_argument(
         "--adhoc",
         action="store_true",
-        help=("Perform adhoc prediction. "
-              "Re-calculate the covariate validation loss and perform HP search using latest historical data. "
-              "The search will be stopped once `topk` HP has been found for ensemble predictions."),
+        help=(
+            "Perform adhoc prediction. "
+            "Re-calculate the covariate validation loss and perform HP search using latest historical data. "
+            "The search will be stopped once `topk` HP has been found for ensemble predictions."
+        ),
     )
     parser.add_argument(
         "--loss_quantile",
@@ -137,7 +166,7 @@ def configure_parser(parser):
     )
 
     parser.add_argument(
-        "symbols", type=str, nargs='+', help="Array of asset symbols to be predicted."
+        "symbols", type=str, nargs="+", help="Array of asset symbols to be predicted."
     )
 
     parser.set_defaults(func=handle_predict)

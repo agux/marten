@@ -22,6 +22,7 @@ def init(args):
             else args.worker
         ),
         dashboard_port=args.dashboard_port,
+        args=args,
     )
 
 
@@ -34,11 +35,7 @@ def main(args):
     futures = []
     for symbol in args.symbols:
         if args.adhoc:
-            future = client.submit(
-                predict_adhoc,
-                symbol,
-                args
-            )
+            future = client.submit(predict_adhoc, symbol, args)
         else:
             future = client.submit(
                 predict_best,
@@ -49,7 +46,11 @@ def main(args):
                 args.random_seed,
                 args.future_steps,
                 args.topk,
-                select_device(args.accelerator),
+                select_device(
+                    args.accelerator,
+                    getattr(args, "gpu_util_threshold", None),
+                    getattr(args, "gpu_ram_threshold", None),
+                ),
             )
         futures.append(future)
 
