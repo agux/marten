@@ -23,4 +23,4 @@ OUTPUT_LOG=workers.log
 > $OUTPUT_LOG
 
 # Start the Dask worker with the specified parameters
-nohup dask-worker tcp://$SCHEDULER_IP:$PORT --nworkers $NWORKERS --nthreads $NTHREADS > >(tee -a $OUTPUT_LOG) 2>&1 &
+nohup dask worker tcp://$SCHEDULER_IP:$PORT --nworkers $NWORKERS --nthreads $NTHREADS --memory-limit 0 > >(tee -a $OUTPUT_LOG) 2>&1 &
