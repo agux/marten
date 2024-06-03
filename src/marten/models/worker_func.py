@@ -130,7 +130,7 @@ def fit_with_covar(
     )
 
     covar_col = f"{feature}_{cov_symbol}"
-    nan_count = merged_df[covar_col].isna().sum()
+    nan_count = int(merged_df[covar_col].isna().sum())
     if nan_count >= len(merged_df) * 0.5:
         logger.info("too much missing values in %s: %s, skipping", covar_col, nan_count)
         return None
@@ -178,9 +178,6 @@ def fit_with_covar(
     # get the row count in merged_df as timesteps
     timesteps = len(merged_df)
     # get merged_df's right-most column's nan count.
-    nan_count = merged_df.iloc[:, -1].isna().sum()
-    # Assuming `nan_count` is a numpy.int64 value
-    nan_count = int(nan_count)  # Convert to Python's native int type
     ts_cutoff_date = merged_df["ds"].max().strftime("%Y-%m-%d")
     with alchemyEngine.begin() as conn:
         save_covar_metrics(

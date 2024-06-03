@@ -488,9 +488,9 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
             sdf2 = sdf2[["ds", col_name]]
             merged_df = pd.merge(merged_df, sdf2, on="ds", how="left")
 
-    missing_values = merged_df.isnull().sum()
+    missing_values = merged_df.isna().sum()
     missing_values = missing_values[missing_values > 0]
-    logger.info("count of missing values:\n%s", missing_values)
+    logger.info("Count of missing values:\n%s", missing_values)
 
     return merged_df, covar_set_id, ranked_features
 
