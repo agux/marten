@@ -333,7 +333,7 @@ def train(
     logger, args = worker.logger, worker.args
 
     def _train_with_cpu():
-        logger.warning("modifying **kwargs to train with cpu: %s", kwargs)
+        logger.debug("modifying **kwargs to train with cpu: %s", kwargs)
         if "accelerator" in kwargs and kwargs["accelerator"] in ["gpu", "auto"]:
             del kwargs["accelerator"]
         logger.debug("**kwargs after modification: %s", kwargs)
