@@ -355,6 +355,7 @@ def _load_covars(
     # Note: SELECT DISTINCT ON expressions must match initial ORDER BY expressions
     query += " ORDER BY ts_date desc, loss_val asc, nan_count asc, cov_table, cov_symbol"
     query += limit_clause
+    logger.debug("loading topk covariates using sql:\n%s\nparams:%s",query,params)
     df = pd.read_sql(
         query,
         alchemyEngine,
@@ -445,6 +446,8 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
         covars_df = _load_covar_set(covar_set_id, alchemyEngine)
     else:
         nan_threshold = round(len(df) * args.nan_limit, 0)
+        logger.info("covar_set_id is not provided, selecting top %s covars with NaN threshold %s, cutoff date %s", 
+                    args.max_covars, nan_threshold, cutoff_date)
         covars_df, covar_set_id = _load_covars(
             alchemyEngine, args.max_covars, args.symbol, nan_threshold, cutoff_date=cutoff_date
         )
