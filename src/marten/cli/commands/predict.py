@@ -174,7 +174,13 @@ def configure_parser(parser):
         default=8789,
         help=("Port number for the dask dashboard. " "Defaults to 8789."),
     )
-
+    parser.add_argument(
+        "--scheduler_port",
+        action="store",
+        type=int,
+        default=0,
+        help=("Port number for the scheduler. " "Defaults to 0 (a random port will be selected)"),
+    )
     parser.add_argument(
         "symbols", type=str, nargs="+", help="Array of asset symbols to be predicted."
     )

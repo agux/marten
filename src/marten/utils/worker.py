@@ -35,7 +35,7 @@ class LocalWorkerPlugin(WorkerPlugin):
 def init_client(name, worker=-1, threads=1, dashboard_port=None, args=None):
     cluster = LocalCluster(
         host="0.0.0.0",
-        scheduler_port=8786,
+        scheduler_port=getattr(args, "scheduler_port", 0),
         n_workers=worker if worker > 0 else multiprocessing.cpu_count(),
         threads_per_worker=threads,
         processes=True,
@@ -48,6 +48,9 @@ def init_client(name, worker=-1, threads=1, dashboard_port=None, args=None):
     client.forward_logging()
     get_logger(name).info(
         "dask dashboard can be accessed at: %s", cluster.dashboard_link
+    )
+    get_logger(name).info(
+        "dask scheduler address: %s", cluster.scheduler_address
     )
 
     return client
