@@ -53,10 +53,6 @@ def merge_covar_df(
 
         return merged_df
 
-    # `cov_symbol` may contain special characters such as `.IXIC`, or `H-FIN`. The dot and hyphen is not allowed in column alias.
-    # Convert common special characters often seen in stock / index symbols to valid replacements as PostgreSQL table column alias.
-    # cov_symbol_sanitized = cov_symbol.replace(".", "_").replace("-", "_")
-    # cov_symbol_sanitized = f"{feature}_{cov_symbol_sanitized}"
     cov_symbol_sanitized = f"{feature}_{cov_symbol}"
     cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
 
@@ -129,7 +125,7 @@ def fit_with_covar(
         alchemyEngine,
     )
 
-    covar_col = f"{feature}_{cov_symbol}"
+    covar_col = feature if feature in merged_df.columns else f"{feature}_{cov_symbol}"
     nan_count = int(merged_df[covar_col].isna().sum())
     if nan_count >= len(merged_df) * 0.5:
         logger.info("too much missing values in %s: %s, skipping", covar_col, nan_count)
