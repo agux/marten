@@ -41,7 +41,7 @@ def init_client(name, worker=-1, threads=1, dashboard_port=None, args=None):
         processes=True,
         dashboard_address=":8787" if dashboard_port is None else f":{dashboard_port}",
         # memory_limit="2GB",
-        memory_limit=None,  # no limit
+        memory_limit=0,  # no limit
     )
     client = Client(cluster)
     client.register_plugin(LocalWorkerPlugin(name, args))
