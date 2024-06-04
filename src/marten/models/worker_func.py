@@ -1315,6 +1315,9 @@ def covars_and_search(client, symbol):
         covar_set_id,
     )
 
+    univ_loss = _univariate_default_hp(anchor_df, args, hps_id)
+    base_loss = float(univ_loss) * args.loss_quantile
+    
     # if in resume mode, check if the topk HP is present, and further check if prediction is already conducted.
     topk_count = count_topk_hp(hps_id, base_loss)
     if args.resume & topk_count > args.topk:
@@ -1334,8 +1337,6 @@ def covars_and_search(client, symbol):
     # run covariate loss calculation in batch
     logger.info("Starting covariate loss calculation")
     t1_start = time.time()
-    # univ_loss_fut = univariate_baseline(anchor_df, hps_id, args)
-    univ_loss = _univariate_default_hp(anchor_df, args, hps_id)
     prep_covar_baseline_metrics(anchor_df, anchor_table, args)
     logger.debug("waiting dask futures: %s", len(hps.futures))
     await_futures(hps.futures, hard_wait=True)
@@ -1347,7 +1348,6 @@ def covars_and_search(client, symbol):
     )
 
     # run HP search using Bayeopt and check whether needed HP(s) are found
-    base_loss = float(univ_loss) * args.loss_quantile
     logger.info(
         "Starting Bayesian optimization search for hyper-parameters. Loss_val threshold: %s",
         round(base_loss, 3),
