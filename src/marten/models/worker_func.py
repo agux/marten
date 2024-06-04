@@ -1285,8 +1285,7 @@ def _univariate_default_hp(anchor_df, args, hps_id):
         None,
     )
 
-
-def predict_adhoc(symbol, args):
+def covars_and_search(client, symbol):
     import marten.models.hp_search as hps
     from marten.models.hp_search import (
         _get_cutoff_date,
@@ -1297,70 +1296,84 @@ def predict_adhoc(symbol, args):
     )
 
     worker = get_worker()
-    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+    alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
+
+    args = init_hps(hps, symbol, args, client)
+    cutoff_date = _get_cutoff_date(args)
+    anchor_df, anchor_table = load_anchor_ts(
+        args.symbol, args.timestep_limit, alchemyEngine, cutoff_date
+    )
+    cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
+
+    hps_id, covar_set_id = get_hps_session(args.symbol, cutoff_date, args.resume)
+    args.covar_set_id = covar_set_id
+    logger.info(
+        "HPS session ID: %s, Cutoff date: %s, CovarSet ID: %s",
+        hps_id,
+        cutoff_date,
+        covar_set_id,
+    )
+
+    # if in resume mode, check if the topk HP is present, and further check if prediction is already conducted.
+    topk_count = count_topk_hp(hps_id, base_loss)
+    if args.resume & topk_count > args.topk:
+        logger.info(
+            "Found %s HP with Loss_val less than %s in HP search history.",
+            topk_count,
+            base_loss,
+        )
+        return
+
+    # run covariate loss calculation in batch
+    logger.info("Starting covariate loss calculation")
+    t1_start = time.time()
+    # univ_loss_fut = univariate_baseline(anchor_df, hps_id, args)
+    univ_loss = _univariate_default_hp(anchor_df, args, hps_id)
+    prep_covar_baseline_metrics(anchor_df, anchor_table, args)
+    logger.debug("waiting dask futures: %s", len(hps.futures))
+    await_futures(hps.futures, hard_wait=True)
+
+    logger.info(
+        "%s covariate baseline metric computation completed. Time taken: %s seconds",
+        args.symbol,
+        round(time.time() - t1_start, 3),
+    )
+
+    # run HP search using Bayeopt and check whether needed HP(s) are found
+    base_loss = float(univ_loss) * args.loss_quantile
+    logger.info(
+        "Starting Bayesian optimization search for hyper-parameters. Loss_val threshold: %s",
+        round(base_loss, 3),
+    )
+    t2_start = time.time()
+    df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
+        anchor_df, args, alchemyEngine, logger, cutoff_date
+    )
+    update_covar_set_id(alchemyEngine, hps_id, covar_set_id)
+
+    df_future = client.scatter(df)
+    ranked_features_future = client.scatter(ranked_features)
+    fast_bayesopt(
+        df_future,
+        covar_set_id,
+        hps_id,
+        ranked_features_future,
+        base_loss,
+        args,
+    )
+    logger.info(
+        "%s hyper-parameter search completed. Time taken: %s seconds",
+        args.symbol,
+        round(time.time() - t2_start, 3),
+    )
+    await_futures(hps.futures)
+
+def predict_adhoc(symbol, args):
+    worker = get_worker()
+    logger = worker.alchemyEngine, worker.logger
 
     with worker_client() as client:
-        args = init_hps(hps, symbol, args, client)
-        cutoff_date = _get_cutoff_date(args)
-        anchor_df, anchor_table = load_anchor_ts(
-            args.symbol, args.timestep_limit, alchemyEngine, cutoff_date
-        )
-        cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
-
-        hps_id, covar_set_id = get_hps_session(args.symbol, cutoff_date, args.resume)
-        args.covar_set_id = covar_set_id
-        logger.info(
-            "HPS session ID: %s, Cutoff date: %s, CovarSet ID: %s",
-            hps_id,
-            cutoff_date,
-            covar_set_id,
-        )
-
-        # TODO: if in resume mode, check if the topk HP is present, and further check if prediction is already conducted.
-
-        # run covariate loss calculation in batch
-        logger.info("Starting covariate loss calculation")
-        t1_start = time.time()
-        # univ_loss_fut = univariate_baseline(anchor_df, hps_id, args)
-        univ_loss = _univariate_default_hp(anchor_df, args, hps_id)
-        prep_covar_baseline_metrics(anchor_df, anchor_table, args)
-        logger.debug("waiting dask futures: %s", len(hps.futures))
-        await_futures(hps.futures, hard_wait=True)
-
-        logger.info(
-            "%s covariate baseline metric computation completed. Time taken: %s seconds",
-            args.symbol,
-            round(time.time() - t1_start, 3),
-        )
-
-        # run HP search using Bayeopt and check whether needed HP(s) are found
-        base_loss = float(univ_loss) * args.loss_quantile
-        logger.info(
-            "Starting Bayesian optimization search for hyper-parameters. Loss_val threshold: %s",
-            round(base_loss, 3),
-        )
-        t2_start = time.time()
-        df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
-            anchor_df, args, alchemyEngine, logger, cutoff_date
-        )
-        update_covar_set_id(alchemyEngine, hps_id, covar_set_id)
-
-        df_future = client.scatter(df)
-        ranked_features_future = client.scatter(ranked_features)
-        fast_bayesopt(
-            df_future,
-            covar_set_id,
-            hps_id,
-            ranked_features_future,
-            base_loss,
-            args,
-        )
-        logger.info(
-            "%s hyper-parameter search completed. Time taken: %s seconds",
-            args.symbol,
-            round(time.time() - t2_start, 3),
-        )
-        await_futures(hps.futures)
+        covars_and_search(client, symbol)
 
     # predict
     logger.info("Starting adhoc prediction")
