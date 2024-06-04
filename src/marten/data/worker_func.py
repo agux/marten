@@ -1451,8 +1451,9 @@ def get_fund_dividend_events():
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
     logger.info("running fund_dividend_events()...")
 
-    with worker_client() as client:
-        df = EastMoneyAPI.fund_fh_em(client, priority=1)
+    df = ak.fund_fh_em()
+    # with worker_client() as client:
+    #     df = EastMoneyAPI.fund_fh_em(client, priority=1)
 
     df.drop(columns=["序号"], inplace=True)
     df.rename(
