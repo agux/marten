@@ -1163,7 +1163,7 @@ def init_hps(hps, symbol, args, client):
     hps.logger = logger
     hps.alchemyEngine = alchemyEngine
     hps.args = args
-    
+
     hps.client = client
 
     return args
@@ -1285,6 +1285,7 @@ def _univariate_default_hp(anchor_df, args, hps_id):
         None,
     )
 
+
 def covars_and_search(client, symbol):
     import marten.models.hp_search as hps
     from marten.models.hp_search import (
@@ -1323,6 +1324,12 @@ def covars_and_search(client, symbol):
             base_loss,
         )
         return
+    else:
+        logger.info(
+            "Found %s HP with Loss_val less than %s in HP search history. The process will be continued.",
+            topk_count,
+            base_loss,
+        )
 
     # run covariate loss calculation in batch
     logger.info("Starting covariate loss calculation")
@@ -1367,6 +1374,7 @@ def covars_and_search(client, symbol):
         round(time.time() - t2_start, 3),
     )
     await_futures(hps.futures)
+
 
 def predict_adhoc(symbol, args):
     worker = get_worker()
