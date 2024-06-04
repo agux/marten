@@ -705,8 +705,8 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
     )
     
     results = tuner.minimize()
-    logger.info("best parameters:", results["best_params"])
-    logger.info("best Loss_val:", results["best_objective"])
+    logger.info("best parameters: %s", results["best_params"])
+    logger.info("best objective: %s", results["best_objective"])
 
     return results["best_objective"]
 

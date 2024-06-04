@@ -1231,7 +1231,7 @@ def fast_bayesopt(df, covar_set_id, hps_id, ranked_features, base_loss, args):
             args.resume or i > 0,
         )
         i += 1
-        if min_loss > base_loss:
+        if min_loss is None or min_loss > base_loss:
             continue
 
         topk_count = count_topk_hp(hps_id, base_loss)
