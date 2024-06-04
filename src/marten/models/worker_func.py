@@ -1180,7 +1180,7 @@ def count_topk_hp(hps_id, base_loss):
                     select count(*)
                     from hps_metrics
                     where 
-                        hps_id = :hp_id
+                        hps_id = :hps_id
                         and loss_val <= :base_loss
                 """
             ),
