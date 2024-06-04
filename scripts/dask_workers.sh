@@ -22,5 +22,12 @@ OUTPUT_LOG=workers.log
 # Clear the log file
 > $OUTPUT_LOG
 
+# Load pyenv into the shell session.
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+if command -v pyenv 1>/dev/null 2>&1; then
+  eval "$(pyenv init -)"
+fi
+
 # Start the Dask worker with the specified parameters
 nohup dask worker tcp://$SCHEDULER_IP:$PORT --nworkers $NWORKERS --nthreads $NTHREADS --memory-limit 0 > >(tee -a $OUTPUT_LOG) 2>&1 &

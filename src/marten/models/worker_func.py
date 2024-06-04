@@ -1316,6 +1316,8 @@ def predict_adhoc(symbol, args):
             covar_set_id,
         )
 
+        # TODO: if in resume mode, check if the topk HP is present, and further check if prediction is already conducted.
+
         # run covariate loss calculation in batch
         logger.info("Starting covariate loss calculation")
         t1_start = time.time()
@@ -1342,7 +1344,7 @@ def predict_adhoc(symbol, args):
             anchor_df, args, alchemyEngine, logger, cutoff_date
         )
         update_covar_set_id(alchemyEngine, hps_id, covar_set_id)
-    
+
         df_future = client.scatter(df)
         ranked_features_future = client.scatter(ranked_features)
         fast_bayesopt(
