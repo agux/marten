@@ -1550,7 +1550,7 @@ def covars_and_search(client, symbol):
             topk_count,
             base_loss,
         )
-        return hps_id
+        return hps_id, cutoff_date
     else:
         logger.info(
             "Found %s HP with Loss_val less than %s in HP search history. The process will be continued.",
