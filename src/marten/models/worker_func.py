@@ -33,6 +33,8 @@ from marten.utils.neuralprophet import (
     layer_spec_to_list,
     select_device,
 )
+from marten.models.hp_search import augment_anchor_df_with_covars, load_anchor_ts
+
 
 from types import SimpleNamespace
 
@@ -642,6 +644,56 @@ def new_metric_keys(
         with attempt:
             return action()
 
+def get_topk_prediction_settings(symbol, hps_id, topk):
+    worker = get_worker()
+    alchemyEngine = worker.alchemyEngine
+
+    query = """
+        WITH baseline as (
+            select loss_val
+            from hps_metrics
+            where anchor_symbol = %(symbol)s 
+            and hps_id = %(hps_id)s 
+            and covar_set_id = 0
+        ),
+        top_by_loss_val AS (
+            SELECT 
+                hyper_params, mae, rmse, loss, mae_val, 
+                rmse_val, loss_val, hpid, epochs, sub_topk,
+                covar_set_id, ts_date
+            FROM hps_metrics
+            WHERE anchor_symbol = %(symbol)s
+            AND hps_id = %(hps_id)s 
+            and loss_val < (select loss_val from baseline)
+            ORDER BY loss_val ASC
+            LIMIT %(limit)s
+        ),
+        top_by_loss AS (
+            SELECT 
+                hyper_params, mae, rmse, loss, mae_val, 
+                rmse_val, loss_val, hpid, epochs, sub_topk,
+                covar_set_id, ts_date
+            FROM hps_metrics
+            WHERE anchor_symbol = %(symbol)s
+            AND hps_id = %(hps_id)s 
+            and loss_val < (select loss_val from baseline)
+            ORDER BY loss ASC
+            LIMIT %(limit)s
+        )
+        SELECT DISTINCT *
+        FROM top_by_loss_val
+        UNION
+        SELECT DISTINCT *
+        FROM top_by_loss
+    """
+    params = {
+        "symbol": symbol,
+        "hps_id": hps_id,
+        "limit": topk,
+    }
+
+    return pd.read_sql(query, alchemyEngine, params=params)
+
 
 def get_best_prediction_setting(alchemyEngine, logger, symbol, df, topk, nth_top):
     # find the model setting with optimum performance, including univariate default setting.
@@ -935,6 +987,175 @@ def train_predict(
 
     return forecast, metrics
 
+def forecast(symbol, df, hps_metric, region):
+    worker = get_worker()
+    alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
+
+    covar_set_id = int(hps_metric["covar_set_id"])
+    logger.info(
+        (
+            "%s - forecasting with setting:\n"
+            "hpid: %s\n"
+            "loss: %s\n"
+            "loss_val: %s\n"
+            "covar_set_id: %s\n"
+            "sub_topk: %s\n"
+            "ts_date: %s\n"
+            "hyper-params: %s"
+        ),
+        symbol,
+        hps_metric["hpid"],
+        hps_metric["loss"],
+        hps_metric["loss_val"],
+        covar_set_id,
+        hps_metric["sub_topk"],
+        hps_metric["ts_date"],
+        hps_metric["hyper_params"]
+    )
+
+    hyperparams = json.loads(hps_metric["hyper_params"])
+    new_df, _, ranked_features = augment_anchor_df_with_covars(
+        df,
+        SimpleNamespace(covar_set_id=covar_set_id, symbol=symbol),
+        alchemyEngine,
+        logger,
+        hps_metric["ts_date"],
+    )
+
+    if hps_metric["sub_topk"] is not None:
+        new_df = select_topk_features(
+            new_df, ranked_features, hps_metric["sub_topk"]
+        )
+    
+    if "ar_layers" not in hyperparams:
+        hyperparams["ar_layers"] = layer_spec_to_list(hyperparams["ar_layer_spec"])
+        hyperparams.pop("ar_layer_spec")
+    if "lagged_reg_layers" not in hyperparams:
+        hyperparams["lagged_reg_layers"] = layer_spec_to_list(
+            hyperparams["lagged_reg_layer_spec"]
+        )
+        hyperparams.pop("lagged_reg_layer_spec")
+    if "topk_covar" in hyperparams:
+        hyperparams.pop("topk_covar")
+
+    # start_time = time.time()
+    with worker_client() as client:
+        df_future = client.scatter(new_df)
+        futures = []
+        # train with validation
+        futures.append(
+            client.submit(
+                train,
+                df=df_future,
+                country=region,
+                epochs=args.epochs,
+                random_seed=args.random_seed,
+                early_stopping=args.early_stopping,
+                weekly_seasonality=False,
+                daily_seasonality=False,
+                impute_missing=True,
+                validate=True,
+                changepoints_range=1.0,
+                accelerator="gpu" if args.accelerator else None,
+                **hyperparams,
+            )
+        )
+        # train with full dataset without validation split
+        futures.append(
+            client.submit(
+                train_predict,
+                df=df_future,
+                country=region,
+                epochs=args.epochs,
+                random_seed=args.random_seed,
+                early_stopping=args.early_stopping,
+                weekly_seasonality=False,
+                daily_seasonality=False,
+                impute_missing=True,
+                validate=False,
+                future_steps=args.future_steps,
+                changepoints_range=1.0,
+                accelerator="gpu" if args.accelerator else None,
+                **hyperparams,
+            )
+        )
+        results = client.gather(futures)
+
+    metrics = results[0][1]
+    forecast, metrics_final = results[1][0], results[1][1]
+    agg_loss = metrics.iloc[-1]["Loss_val"] + metrics_final.iloc[-1]["Loss"]
+    n_covars = len([col for col in new_df.columns if col not in ("ds", "y")])
+
+    snapshot_id, n_yearly_seasonality = save_forecast_snapshot(
+        alchemyEngine,
+        symbol,
+        hps_metric["hyper_params"],
+        covar_set_id,
+        metrics,
+        metrics_final,
+        forecast,
+        None,
+        region,
+        args.random_seed,
+        args.future_steps,
+        n_covars,
+    )
+
+    logger.info(
+        "%s - estimated %s yearly-seasonality coefficients. snapshot_id: %s",
+        symbol,
+        n_yearly_seasonality,
+        snapshot_id,
+    )
+
+    return snapshot_id, forecast, agg_loss
+
+def ensemble_topk_prediction(
+    symbol,
+    timestep_limit,
+    random_seed,
+    future_steps,
+    topk,
+    hps_id,
+):
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+
+    df, _ = load_anchor_ts(symbol, timestep_limit, alchemyEngine)
+
+    region = get_holiday_region(alchemyEngine, symbol)
+    logger.info("%s - inferred holiday region: %s", symbol, region)
+
+    hps_metrics = get_topk_prediction_settings(symbol, hps_id, topk)
+
+    with worker_client() as client:
+        futures = []
+        df_fut = client.scatter(df)
+        for _, row in hps_metrics.iterrows():
+            futures.append(client.submit(forecast, symbol, df_fut, row, region))
+
+        results = client.gather(futures)
+
+    # each row of results is a tuple consisting snapshot_id, forecast, agg_loss
+    # select the topk rows with lowest agg_loss value
+    topk_results = sorted(results, key=lambda x: x[2])[:topk]
+    snapshot_ids = [t[0] for t in topk_results]
+    forecasts = [t[1] for t in topk_results]
+    agg_loss = [t[2] for t in topk_results]
+
+    sum_loss = sum(agg_loss)
+    weights = [(1.0 - (loss / sum_loss)) / (topk - 1.0) for loss in agg_loss]
+
+    save_ensemble_snapshot(
+        alchemyEngine,
+        symbol,
+        forecasts,
+        weights,
+        region,
+        snapshot_ids,
+        random_seed,
+        future_steps,
+    )
 
 def predict_best(
     symbol,
@@ -1317,7 +1538,7 @@ def covars_and_search(client, symbol):
 
     univ_loss = _univariate_default_hp(anchor_df, args, hps_id)
     base_loss = float(univ_loss) * args.loss_quantile
-    
+
     # if in resume mode, check if the topk HP is present, and further check if prediction is already conducted.
     topk_count = count_topk_hp(hps_id, base_loss)
     if args.resume & topk_count > args.topk:
@@ -1375,26 +1596,26 @@ def covars_and_search(client, symbol):
     )
     await_futures(hps.futures)
 
+    return hps_id
+
 
 def predict_adhoc(symbol, args):
     worker = get_worker()
     logger = worker.alchemyEngine, worker.logger
 
     with worker_client() as client:
-        covars_and_search(client, symbol)
+        hps_id = covars_and_search(client, symbol)
 
     # predict
     logger.info("Starting adhoc prediction")
     t3_start = time.time()
-    predict_best(
-        args.symbol,
-        args.early_stopping,
+    ensemble_topk_prediction(
+        symbol,
         args.timestep_limit,
-        args.epochs,
         args.random_seed,
         args.future_steps,
         args.topk,
-        args.accelerator,
+        hps_id,
     )
     logger.info(
         "%s prediction completed. Time taken: %s seconds",

@@ -728,7 +728,7 @@ def bayesopt(df, covar_set_id, hps_id, ranked_features):
     n_jobs = args.batch_size
 
     # split large iterations into smaller runs to avoid OOM / memory leak
-    mango_itr = 10
+    mango_itr = min(2, int(1000./args.batch_size))
     for i in range(0, math.ceil(args.iteration/mango_itr)):
         itr = min(mango_itr, args.iteration - i*mango_itr)
         _bayesopt_run(
