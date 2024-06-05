@@ -659,7 +659,7 @@ def get_topk_prediction_settings(symbol, hps_id, topk):
             SELECT 
                 hyper_params, mae, rmse, loss, mae_val, 
                 rmse_val, loss_val, hpid, epochs, sub_topk,
-                covar_set_id, ts_date
+                covar_set_id
             FROM hps_metrics
             WHERE anchor_symbol = %(symbol)s
             AND hps_id = %(hps_id)s 
@@ -671,7 +671,7 @@ def get_topk_prediction_settings(symbol, hps_id, topk):
             SELECT 
                 hyper_params, mae, rmse, loss, mae_val, 
                 rmse_val, loss_val, hpid, epochs, sub_topk,
-                covar_set_id, ts_date
+                covar_set_id
             FROM hps_metrics
             WHERE anchor_symbol = %(symbol)s
             AND hps_id = %(hps_id)s 
@@ -986,7 +986,8 @@ def train_predict(
 
     return forecast, metrics
 
-def forecast(symbol, df, hps_metric, region):
+
+def forecast(symbol, df, hps_metric, region, cutoff_date):
     from marten.models.hp_search import augment_anchor_df_with_covars
 
     worker = get_worker()
@@ -1001,7 +1002,7 @@ def forecast(symbol, df, hps_metric, region):
             "loss_val: %s\n"
             "covar_set_id: %s\n"
             "sub_topk: %s\n"
-            "ts_date: %s\n"
+            "cutoff_date: %s\n"
             "hyper-params: %s"
         ),
         symbol,
@@ -1010,8 +1011,8 @@ def forecast(symbol, df, hps_metric, region):
         hps_metric["loss_val"],
         covar_set_id,
         hps_metric["sub_topk"],
-        hps_metric["ts_date"],
-        hps_metric["hyper_params"]
+        cutoff_date,
+        hps_metric["hyper_params"],
     )
 
     hyperparams = json.loads(hps_metric["hyper_params"])
@@ -1020,7 +1021,7 @@ def forecast(symbol, df, hps_metric, region):
         SimpleNamespace(covar_set_id=covar_set_id, symbol=symbol),
         alchemyEngine,
         logger,
-        hps_metric["ts_date"],
+        cutoff_date,
     )
 
     if hps_metric["sub_topk"] is not None:
@@ -1111,13 +1112,9 @@ def forecast(symbol, df, hps_metric, region):
 
     return snapshot_id, forecast, agg_loss
 
+
 def ensemble_topk_prediction(
-    symbol,
-    timestep_limit,
-    random_seed,
-    future_steps,
-    topk,
-    hps_id,
+    symbol, timestep_limit, random_seed, future_steps, topk, hps_id, cutoff_date
 ):
     from marten.models.hp_search import load_anchor_ts
 
@@ -1135,7 +1132,9 @@ def ensemble_topk_prediction(
         futures = []
         df_fut = client.scatter(df)
         for _, row in hps_metrics.iterrows():
-            futures.append(client.submit(forecast, symbol, df_fut, row, region))
+            futures.append(
+                client.submit(forecast, symbol, df_fut, row, region, cutoff_date)
+            )
 
         results = client.gather(futures)
 
@@ -1159,6 +1158,7 @@ def ensemble_topk_prediction(
         random_seed,
         future_steps,
     )
+
 
 def predict_best(
     symbol,
@@ -1599,7 +1599,7 @@ def covars_and_search(client, symbol):
     )
     await_futures(hps.futures)
 
-    return hps_id
+    return hps_id, cutoff_date
 
 
 def predict_adhoc(symbol, args):
@@ -1607,7 +1607,7 @@ def predict_adhoc(symbol, args):
     logger = worker.logger
 
     with worker_client() as client:
-        hps_id = covars_and_search(client, symbol)
+        hps_id, cutoff_date = covars_and_search(client, symbol)
 
     # predict
     logger.info("Starting adhoc prediction")
@@ -1619,6 +1619,7 @@ def predict_adhoc(symbol, args):
         args.future_steps,
         args.topk,
         hps_id,
+        cutoff_date,
     )
     logger.info(
         "%s prediction completed. Time taken: %s seconds",

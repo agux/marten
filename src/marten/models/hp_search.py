@@ -1174,14 +1174,12 @@ def get_hps_session(symbol, cutoff_date, resume):
                 select max(id) id
                 from hps_sessions
                 where symbol = :symbol
-                and ts_date = :ts_date
-                
+                    and ts_date = :ts_date
                 union all
-                
                 select max(id) id
                 from hps_sessions
                 where symbol = :symbol
-                and search_space is null
+                    and search_space is null
             )
         """
         with alchemyEngine.connect() as conn:
