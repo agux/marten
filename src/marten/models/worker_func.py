@@ -33,7 +33,6 @@ from marten.utils.neuralprophet import (
     layer_spec_to_list,
     select_device,
 )
-from marten.models.hp_search import augment_anchor_df_with_covars, load_anchor_ts
 
 
 from types import SimpleNamespace
@@ -988,6 +987,8 @@ def train_predict(
     return forecast, metrics
 
 def forecast(symbol, df, hps_metric, region):
+    from marten.models.hp_search import augment_anchor_df_with_covars
+
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
 
@@ -1026,7 +1027,7 @@ def forecast(symbol, df, hps_metric, region):
         new_df = select_topk_features(
             new_df, ranked_features, hps_metric["sub_topk"]
         )
-    
+
     if "ar_layers" not in hyperparams:
         hyperparams["ar_layers"] = layer_spec_to_list(hyperparams["ar_layer_spec"])
         hyperparams.pop("ar_layer_spec")
@@ -1118,6 +1119,8 @@ def ensemble_topk_prediction(
     topk,
     hps_id,
 ):
+    from marten.models.hp_search import load_anchor_ts
+
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
