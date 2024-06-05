@@ -1544,13 +1544,13 @@ def covars_and_search(client, symbol):
 
     # if in resume mode, check if the topk HP is present, and further check if prediction is already conducted.
     topk_count = count_topk_hp(hps_id, base_loss)
-    if args.resume & topk_count > args.topk:
+    if args.resume and topk_count > args.topk:
         logger.info(
-            "Found %s HP with Loss_val less than %s in HP search history.",
+            "Found %s HP with Loss_val less than %s in HP search history already. Skipping covariate and HP search.",
             topk_count,
             base_loss,
         )
-        return
+        return hps_id
     else:
         logger.info(
             "Found %s HP with Loss_val less than %s in HP search history. The process will be continued.",
