@@ -1604,7 +1604,7 @@ def covars_and_search(client, symbol):
 
 def predict_adhoc(symbol, args):
     worker = get_worker()
-    logger = worker.alchemyEngine, worker.logger
+    logger = worker.logger
 
     with worker_client() as client:
         hps_id = covars_and_search(client, symbol)
