@@ -1709,6 +1709,6 @@ def predict_adhoc(symbol, args):
     )
     logger.info(
         "%s prediction completed. Time taken: %s seconds",
-        symbol
+        symbol,
         round(time.time() - t3_start, 3),
     )
