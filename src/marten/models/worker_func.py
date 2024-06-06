@@ -660,22 +660,31 @@ def get_topk_foundation_settings(symbol, hps_id, topk, ts_date, nan_limit):
     alchemyEngine = worker.alchemyEngine
 
     query = """
-        WITH univ_baseline as (
+        WITH univ_baseline_nc as (
+            select cov_table, cov_symbol, feature, symbol
+            from neuralprophet_corel
+            where 
+                symbol = %(symbol)s
+                and ts_date = %(ts_date)s
+        ),
+        univ_baseline as (
             select
-                hyper_params, mae, rmse, loss, mae_val, 
-                rmse_val, loss_val, hpid, epochs, sub_topk,
-                covar_set_id, anchor_symbol symbol,
-                null cov_table, null cov_symbol, null feature
-            from hps_metrics
-            where anchor_symbol = %(symbol)s 
-            and hps_id = %(hps_id)s
-            and covar_set_id = 0
+                hm.hyper_params, hm.mae, hm.rmse, hm.loss, hm.mae_val, 
+                hm.rmse_val, hm.loss_val, hm.hpid, hm.epochs, hm.sub_topk,
+                hm.covar_set_id, hm.anchor_symbol symbol,
+                nc.cov_table, nc.cov_symbol, nc.feature
+            from hps_metrics hm
+            inner join univ_baseline_nc nc
+                on hm.anchor_symbol = nc.symbol
+            where hm.anchor_symbol = %(symbol)s 
+            and hm.hps_id = %(hps_id)s
+            and hm.covar_set_id = 0
         ),
         top_by_loss_val as (
             SELECT 
                 ub.hyper_params, nc.mae, nc.rmse, nc.loss, nc.mae_val,
-                nc.rmse_val, nc.loss_val, ub.hpid, nc.epochs, 1, 0,
-                nc.symbol, nc.cov_table, nc.cov_symbol, nc.feature
+                nc.rmse_val, nc.loss_val, ub.hpid, nc.epochs, 1, 
+                0, nc.symbol, nc.cov_table, nc.cov_symbol, nc.feature
             FROM neuralprophet_corel nc
             INNER JOIN
                 univ_baseline ub
@@ -690,8 +699,8 @@ def get_topk_foundation_settings(symbol, hps_id, topk, ts_date, nan_limit):
         top_by_loss as (
             SELECT 
                 ub.hyper_params, nc.mae, nc.rmse, nc.loss, nc.mae_val,
-                nc.rmse_val, nc.loss_val, ub.hpid, nc.epochs, 1, 0,
-                nc.symbol, nc.cov_table, nc.cov_symbol, nc.feature
+                nc.rmse_val, nc.loss_val, ub.hpid, nc.epochs, 1, 
+                0, nc.symbol, nc.cov_table, nc.cov_symbol, nc.feature
             FROM neuralprophet_corel nc
             INNER JOIN
                 univ_baseline ub
