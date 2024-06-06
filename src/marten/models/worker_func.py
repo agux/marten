@@ -211,8 +211,12 @@ def save_covar_metrics(
             text(
                 """
                     INSERT INTO neuralprophet_corel 
-                    (symbol, cov_table, cov_symbol, feature, mae_val, rmse_val, loss_val, fit_time, timesteps, nan_count, ts_date, epochs) 
-                    VALUES (:symbol, :cov_table, :cov_symbol, :feature, :mae_val, :rmse_val, :loss_val, :fit_time, :timesteps, :nan_count, :ts_date, :epochs) 
+                    (symbol, cov_table, cov_symbol, feature, mae_val, 
+                    rmse_val, loss_val, fit_time, timesteps, nan_count, 
+                    ts_date, epochs, mae, rmse, loss) 
+                    VALUES (:symbol, :cov_table, :cov_symbol, :feature, :mae_val, 
+                    :rmse_val, :loss_val, :fit_time, :timesteps, :nan_count, 
+                    :ts_date, :epochs, :mae, :rmse, :loss) 
                     ON CONFLICT (symbol, cov_symbol, feature, cov_table, ts_date) 
                     DO UPDATE SET 
                         mae_val = EXCLUDED.mae_val, 
@@ -221,7 +225,10 @@ def save_covar_metrics(
                         fit_time = EXCLUDED.fit_time,
                         timesteps = EXCLUDED.timesteps,
                         nan_count = EXCLUDED.nan_count,
-                        epochs = EXCLUDED.epochs
+                        epochs = EXCLUDED.epochs,
+                        mae = EXCLUDED.mae, 
+                        rmse = EXCLUDED.rmse, 
+                        loss = EXCLUDED.loss
                 """
             ),
             {
@@ -239,6 +246,9 @@ def save_covar_metrics(
                 "timesteps": timesteps,
                 "nan_count": nan_count,
                 "epochs": epochs,
+                "mae": row["MAE"],
+                "rmse": row["RMSE"],
+                "loss": row["Loss"],
             },
         )
 
@@ -349,7 +359,7 @@ def train(
         # ....../.pyenv/versions/3.12.2/envs/venv_3.12.2/lib/python3.12/site-packages/neuralprophet/df_utils.py:1152:
         # FutureWarning: Series.view is deprecated and will be removed in a future version. Use ``astype`` as an alternative to change the dtype.
         # converted_ds = pd.to_datetime(ds_col, utc=True).view(dtype=np.int64)
-        warnings.simplefilter("ignore", FutureWarning)
+        warnings.simplefilter("ignore", FutureWarning, pd.errors.PerformanceWarning)
 
         try:
             if (
@@ -643,6 +653,72 @@ def new_metric_keys(
         with attempt:
             return action()
 
+def get_topk_foundation_settings(symbol, hps_id, topk, ts_date):
+    worker = get_worker()
+    alchemyEngine = worker.alchemyEngine
+
+    query = """
+        WITH univ_baseline as (
+            select
+                hyper_params, mae, rmse, loss, mae_val, 
+                rmse_val, loss_val, hpid, epochs, sub_topk,
+                covar_set_id, anchor_symbol symbol
+            from hps_metrics
+            where anchor_symbol = %(symbol)s 
+            and hps_id = %(hps_id)s
+            and covar_set_id = 0
+        ),
+        top_by_loss_val as (
+            SELECT 
+                ub.hyper_params, nc.mae, nc.rmse, nc.loss, nc.mae_val,
+                nc.rmse_val, nc.loss_val, ub.hpid, nc.epochs, 1, 0,
+                nc.symbol
+            FROM neuralprophet_corel nc
+            INNER JOIN
+                univ_baseline ub
+            ON nc.symbol = ub.anchor_symbol
+            where 
+                nc.ts_date = %(ts_date)s
+                and nc.loss_val < ub.loss_val
+            order by nc.loss_val
+            limit %(limit)s
+        ),
+        top_by_loss as (
+            SELECT 
+                ub.hyper_params, nc.mae, nc.rmse, nc.loss, nc.mae_val,
+                nc.rmse_val, nc.loss_val, ub.hpid, nc.epochs, 1, 0,
+                nc.symbol
+            FROM neuralprophet_corel nc
+            INNER JOIN
+                univ_baseline ub
+            ON nc.symbol = ub.anchor_symbol
+            where 
+                nc.ts_date = %(ts_date)s
+                and nc.loss_val < ub.loss_val
+            order by nc.loss
+            limit %(limit)s
+        )
+        SELECT *
+        FROM univ_baseline
+        UNION
+        SELECT *
+        FROM top_by_loss_val
+        UNION
+        SELECT *
+        FROM top_by_loss
+    """
+    params = {
+        "symbol": symbol,
+        "hps_id": hps_id,
+        "limit": topk,
+        "ts_date": ts_date,
+    }
+
+    df = pd.read_sql(query, alchemyEngine, params=params)
+    df.drop("anchor_symbol", axis=1, inplace=True)
+
+    return df
+
 def get_topk_prediction_settings(symbol, hps_id, topk):
     worker = get_worker()
     alchemyEngine = worker.alchemyEngine
@@ -664,7 +740,7 @@ def get_topk_prediction_settings(symbol, hps_id, topk):
             WHERE anchor_symbol = %(symbol)s
             AND hps_id = %(hps_id)s 
             and loss_val < (select loss_val from baseline)
-            ORDER BY loss_val ASC
+            ORDER BY loss_val
             LIMIT %(limit)s
         ),
         top_by_loss AS (
@@ -676,7 +752,7 @@ def get_topk_prediction_settings(symbol, hps_id, topk):
             WHERE anchor_symbol = %(symbol)s
             AND hps_id = %(hps_id)s 
             and loss_val < (select loss_val from baseline)
-            ORDER BY loss ASC
+            ORDER BY loss
             LIMIT %(limit)s
         )
         SELECT DISTINCT *
@@ -1016,18 +1092,20 @@ def forecast(symbol, df, hps_metric, region, cutoff_date):
     )
 
     hyperparams = json.loads(hps_metric["hyper_params"])
-    new_df, _, ranked_features = augment_anchor_df_with_covars(
-        df,
-        SimpleNamespace(covar_set_id=covar_set_id, symbol=symbol),
-        alchemyEngine,
-        logger,
-        cutoff_date,
-    )
-
-    if hps_metric["sub_topk"] is not None:
-        new_df = select_topk_features(
-            new_df, ranked_features, hps_metric["sub_topk"]
+    if covar_set_id == 0:
+        new_df = df
+    else:
+        new_df, _, ranked_features = augment_anchor_df_with_covars(
+            df,
+            SimpleNamespace(covar_set_id=covar_set_id, symbol=symbol),
+            alchemyEngine,
+            logger,
+            cutoff_date,
         )
+        if hps_metric["sub_topk"] is not None:
+            new_df = select_topk_features(
+                new_df, ranked_features, hps_metric["sub_topk"]
+            )
 
     if "ar_layers" not in hyperparams:
         hyperparams["ar_layers"] = layer_spec_to_list(hyperparams["ar_layer_spec"])
@@ -1085,7 +1163,11 @@ def forecast(symbol, df, hps_metric, region, cutoff_date):
 
     metrics = results[0][1]
     forecast, metrics_final = results[1][0], results[1][1]
+    
+    metrics.iloc[-1]["Loss_val"] = sanitize_loss(metrics.iloc[-1]["Loss_val"])
+    metrics_final.iloc[-1]["Loss"] = sanitize_loss(metrics.iloc[-1]["Loss"])
     agg_loss = metrics.iloc[-1]["Loss_val"] + metrics_final.iloc[-1]["Loss"]
+    
     n_covars = len([col for col in new_df.columns if col not in ("ds", "y")])
 
     snapshot_id, n_yearly_seasonality = save_forecast_snapshot(
@@ -1104,10 +1186,11 @@ def forecast(symbol, df, hps_metric, region, cutoff_date):
     )
 
     logger.info(
-        "%s - estimated %s yearly-seasonality coefficients. snapshot_id: %s",
+        "%s - estimated %s yearly-seasonality coefficients. snapshot_id: %s, aggregated loss: %s",
         symbol,
         n_yearly_seasonality,
         snapshot_id,
+        agg_loss,
     )
 
     return snapshot_id, forecast, agg_loss
@@ -1126,12 +1209,15 @@ def ensemble_topk_prediction(
     region = get_holiday_region(alchemyEngine, symbol)
     logger.info("%s - inferred holiday region: %s", symbol, region)
 
-    hps_metrics = get_topk_prediction_settings(symbol, hps_id, topk)
+    s1 = get_topk_prediction_settings(symbol, hps_id, topk)
+    # get univariate and 2*topk 2-pair covariate settings
+    s2 = get_topk_foundation_settings(symbol, hps_id, topk, cutoff_date)
+    settings = pd.concat([s1, s2], axis=0)
 
     with worker_client() as client:
         futures = []
         df_fut = client.scatter(df)
-        for _, row in hps_metrics.iterrows():
+        for _, row in settings.iterrows():
             futures.append(
                 client.submit(forecast, symbol, df_fut, row, region, cutoff_date)
             )
@@ -1623,6 +1709,6 @@ def predict_adhoc(symbol, args):
     )
     logger.info(
         "%s prediction completed. Time taken: %s seconds",
-        args.symbol,
+        symbol
         round(time.time() - t3_start, 3),
     )
