@@ -359,7 +359,8 @@ def train(
         # ....../.pyenv/versions/3.12.2/envs/venv_3.12.2/lib/python3.12/site-packages/neuralprophet/df_utils.py:1152:
         # FutureWarning: Series.view is deprecated and will be removed in a future version. Use ``astype`` as an alternative to change the dtype.
         # converted_ds = pd.to_datetime(ds_col, utc=True).view(dtype=np.int64)
-        warnings.simplefilter("ignore", FutureWarning, pd.errors.PerformanceWarning)
+        warnings.simplefilter("ignore", FutureWarning)
+        warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
 
         try:
             if (
