@@ -720,7 +720,7 @@ def get_topk_foundation_settings(symbol, hps_id, topk, ts_date, nan_limit):
     }
 
     df = pd.read_sql(query, alchemyEngine, params=params)
-    df.drop("anchor_symbol", axis=1, inplace=True)
+    df.drop("symbol", axis=1, inplace=True)
 
     return df
 
