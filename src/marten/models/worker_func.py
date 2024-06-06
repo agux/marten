@@ -678,7 +678,7 @@ def get_topk_foundation_settings(symbol, hps_id, topk, ts_date, nan_limit):
             FROM neuralprophet_corel nc
             INNER JOIN
                 univ_baseline ub
-            ON nc.symbol = ub.anchor_symbol
+            ON nc.symbol = ub.symbol
             where 
                 nc.ts_date = %(ts_date)s
                 and nc.loss_val < ub.loss_val
@@ -694,7 +694,7 @@ def get_topk_foundation_settings(symbol, hps_id, topk, ts_date, nan_limit):
             FROM neuralprophet_corel nc
             INNER JOIN
                 univ_baseline ub
-            ON nc.symbol = ub.anchor_symbol
+            ON nc.symbol = ub.symbol
             where 
                 nc.ts_date = %(ts_date)s
                 and nc.loss_val < ub.loss_val
