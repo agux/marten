@@ -664,7 +664,8 @@ def get_topk_foundation_settings(symbol, hps_id, topk, ts_date, nan_limit):
             select
                 hyper_params, mae, rmse, loss, mae_val, 
                 rmse_val, loss_val, hpid, epochs, sub_topk,
-                covar_set_id, anchor_symbol symbol
+                covar_set_id, anchor_symbol symbol,
+                null cov_table, null cov_symbol, null feature
             from hps_metrics
             where anchor_symbol = %(symbol)s 
             and hps_id = %(hps_id)s
@@ -674,7 +675,7 @@ def get_topk_foundation_settings(symbol, hps_id, topk, ts_date, nan_limit):
             SELECT 
                 ub.hyper_params, nc.mae, nc.rmse, nc.loss, nc.mae_val,
                 nc.rmse_val, nc.loss_val, ub.hpid, nc.epochs, 1, 0,
-                nc.symbol
+                nc.symbol, nc.cov_table, nc.cov_symbol, nc.feature
             FROM neuralprophet_corel nc
             INNER JOIN
                 univ_baseline ub
@@ -690,7 +691,7 @@ def get_topk_foundation_settings(symbol, hps_id, topk, ts_date, nan_limit):
             SELECT 
                 ub.hyper_params, nc.mae, nc.rmse, nc.loss, nc.mae_val,
                 nc.rmse_val, nc.loss_val, ub.hpid, nc.epochs, 1, 0,
-                nc.symbol
+                nc.symbol, nc.cov_table, nc.cov_symbol, nc.feature
             FROM neuralprophet_corel nc
             INNER JOIN
                 univ_baseline ub
@@ -1099,9 +1100,16 @@ def forecast(symbol, df, hps_metric, region, cutoff_date):
         hps_metric["hyper_params"],
     )
 
-    hyperparams = json.loads(hps_metric["hyper_params"])
     if covar_set_id == 0:
-        new_df = df
+        new_df = merge_covar_df(
+            symbol,
+            df[["ds", "y"]],
+            hps_metric["cov_table"],
+            hps_metric["cov_symbol"],
+            hps_metric["feature"],
+            df["ds"].min().strftime("%Y-%m-%d"),
+            alchemyEngine,
+        )
     else:
         new_df, _, ranked_features = augment_anchor_df_with_covars(
             df,
@@ -1112,9 +1120,14 @@ def forecast(symbol, df, hps_metric, region, cutoff_date):
         )
         if hps_metric["sub_topk"] is not None:
             new_df = select_topk_features(
-                new_df, ranked_features, hps_metric["sub_topk"]
+                new_df, ranked_features, int(hps_metric["sub_topk"])
             )
 
+    logger.info(
+        "dataframe augmented with covar_set_id %s: %s", covar_set_id, new_df.shape
+    )
+
+    hyperparams = json.loads(hps_metric["hyper_params"])
     if "ar_layers" not in hyperparams:
         hyperparams["ar_layers"] = layer_spec_to_list(hyperparams["ar_layer_spec"])
         hyperparams.pop("ar_layer_spec")
@@ -1171,11 +1184,11 @@ def forecast(symbol, df, hps_metric, region, cutoff_date):
 
     metrics = results[0][1]
     forecast, metrics_final = results[1][0], results[1][1]
-    
+
     metrics.iloc[-1]["Loss_val"] = sanitize_loss(metrics.iloc[-1]["Loss_val"])
     metrics_final.iloc[-1]["Loss"] = sanitize_loss(metrics.iloc[-1]["Loss"])
     agg_loss = metrics.iloc[-1]["Loss_val"] + metrics_final.iloc[-1]["Loss"]
-    
+
     n_covars = len([col for col in new_df.columns if col not in ("ds", "y")])
 
     snapshot_id, n_yearly_seasonality = save_forecast_snapshot(
@@ -1222,7 +1235,7 @@ def ensemble_topk_prediction(
     # get univariate and 2*topk 2-pair covariate settings
     nan_threshold = round(len(df) * args.nan_limit, 0)
     s2 = get_topk_foundation_settings(symbol, hps_id, topk, cutoff_date, nan_threshold)
-    settings = pd.concat([s1, s2], axis=0)
+    settings = pd.concat([s1, s2], axis=0, ignore_index=True)
 
     with worker_client() as client:
         futures = []
