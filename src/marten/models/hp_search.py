@@ -186,7 +186,7 @@ def _covar_symbols_from_table(anchor_symbol, dates, table, feature, ts_date, min
 def _pair_endogenous_covar_metrics(
     anchor_symbol, anchor_df, cov_table, features, args, cutoff_date
 ):
-    global random_seed, client, futures, logger
+    global client, futures, logger
 
     # remove feature elements already exists in the neuralprophet_corel table.
     features = _remove_measured_features(
@@ -213,7 +213,7 @@ def _pair_endogenous_covar_metrics(
             cov_table,
             anchor_symbol,
             None,
-            random_seed,
+            args.random_seed,
             feature,
             select_device(args.accelerator, 
                           getattr(args, "gpu_util_threshold", None), 
@@ -228,7 +228,7 @@ def _pair_endogenous_covar_metrics(
 def _pair_covar_metrics(
     anchor_symbol, anchor_df_future, cov_table, cov_symbols, feature, min_date, args
 ):
-    global random_seed, client, futures
+    global client, futures
     
     for symbol in cov_symbols["symbol"]:
         logger.debug(
@@ -245,7 +245,7 @@ def _pair_covar_metrics(
             cov_table,
             symbol,
             min_date,
-            random_seed,
+            args.random_seed,
             feature,
             select_device(args.accelerator, 
                           getattr(args, "gpu_util_threshold", None), 

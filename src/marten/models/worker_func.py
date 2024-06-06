@@ -155,6 +155,7 @@ def fit_with_covar(
             random_seed=random_seed,
             early_stopping=early_stopping,
             batch_size=None,
+            yearly_seasonality="auto",
             weekly_seasonality=False,
             daily_seasonality=False,
             impute_missing=True,
@@ -361,7 +362,7 @@ def train(
         # converted_ds = pd.to_datetime(ds_col, utc=True).view(dtype=np.int64)
         warnings.simplefilter("ignore", FutureWarning)
         warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
-
+        warnings.simplefilter("ignore", RuntimeWarning)
         try:
             if (
                 select_device(
@@ -654,7 +655,7 @@ def new_metric_keys(
         with attempt:
             return action()
 
-def get_topk_foundation_settings(symbol, hps_id, topk, ts_date):
+def get_topk_foundation_settings(symbol, hps_id, topk, ts_date, nan_limit):
     worker = get_worker()
     alchemyEngine = worker.alchemyEngine
 
@@ -681,6 +682,7 @@ def get_topk_foundation_settings(symbol, hps_id, topk, ts_date):
             where 
                 nc.ts_date = %(ts_date)s
                 and nc.loss_val < ub.loss_val
+                and nc.nan_count < %(nan_limit)s
             order by nc.loss_val
             limit %(limit)s
         ),
@@ -696,6 +698,7 @@ def get_topk_foundation_settings(symbol, hps_id, topk, ts_date):
             where 
                 nc.ts_date = %(ts_date)s
                 and nc.loss_val < ub.loss_val
+                and nc.nan_count <= %(nan_limit)s
             order by nc.loss
             limit %(limit)s
         )
@@ -713,6 +716,7 @@ def get_topk_foundation_settings(symbol, hps_id, topk, ts_date):
         "hps_id": hps_id,
         "limit": topk,
         "ts_date": ts_date,
+        "nan_limit": nan_limit,
     }
 
     df = pd.read_sql(query, alchemyEngine, params=params)
@@ -961,6 +965,7 @@ def save_forecast_snapshot(
     random_seed,
     future_steps,
     n_covars,
+    cutoff_date
 ):
     metric = metrics.iloc[-1]
     metric_final = metrics_final.iloc[-1]
@@ -977,12 +982,13 @@ def save_forecast_snapshot(
                     (
                         model,symbol,hyper_params,covar_set_id,mae_val,rmse_val,loss_val,mae,rmse,loss,
                         predict_diff_mean,predict_diff_stddev,epochs,fit_time,mae_final,rmse_final,loss_final,
-                        region,random_seed,future_steps,n_covars
+                        region,random_seed,future_steps,n_covars,cutoff_date
                     )
                 values(
                     :model,:symbol,:hyper_params,:covar_set_id,:mae_val,:rmse_val,:loss_val,
                     :mae,:rmse,:loss,:predict_diff_mean,:predict_diff_stddev,:epochs,:fit_time,
-                    :mae_final,:rmse_final,:loss_final,:region,:random_seed,:future_steps,:n_covars
+                    :mae_final,:rmse_final,:loss_final,:region,:random_seed,:future_steps,:n_covars,
+                    :cutoff_date
                 ) RETURNING id
                 """
             ),
@@ -1010,6 +1016,7 @@ def save_forecast_snapshot(
                 "random_seed": random_seed,
                 "future_steps": future_steps,
                 "n_covars": n_covars,
+                "cutoff_date": cutoff_date,
             },
         )
         snapshot_id = result.fetchone()[0]
@@ -1184,6 +1191,7 @@ def forecast(symbol, df, hps_metric, region, cutoff_date):
         args.random_seed,
         args.future_steps,
         n_covars,
+        cutoff_date,
     )
 
     logger.info(
@@ -1203,7 +1211,7 @@ def ensemble_topk_prediction(
     from marten.models.hp_search import load_anchor_ts
 
     worker = get_worker()
-    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+    alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
 
     df, _ = load_anchor_ts(symbol, timestep_limit, alchemyEngine)
 
@@ -1212,7 +1220,8 @@ def ensemble_topk_prediction(
 
     s1 = get_topk_prediction_settings(symbol, hps_id, topk)
     # get univariate and 2*topk 2-pair covariate settings
-    s2 = get_topk_foundation_settings(symbol, hps_id, topk, cutoff_date)
+    nan_threshold = round(len(df) * args.nan_limit, 0)
+    s2 = get_topk_foundation_settings(symbol, hps_id, topk, cutoff_date, nan_threshold)
     settings = pd.concat([s1, s2], axis=0)
 
     with worker_client() as client:
@@ -1351,6 +1360,7 @@ def predict_best(
         top_forecasts.append(forecast)
 
         n_covars = len([col for col in df.columns if col not in ("ds", "y")])
+        cutoff_date = df["ds"].max().strftime("%Y-%m-%d")
 
         # save the snapshot and yearly seasonality coefficients to tables.
         snapshot_id, n_yearly_seasonality = save_forecast_snapshot(
@@ -1366,6 +1376,7 @@ def predict_best(
             random_seed,
             future_steps,
             n_covars,
+            cutoff_date,
         )
         snapshot_ids.append(snapshot_id)
 
@@ -1547,7 +1558,7 @@ def fast_bayesopt(df, covar_set_id, hps_id, ranked_features, base_loss, args):
 
         topk_count = count_topk_hp(hps_id, base_loss)
 
-        if topk_count > args.topk:
+        if topk_count >= args.topk:
             logger.info(
                 "Found %s HP with Loss_val less than %s. Best score: %s, stopping bayesopt.",
                 topk_count,
@@ -1631,7 +1642,7 @@ def covars_and_search(client, symbol):
 
     # if in resume mode, check if the topk HP is present, and further check if prediction is already conducted.
     topk_count = count_topk_hp(hps_id, base_loss)
-    if args.resume and topk_count > args.topk:
+    if args.resume and topk_count >= args.topk:
         logger.info(
             "Found %s HP with Loss_val less than %s in HP search history already. Skipping covariate and HP search.",
             topk_count,
