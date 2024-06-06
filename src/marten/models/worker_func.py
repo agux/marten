@@ -665,6 +665,8 @@ def get_topk_foundation_settings(symbol, hps_id, topk, ts_date, nan_limit):
             from neuralprophet_corel
             where 
                 symbol = %(symbol)s
+                and cov_symbol = symbol
+                and feature = 'y'
                 and ts_date = %(ts_date)s
         ),
         univ_baseline as (
@@ -1245,6 +1247,7 @@ def ensemble_topk_prediction(
     nan_threshold = round(len(df) * args.nan_limit, 0)
     s2 = get_topk_foundation_settings(symbol, hps_id, topk, cutoff_date, nan_threshold)
     settings = pd.concat([s1, s2], axis=0, ignore_index=True)
+    logger.info("prediction settings loaded: %s", len(settings))
 
     with worker_client() as client:
         futures = []
