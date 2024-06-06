@@ -1196,7 +1196,7 @@ def forecast(symbol, df, hps_metric, region, cutoff_date):
 
     metrics.iloc[-1]["Loss_val"] = sanitize_loss(metrics.iloc[-1]["Loss_val"])
     metrics_final.iloc[-1]["Loss"] = sanitize_loss(metrics.iloc[-1]["Loss"])
-    agg_loss = metrics.iloc[-1]["Loss_val"] + metrics_final.iloc[-1]["Loss"]
+    agg_loss = round((metrics.iloc[-1]["Loss_val"] + metrics_final.iloc[-1]["Loss"]) / 2., 5)
 
     n_covars = len([col for col in new_df.columns if col not in ("ds", "y")])
 
