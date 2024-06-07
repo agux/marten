@@ -483,11 +483,11 @@ def log_metrics_for_hyper_params(
             epochs=epochs,
             random_seed=random_seed,
             early_stopping=early_stopping,
-            batch_size=params["batch_size"],
-            n_lags=params["n_lags"],
-            yearly_seasonality=params["yearly_seasonality"],
-            ar_layers=params["ar_layers"],
-            lagged_reg_layers=params["lagged_reg_layers"],
+            # batch_size=params["batch_size"],
+            # n_lags=params["n_lags"],
+            # yearly_seasonality=params["yearly_seasonality"],
+            # ar_layers=params["ar_layers"],
+            # lagged_reg_layers=params["lagged_reg_layers"],
             weekly_seasonality=False,
             daily_seasonality=False,
             impute_missing=True,
@@ -495,7 +495,8 @@ def log_metrics_for_hyper_params(
             validate=True,
             country=region,
             changepoints_range=1.0,
-            optimizer="AdamW" if "optimizer" not in params else params["optimizer"],
+            # optimizer="AdamW" if "optimizer" not in params else params["optimizer"],
+            **params,
         )
     except ValueError as e:
         logger.warning(str(e))
@@ -714,13 +715,13 @@ def get_topk_foundation_settings(symbol, hps_id, topk, ts_date, nan_limit):
             order by nc.loss
             limit %(limit)s
         )
-        SELECT *
+        SELECT DISTINCT *
         FROM univ_baseline
         UNION
-        SELECT *
+        SELECT DISTINCT *
         FROM top_by_loss_val
         UNION
-        SELECT *
+        SELECT DISTINCT *
         FROM top_by_loss
     """
     params = {
@@ -1075,10 +1076,19 @@ def train_predict(
     set_log_level("ERROR")
     set_random_seed(random_seed)
 
-    future = m.make_future_dataframe(
-        df, n_historic_predictions=True, periods=future_steps
-    )
-    forecast = m.predict(future)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
+        # WARNING - (py.warnings._showwarnmsg) - .../python3.12/site-packages/neuralprophet/data/process.py:127: 
+        # PerformanceWarning: DataFrame is highly fragmented.  
+        # This is usually the result of calling `frame.insert` many times, 
+        # which has poor performance.  
+        # Consider joining all columns at once using pd.concat(axis=1) instead. 
+        # To get a de-fragmented frame, use `newframe = frame.copy()`
+        # df_forecast[name] = yhat
+        future = m.make_future_dataframe(
+            df, n_historic_predictions=True, periods=future_steps
+        )
+        forecast = m.predict(future)
 
     return forecast, metrics
 
@@ -1237,6 +1247,9 @@ def ensemble_topk_prediction(
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
 
+    #TODO: we don't specify the cutoff_date to load TS, such that
+    # we can predict based off latest historical data. Some model HPs
+    # may not generalize well to unseen data.
     df, _ = load_anchor_ts(symbol, timestep_limit, alchemyEngine)
 
     region = get_holiday_region(alchemyEngine, symbol)
@@ -1441,6 +1454,7 @@ def save_ensemble_snapshot(
     future_steps,
 ):
     ens_df = None
+    country_holidays = get_country_holidays(region)
     hyper_params = json.dumps(
         [{"snapshot_id": sid, "weight": w} for sid, w in zip(snapshot_ids, weights)],
         sort_keys=True,
@@ -1452,19 +1466,19 @@ def save_ensemble_snapshot(
         df = df[["ds", "trend", "season_yearly"]]
         df.rename(columns={"ds": "date"}, inplace=True)
         df[["trend", "season_yearly"]] = df[["trend", "season_yearly"]] * w
-        # df.set_index("date", inplace=True)
 
         if ens_df is None:
             ens_df = df
-            country_holidays = get_country_holidays(region)
             ens_df.loc[:, "symbol"] = symbol
             ens_df.loc[:, "holiday"] = ens_df["date"].apply(
                 lambda x: check_holiday(x, country_holidays)
             )
+            ens_df.set_index("date", inplace=True)
         else:
+            df.set_index("date", inplace=True)
             ens_df[["trend", "season_yearly"]] += df[["trend", "season_yearly"]]
 
-    # ens_df.reset_index(inplace=True)
+    ens_df.reset_index(inplace=True)
 
     with alchemyEngine.begin() as conn:
         result = conn.execute(

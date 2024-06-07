@@ -664,7 +664,7 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
                 df,
                 params,
                 args.epochs,
-                random_seed,
+                args.random_seed,
                 select_device(args.accelerator,
                               getattr(args, "gpu_util_threshold", None), 
                           getattr(args, "gpu_ram_threshold", None)),
