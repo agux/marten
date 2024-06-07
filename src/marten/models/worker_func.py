@@ -978,7 +978,11 @@ def save_forecast_snapshot(
     random_seed,
     future_steps,
     n_covars,
-    cutoff_date
+    cutoff_date,
+    group_id,
+    hpid,
+    avg_loss,
+    covar
 ):
     metric = metrics.iloc[-1]
     metric_final = metrics_final.iloc[-1]
@@ -995,13 +999,13 @@ def save_forecast_snapshot(
                     (
                         model,symbol,hyper_params,covar_set_id,mae_val,rmse_val,loss_val,mae,rmse,loss,
                         predict_diff_mean,predict_diff_stddev,epochs,fit_time,mae_final,rmse_final,loss_final,
-                        region,random_seed,future_steps,n_covars,cutoff_date
+                        region,random_seed,future_steps,n_covars,cutoff_date,group_id,hpid,avg_loss,covar
                     )
                 values(
                     :model,:symbol,:hyper_params,:covar_set_id,:mae_val,:rmse_val,:loss_val,
                     :mae,:rmse,:loss,:predict_diff_mean,:predict_diff_stddev,:epochs,:fit_time,
                     :mae_final,:rmse_final,:loss_final,:region,:random_seed,:future_steps,:n_covars,
-                    :cutoff_date
+                    :cutoff_date,:group_id,:hpid,:avg_loss,:covar
                 ) RETURNING id
                 """
             ),
@@ -1030,6 +1034,10 @@ def save_forecast_snapshot(
                 "future_steps": future_steps,
                 "n_covars": n_covars,
                 "cutoff_date": cutoff_date,
+                "group_id":group_id,
+                "hpid":hpid,
+                "avg_loss":avg_loss,
+                "covar":covar,
             },
         )
         snapshot_id = result.fetchone()[0]
@@ -1093,7 +1101,7 @@ def train_predict(
     return forecast, metrics
 
 
-def forecast(symbol, df, hps_metric, region, cutoff_date):
+def forecast(symbol, df, hps_metric, region, cutoff_date, group_id):
     from marten.models.hp_search import augment_anchor_df_with_covars
 
     worker = get_worker()
@@ -1208,9 +1216,10 @@ def forecast(symbol, df, hps_metric, region, cutoff_date):
 
     metrics.iloc[-1]["Loss_val"] = sanitize_loss(metrics.iloc[-1]["Loss_val"])
     metrics_final.iloc[-1]["Loss"] = sanitize_loss(metrics.iloc[-1]["Loss"])
-    agg_loss = round((metrics.iloc[-1]["Loss_val"] + metrics_final.iloc[-1]["Loss"]) / 2., 5)
+    avg_loss = round((metrics.iloc[-1]["Loss_val"] + metrics_final.iloc[-1]["Loss"]) / 2., 5)
 
-    n_covars = len([col for col in new_df.columns if col not in ("ds", "y")])
+    covar_columns = [col for col in new_df.columns if col not in ("ds", "y")]
+    n_covars = len(covar_columns)
 
     snapshot_id, n_yearly_seasonality = save_forecast_snapshot(
         alchemyEngine,
@@ -1226,18 +1235,25 @@ def forecast(symbol, df, hps_metric, region, cutoff_date):
         args.future_steps,
         n_covars,
         cutoff_date,
+        group_id,
+        hps_metric["hpid"],
+        avg_loss,
+        covar_columns[0] if n_covars==1 else None,
     )
 
     logger.info(
-        "%s - estimated %s yearly-seasonality coefficients. snapshot_id: %s, aggregated loss: %s",
+        "%s - estimated %s yearly-seasonality coefficients. snapshot_id: %s, averaged loss: %s",
         symbol,
         n_yearly_seasonality,
         snapshot_id,
-        agg_loss,
+        avg_loss,
     )
 
-    return snapshot_id, forecast, agg_loss
+    return snapshot_id, forecast, avg_loss
 
+def get_prediction_group_id(alchemyEngine):
+    with alchemyEngine.begin() as conn:
+        return conn.execute(text("SELECT nextval('prediction_group_id_seq')")).scalar()
 
 def ensemble_topk_prediction(
     symbol, timestep_limit, random_seed, future_steps, topk, hps_id, cutoff_date
@@ -1247,7 +1263,7 @@ def ensemble_topk_prediction(
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
 
-    #TODO: we don't specify the cutoff_date to load TS, such that
+    # TODO: we don't specify the cutoff_date to load TS, such that
     # we can predict based off latest historical data. Some model HPs
     # may not generalize well to unseen data.
     df, _ = load_anchor_ts(symbol, timestep_limit, alchemyEngine)
@@ -1260,14 +1276,18 @@ def ensemble_topk_prediction(
     nan_threshold = round(len(df) * args.nan_limit, 0)
     s2 = get_topk_foundation_settings(symbol, hps_id, topk, cutoff_date, nan_threshold)
     settings = pd.concat([s1, s2], axis=0, ignore_index=True)
-    logger.info("prediction settings loaded: %s", len(settings))
+
+    group_id = get_prediction_group_id(alchemyEngine)
+    logger.info("prediction settings loaded: %s, group id: %s", len(settings), group_id)
 
     with worker_client() as client:
         futures = []
         df_fut = client.scatter(df)
         for _, row in settings.iterrows():
             futures.append(
-                client.submit(forecast, symbol, df_fut, row, region, cutoff_date)
+                client.submit(
+                    forecast, symbol, df_fut, row, region, cutoff_date, group_id
+                )
             )
 
         results = client.gather(futures)
@@ -1277,10 +1297,10 @@ def ensemble_topk_prediction(
     topk_results = sorted(results, key=lambda x: x[2])[:topk]
     snapshot_ids = [t[0] for t in topk_results]
     forecasts = [t[1] for t in topk_results]
-    agg_loss = [t[2] for t in topk_results]
+    avg_loss = [t[2] for t in topk_results]
 
-    sum_loss = sum(agg_loss)
-    weights = [(1.0 - (loss / sum_loss)) / (topk - 1.0) for loss in agg_loss]
+    sum_loss = sum(avg_loss)
+    weights = [(1.0 - (loss / sum_loss)) / (topk - 1.0) for loss in avg_loss]
 
     save_ensemble_snapshot(
         alchemyEngine,
@@ -1291,6 +1311,7 @@ def ensemble_topk_prediction(
         snapshot_ids,
         random_seed,
         future_steps,
+        group_id,
     )
 
 
@@ -1452,6 +1473,7 @@ def save_ensemble_snapshot(
     snapshot_ids,
     random_seed,
     future_steps,
+    group_id,
 ):
     ens_df = None
     country_holidays = get_country_holidays(region)
@@ -1489,11 +1511,13 @@ def save_ensemble_snapshot(
                     predict_snapshots
                     (
                         model,symbol,hyper_params,
-                        region,random_seed,future_steps
+                        region,random_seed,future_steps,
+                        group_id
                     )
                 values(
                     :model,:symbol,:hyper_params,
-                    :region,:random_seed,:future_steps
+                    :region,:random_seed,:future_steps,
+                    :group_id
                 ) RETURNING id
                 """
             ),
@@ -1504,6 +1528,7 @@ def save_ensemble_snapshot(
                 "region": region,
                 "random_seed": random_seed,
                 "future_steps": future_steps,
+                "group_id": group_id,
             },
         )
         snapshot_id = result.fetchone()[0]
