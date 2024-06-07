@@ -114,7 +114,7 @@ def fit_with_covar(
 ):
     # Local import of get_worker to avoid circular import issue?
     worker = get_worker()
-    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+    alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
 
     merged_df = merge_covar_df(
         anchor_symbol,
@@ -151,7 +151,7 @@ def fit_with_covar(
     try:
         _, metrics = train(
             df=merged_df,
-            epochs=None,
+            epochs=args.epochs,
             random_seed=random_seed,
             early_stopping=early_stopping,
             batch_size=None,
@@ -656,6 +656,7 @@ def new_metric_keys(
         with attempt:
             return action()
 
+
 def get_topk_foundation_settings(symbol, hps_id, topk, ts_date, nan_limit):
     worker = get_worker()
     alchemyEngine = worker.alchemyEngine
@@ -736,6 +737,7 @@ def get_topk_foundation_settings(symbol, hps_id, topk, ts_date, nan_limit):
     df.drop("symbol", axis=1, inplace=True)
 
     return df
+
 
 def get_topk_prediction_settings(symbol, hps_id, topk):
     worker = get_worker()
@@ -982,7 +984,7 @@ def save_forecast_snapshot(
     group_id,
     hpid,
     avg_loss,
-    covar
+    covar,
 ):
     metric = metrics.iloc[-1]
     metric_final = metrics_final.iloc[-1]
@@ -1034,10 +1036,10 @@ def save_forecast_snapshot(
                 "future_steps": future_steps,
                 "n_covars": n_covars,
                 "cutoff_date": cutoff_date,
-                "group_id":group_id,
-                "hpid":hpid,
-                "avg_loss":avg_loss,
-                "covar":covar,
+                "group_id": group_id,
+                "hpid": hpid,
+                "avg_loss": avg_loss,
+                "covar": covar,
             },
         )
         snapshot_id = result.fetchone()[0]
@@ -1086,11 +1088,11 @@ def train_predict(
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
-        # WARNING - (py.warnings._showwarnmsg) - .../python3.12/site-packages/neuralprophet/data/process.py:127: 
-        # PerformanceWarning: DataFrame is highly fragmented.  
-        # This is usually the result of calling `frame.insert` many times, 
-        # which has poor performance.  
-        # Consider joining all columns at once using pd.concat(axis=1) instead. 
+        # WARNING - (py.warnings._showwarnmsg) - .../python3.12/site-packages/neuralprophet/data/process.py:127:
+        # PerformanceWarning: DataFrame is highly fragmented.
+        # This is usually the result of calling `frame.insert` many times,
+        # which has poor performance.
+        # Consider joining all columns at once using pd.concat(axis=1) instead.
         # To get a de-fragmented frame, use `newframe = frame.copy()`
         # df_forecast[name] = yhat
         future = m.make_future_dataframe(
@@ -1216,7 +1218,9 @@ def forecast(symbol, df, hps_metric, region, cutoff_date, group_id):
 
     metrics.iloc[-1]["Loss_val"] = sanitize_loss(metrics.iloc[-1]["Loss_val"])
     metrics_final.iloc[-1]["Loss"] = sanitize_loss(metrics.iloc[-1]["Loss"])
-    avg_loss = round((metrics.iloc[-1]["Loss_val"] + metrics_final.iloc[-1]["Loss"]) / 2., 5)
+    avg_loss = round(
+        (metrics.iloc[-1]["Loss_val"] + metrics_final.iloc[-1]["Loss"]) / 2.0, 5
+    )
 
     covar_columns = [col for col in new_df.columns if col not in ("ds", "y")]
     n_covars = len(covar_columns)
@@ -1238,7 +1242,7 @@ def forecast(symbol, df, hps_metric, region, cutoff_date, group_id):
         group_id,
         hps_metric["hpid"],
         avg_loss,
-        covar_columns[0] if n_covars==1 else None,
+        covar_columns[0] if n_covars == 1 else None,
     )
 
     logger.info(
@@ -1251,9 +1255,11 @@ def forecast(symbol, df, hps_metric, region, cutoff_date, group_id):
 
     return snapshot_id, forecast, avg_loss
 
+
 def get_prediction_group_id(alchemyEngine):
     with alchemyEngine.begin() as conn:
         return conn.execute(text("SELECT nextval('prediction_group_id_seq')")).scalar()
+
 
 def ensemble_topk_prediction(
     symbol, timestep_limit, random_seed, future_steps, topk, hps_id, cutoff_date
@@ -1300,7 +1306,7 @@ def ensemble_topk_prediction(
     avg_loss = [t[2] for t in topk_results]
 
     sum_loss = sum(avg_loss)
-    weights = [(1.0 - (loss / sum_loss)) / (topk - 1.0) for loss in avg_loss]
+    weights = [round((1.0 - (loss / sum_loss)) / (topk - 1.0), 5) for loss in avg_loss]
 
     save_ensemble_snapshot(
         alchemyEngine,
@@ -1692,7 +1698,9 @@ def covars_and_search(client, symbol):
     )
     cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
 
-    hps_id, covar_set_id = get_hps_session(args.symbol, cutoff_date, args.resume)
+    hps_id, covar_set_id = get_hps_session(
+        args.symbol, cutoff_date, args.resume, len(anchor_df)
+    )
     args.covar_set_id = covar_set_id
     logger.info(
         "HPS session ID: %s, Cutoff date: %s, CovarSet ID: %s",

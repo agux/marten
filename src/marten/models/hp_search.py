@@ -1165,7 +1165,7 @@ def _get_cutoff_date(args):
     return min(covar_cutoff, hps_cutoff)
 
 
-def get_hps_session(symbol, cutoff_date, resume):
+def get_hps_session(symbol, cutoff_date, resume, timesteps):
     global alchemyEngine
 
     if resume:
@@ -1210,8 +1210,8 @@ def get_hps_session(symbol, cutoff_date, resume):
         result = conn.execute(
             text(
                 """
-                INSERT INTO hps_sessions (symbol, model, ts_date) 
-                VALUES (:symbol, :model, :ts_date)
+                INSERT INTO hps_sessions (symbol, model, ts_date, timesteps) 
+                VALUES (:symbol, :model, :ts_date, :timesteps)
                 RETURNING id
                 """
             ),
@@ -1219,6 +1219,7 @@ def get_hps_session(symbol, cutoff_date, resume):
                 "symbol": symbol,
                 "model": "NeuralProphet",
                 "ts_date": cutoff_date,
+                "timesteps": timesteps
             },
         )
         return result.fetchone()[0], None
