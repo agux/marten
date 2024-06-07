@@ -465,7 +465,7 @@ def log_metrics_for_hyper_params(
     topk_covar = None
     if "topk_covar" in params:
         topk_covar = params["topk_covar"]
-        # params.pop("topk_covar")
+        params.pop("topk_covar")
 
     start_time = time.time()
     metrics = None
