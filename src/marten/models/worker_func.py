@@ -1111,12 +1111,11 @@ def train_predict(
     return forecast, metrics
 
 def calc_final_forecast(forecast, mode):
-    if mode == "additive":
-        forecast["forecast"] = forecast["trend"] + forecast["season_yearly"]
-    elif mode == "multiplicative":
-        forecast["forecast"] = forecast["trend"] * forecast["season_yearly"]
-    else:
-        raise ValueError("seasonality_mode should be either 'additive' or 'multiplicative'")
+    match mode:
+        case "multiplicative":
+            forecast["forecast"] = forecast["trend"] * forecast["season_yearly"]
+        case _: # "additive" | "auto" | None
+            forecast["forecast"] = forecast["trend"] + forecast["season_yearly"]
     return forecast
 
 def forecast(symbol, df, hps_metric, region, cutoff_date, group_id):
