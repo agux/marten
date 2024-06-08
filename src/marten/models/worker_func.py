@@ -1097,6 +1097,7 @@ def train_predict(
     )
 
     with warnings.catch_warnings():
+        warnings.simplefilter("ignore", FutureWarning)
         warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
         # WARNING - (py.warnings._showwarnmsg) - .../python3.12/site-packages/neuralprophet/data/process.py:127:
         # PerformanceWarning: DataFrame is highly fragmented.
@@ -1105,7 +1106,7 @@ def train_predict(
         # Consider joining all columns at once using pd.concat(axis=1) instead.
         # To get a de-fragmented frame, use `newframe = frame.copy()`
         # df_forecast[name] = yhat
-        
+
         set_log_level("ERROR")
         set_random_seed(random_seed)
 
@@ -1240,8 +1241,10 @@ def forecast(symbol, df, hps_metric, region, cutoff_date, group_id):
     calc_final_forecast(forecast, 
                         hyperparams["seasonality_mode"] if "seasonality_mode" in hyperparams else None)
 
-    sanitize_all_loss(metrics.iloc[-1])
-    sanitize_all_loss(metrics_final.iloc[-1])
+    # metrics.loc[metrics.index[-1]] is used to get a view of the last row, 
+    # and modifications to this view will be reflected in the original DataFrame.
+    sanitize_all_loss(metrics.loc[metrics.index[-1]])
+    sanitize_all_loss(metrics.loc[metrics.index[-1]])
 
     # metrics.iloc[-1]["Loss_val"] = sanitize_loss(metrics.iloc[-1]["Loss_val"])
     # metrics_final.iloc[-1]["Loss"] = sanitize_loss(metrics_final.iloc[-1]["Loss"])
