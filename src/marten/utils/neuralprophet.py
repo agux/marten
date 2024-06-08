@@ -41,7 +41,7 @@ def set_yhat_n(df):
 
     # Iterate over the remaining yhat columns and fill in null/NA values in yhat_n
     for col in yhat_columns_sorted[1:]:
-        df['yhat_n'].fillna(df[col], inplace=True)
+        df["yhat_n"] = df["yhat_n"].fillna(df[col])
 
 def set_forecast_columns(forecast):
     # List of columns to keep
