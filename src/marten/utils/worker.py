@@ -35,8 +35,8 @@ class LocalWorkerPlugin(WorkerPlugin):
 
 
 def init_client(name, worker=-1, threads=1, dashboard_port=None, args=None):
-    dask.config.set("distributed.scheduler.worker-ttl", "15 minutes")
-    
+    dask.config.set({"distributed.scheduler.worker-ttl", "15 minutes"})
+
     cluster = LocalCluster(
         host="0.0.0.0",
         scheduler_port=getattr(args, "scheduler_port", 0),
@@ -53,10 +53,7 @@ def init_client(name, worker=-1, threads=1, dashboard_port=None, args=None):
     get_logger(name).info(
         "dask dashboard can be accessed at: %s", cluster.dashboard_link
     )
-    get_logger(name).info(
-        "dask scheduler address: %s", cluster.scheduler_address
-    )
-
+    get_logger(name).info("dask scheduler address: %s", cluster.scheduler_address)
 
     return client
 
@@ -148,7 +145,12 @@ def log_futures(futures):
 
 
 def await_futures(
-    futures, until_all_completed=True, task_timeout=None, shared_vars=None, multiplier=1, hard_wait=False
+    futures,
+    until_all_completed=True,
+    task_timeout=None,
+    shared_vars=None,
+    multiplier=1,
+    hard_wait=False,
 ):
     num = num_undone(futures, shared_vars)
     get_logger().debug("undone futures: %s", num)
