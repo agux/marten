@@ -45,7 +45,7 @@ def set_yhat_n(df):
 
 def set_forecast_columns(forecast):
     # List of columns to keep
-    columns_to_keep = ["ds", "y"]
+    columns_to_keep = ["ds", "y", "trend", "season_yearly"]
 
     # Add columns that match the pattern 'yhat'
     columns_to_keep += [
