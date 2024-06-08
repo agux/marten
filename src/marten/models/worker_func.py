@@ -537,12 +537,18 @@ def log_metrics_for_hyper_params(
     return last_metric["Loss_val"]
 
 def sanitize_all_loss(metric):
-    metric["Loss_val"] = sanitize_loss(metric["Loss_val"])
-    metric["MAE_val"] = sanitize_loss(metric["MAE_val"])
-    metric["RMSE_val"] = sanitize_loss(metric["RMSE_val"])
-    metric["MAE"] = sanitize_loss(metric["MAE"])
-    metric["RMSE"] = sanitize_loss(metric["RMSE"])
-    metric["Loss"] = sanitize_loss(metric["Loss"])
+    if "Loss_val" in metric:
+        metric["Loss_val"] = sanitize_loss(metric["Loss_val"])
+    if "MAE_val" in metric:
+        metric["MAE_val"] = sanitize_loss(metric["MAE_val"])
+    if "RMSE_val" in metric:
+        metric["RMSE_val"] = sanitize_loss(metric["RMSE_val"])
+    if "MAE" in metric:
+        metric["MAE"] = sanitize_loss(metric["MAE"])
+    if "RMSE" in metric:
+        metric["RMSE"] = sanitize_loss(metric["RMSE"])
+    if "Loss" in metric:
+        metric["Loss"] = sanitize_loss(metric["Loss"])
 
 def sanitize_loss(value):
     global LOSS_CAP
