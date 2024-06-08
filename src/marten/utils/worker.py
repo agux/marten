@@ -2,6 +2,8 @@ import os
 import time
 import random
 import multiprocessing
+import dask
+import dask.config
 from dask.distributed import WorkerPlugin, get_worker, LocalCluster, Client
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
@@ -52,6 +54,8 @@ def init_client(name, worker=-1, threads=1, dashboard_port=None, args=None):
     get_logger(name).info(
         "dask scheduler address: %s", cluster.scheduler_address
     )
+
+    dask.config.set("distributed.scheduler.worker-ttl", "15 minutes")
 
     return client
 
