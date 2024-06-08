@@ -304,8 +304,6 @@ def _try_fitting(
                 epochs=epochs,
                 early_stopping=early_stopping,
                 freq="B",
-                minimal=True,
-                metrics=True,
             )
         else:
             metrics = m.fit(
@@ -314,8 +312,6 @@ def _try_fitting(
                 epochs=epochs,
                 early_stopping=early_stopping,
                 freq="B",
-                minimal=True,
-                metrics=True,
             )
         return m, metrics
     except ValueError as e:
