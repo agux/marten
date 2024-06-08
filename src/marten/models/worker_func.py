@@ -1241,10 +1241,10 @@ def forecast(symbol, df, hps_metric, region, cutoff_date, group_id):
     calc_final_forecast(forecast, 
                         hyperparams["seasonality_mode"] if "seasonality_mode" in hyperparams else None)
 
-    # metrics.loc[metrics.index[-1]] is used to get a view of the last row, 
+    # metrics.loc[metrics.index[-1]] is used to get a view of the last row,
     # and modifications to this view will be reflected in the original DataFrame.
     sanitize_all_loss(metrics.loc[metrics.index[-1]])
-    sanitize_all_loss(metrics.loc[metrics.index[-1]])
+    sanitize_all_loss(metrics_final.loc[metrics_final.index[-1]])
 
     # metrics.iloc[-1]["Loss_val"] = sanitize_loss(metrics.iloc[-1]["Loss_val"])
     # metrics_final.iloc[-1]["Loss"] = sanitize_loss(metrics_final.iloc[-1]["Loss"])
