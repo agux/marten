@@ -1740,6 +1740,12 @@ def covars_and_search(client, symbol):
     univ_loss = _univariate_default_hp(anchor_df, args, hps_id)
     base_loss = float(univ_loss) * args.loss_quantile
 
+    df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
+        anchor_df, args, alchemyEngine, logger, cutoff_date
+    )
+    df_future = client.scatter(df)
+    ranked_features_future = client.scatter(ranked_features)
+
     # if in resume mode, check if the topk HP is present, and further check if prediction is already conducted.
     topk_count = count_topk_hp(hps_id, base_loss)
     if args.resume and topk_count >= args.topk:
@@ -1748,7 +1754,7 @@ def covars_and_search(client, symbol):
             topk_count,
             base_loss,
         )
-        return hps_id, cutoff_date
+        return hps_id, cutoff_date, ranked_features_future, df, df_future
     else:
         logger.info(
             "Found %s HP with Loss_val less than %s in HP search history. The process will be continued.",
@@ -1775,13 +1781,9 @@ def covars_and_search(client, symbol):
         round(base_loss, 3),
     )
     t2_start = time.time()
-    df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
-        anchor_df, args, alchemyEngine, logger, cutoff_date
-    )
+
     update_covar_set_id(alchemyEngine, hps_id, covar_set_id)
 
-    df_future = client.scatter(df)
-    ranked_features_future = client.scatter(ranked_features)
     fast_bayesopt(
         df_future,
         covar_set_id,
