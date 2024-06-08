@@ -19,7 +19,6 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
     Retrying,
-    retry_if_exception_type,
     retry_if_exception,
     RetryError,
 )
@@ -32,6 +31,7 @@ from marten.utils.neuralprophet import (
     select_topk_features,
     layer_spec_to_list,
     select_device,
+    max_yhat_col,
 )
 
 
@@ -989,8 +989,9 @@ def save_forecast_snapshot(
 ):
     metric = metrics.iloc[-1]
     metric_final = metrics_final.iloc[-1]
-    mean_diff = (forecast["yhat1"] - forecast["y"]).mean()
-    std_diff = (forecast["yhat1"] - forecast["y"]).std()
+    yhat_col = max_yhat_col(forecast)
+    mean_diff = (forecast[yhat_col] - forecast["y"]).mean()
+    std_diff = (forecast[yhat_col] - forecast["y"]).std()
 
     with alchemyEngine.begin() as conn:
         result = conn.execute(
@@ -1050,8 +1051,8 @@ def save_forecast_snapshot(
 
         country_holidays = get_country_holidays(region)
 
-        forecast_params = forecast[["ds", "trend", "season_yearly", "yhat1"]]
-        forecast_params.rename(columns={"ds": "date"}, inplace=True)
+        forecast_params = forecast[["ds", "trend", "season_yearly", yhat_col]]
+        forecast_params.rename(columns={"ds": "date", yhat_col: "yhat_n"}, inplace=True)
         forecast_params.loc[:, "symbol"] = symbol
         forecast_params.loc[:, "snapshot_id"] = snapshot_id
         forecast_params.loc[:, "holiday"] = forecast_params["date"].apply(
@@ -1519,10 +1520,10 @@ def save_ensemble_snapshot(
 
     for df, w in zip(top_forecasts, weights):
         df = trim_forecasts_by_dates(df)
-
-        df = df[["ds", "yhat1"]]
-        df.rename(columns={"ds": "date"}, inplace=True)
-        df["yhat1"] = df["yhat1"] * w
+        yhat_col = max_yhat_col(df)
+        df = df[["ds", yhat_col]]
+        df.rename(columns={"ds": "date", yhat_col: "yhat_n"}, inplace=True)
+        df["yhat_n"] = df["yhat_n"] * w
 
         if ens_df is None:
             ens_df = df
@@ -1533,7 +1534,7 @@ def save_ensemble_snapshot(
             ens_df.set_index("date", inplace=True)
         else:
             df.set_index("date", inplace=True)
-            ens_df["yhat1"] += df["yhat1"]
+            ens_df["yhat_n"] += df["yhat_n"]
 
     ens_df.reset_index(inplace=True)
 
