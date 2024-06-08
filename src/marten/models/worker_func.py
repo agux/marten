@@ -1119,7 +1119,9 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
 
+    hyperparams = hps_metric["hyper_params"]
     covar_set_id = int(hps_metric["covar_set_id"])
+    hp_str = json.dumps(hyperparams, sort_keys=True)
     logger.info(
         (
             "%s - forecasting with setting:\n"
@@ -1138,7 +1140,7 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
         covar_set_id,
         hps_metric["sub_topk"],
         cutoff_date,
-        hps_metric["hyper_params"],
+        hp_str,
     )
 
     if covar_set_id == 0:
@@ -1170,7 +1172,6 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
         "dataframe augmented with covar_set_id %s: %s", covar_set_id, new_df.shape
     )
 
-    hyperparams = json.loads(hps_metric["hyper_params"])
     if "ar_layers" not in hyperparams:
         hyperparams["ar_layers"] = layer_spec_to_list(hyperparams["ar_layer_spec"])
         hyperparams.pop("ar_layer_spec")
@@ -1250,7 +1251,7 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
     snapshot_id, n_yearly_seasonality = save_forecast_snapshot(
         alchemyEngine,
         symbol,
-        hps_metric["hyper_params"],
+        hp_str,
         covar_set_id,
         metrics,
         metrics_final,
