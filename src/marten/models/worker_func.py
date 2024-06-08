@@ -536,19 +536,13 @@ def log_metrics_for_hyper_params(
 
     return last_metric["Loss_val"]
 
-def sanitize_all_loss(metric):
-    if "Loss_val" in metric:
-        metric["Loss_val"] = sanitize_loss(metric["Loss_val"])
-    if "MAE_val" in metric:
-        metric["MAE_val"] = sanitize_loss(metric["MAE_val"])
-    if "RMSE_val" in metric:
-        metric["RMSE_val"] = sanitize_loss(metric["RMSE_val"])
-    if "MAE" in metric:
-        metric["MAE"] = sanitize_loss(metric["MAE"])
-    if "RMSE" in metric:
-        metric["RMSE"] = sanitize_loss(metric["RMSE"])
-    if "Loss" in metric:
-        metric["Loss"] = sanitize_loss(metric["Loss"])
+def sanitize_all_loss(df):
+    columns_to_sanitize = ["Loss_val", "MAE_val", "RMSE_val", "MAE", "RMSE", "Loss"]
+    for column in columns_to_sanitize:
+        if column in df.columns:
+            df.loc[df.index[-1], column] = sanitize_loss(
+                df.loc[df.index[-1], column]
+            )
 
 def sanitize_loss(value):
     global LOSS_CAP
@@ -1243,8 +1237,8 @@ def forecast(symbol, df, hps_metric, region, cutoff_date, group_id):
 
     # metrics.loc[metrics.index[-1]] is used to get a view of the last row,
     # and modifications to this view will be reflected in the original DataFrame.
-    sanitize_all_loss(metrics.loc[metrics.index[-1]])
-    sanitize_all_loss(metrics_final.loc[metrics_final.index[-1]])
+    sanitize_all_loss(metrics)
+    sanitize_all_loss(metrics_final)
 
     # metrics.iloc[-1]["Loss_val"] = sanitize_loss(metrics.iloc[-1]["Loss_val"])
     # metrics_final.iloc[-1]["Loss"] = sanitize_loss(metrics_final.iloc[-1]["Loss"])
