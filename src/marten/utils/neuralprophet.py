@@ -26,15 +26,38 @@ def select_device(accelerator, util_threshold=80, vram_threshold=80):
         else None
     )
 
-def max_yhat_col(df):
+def set_yhat_n(df):
     # Extract column names
     columns = df.columns
 
     # Filter columns that start with "yhat"
     yhat_columns = [col for col in columns if col.startswith('yhat')]
 
-    # Extract numbers from the column names and find the maximum
-    max_number = max(int(re.search(r'\d+', col).group()) for col in yhat_columns)
+    # Sort columns based on the numerical part in ascending order
+    yhat_columns_sorted = sorted(yhat_columns, key=lambda x: int(re.search(r'\d+', x).group()))
 
-    # Construct the column name with the largest number
-    return f'yhat{max_number}'
+    # Initialize yhat_n with the values from the smallest yhat column
+    df['yhat_n'] = df[yhat_columns_sorted[0]]
+
+    # Iterate over the remaining yhat columns and fill in null/NA values in yhat_n
+    for col in yhat_columns_sorted[1:]:
+        df['yhat_n'].fillna(df[col], inplace=True)
+
+def set_forecast_columns(forecast):
+    # List of columns to keep
+    columns_to_keep = ["ds", "y"]
+
+    # Add columns that match the pattern 'yhat'
+    columns_to_keep += [
+        col
+        for col in forecast.columns
+        if col.startswith("yhat") and "%" not in col
+    ]
+
+    # Remove columns not in the list of columns to keep
+    forecast.drop(
+        columns=[col for col in forecast.columns if col not in columns_to_keep],
+        inplace=True,
+    )
+
+    set_yhat_n(forecast)

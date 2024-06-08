@@ -31,7 +31,7 @@ from marten.utils.neuralprophet import (
     select_topk_features,
     layer_spec_to_list,
     select_device,
-    max_yhat_col,
+    set_forecast_columns,
 )
 
 
@@ -304,6 +304,8 @@ def _try_fitting(
                 epochs=epochs,
                 early_stopping=early_stopping,
                 freq="B",
+                minimal=True,
+                metrics=True,
             )
         else:
             metrics = m.fit(
@@ -312,6 +314,8 @@ def _try_fitting(
                 epochs=epochs,
                 early_stopping=early_stopping,
                 freq="B",
+                minimal=True,
+                metrics=True,
             )
         return m, metrics
     except ValueError as e:
@@ -989,9 +993,9 @@ def save_forecast_snapshot(
 ):
     metric = metrics.iloc[-1]
     metric_final = metrics_final.iloc[-1]
-    yhat_col = max_yhat_col(forecast)
-    mean_diff = (forecast[yhat_col] - forecast["y"]).mean()
-    std_diff = (forecast[yhat_col] - forecast["y"]).std()
+    
+    mean_diff = (forecast["yhat_n"] - forecast["y"]).mean()
+    std_diff = (forecast["yhat_n"] - forecast["y"]).std()
 
     with alchemyEngine.begin() as conn:
         result = conn.execute(
@@ -1051,8 +1055,8 @@ def save_forecast_snapshot(
 
         country_holidays = get_country_holidays(region)
 
-        forecast_params = forecast[["ds", "trend", "season_yearly", yhat_col]]
-        forecast_params.rename(columns={"ds": "date", yhat_col: "yhat_n"}, inplace=True)
+        forecast_params = forecast[["ds", "trend", "season_yearly", "yhat_n"]]
+        forecast_params.rename(columns={"ds": "date"}, inplace=True)
         forecast_params.loc[:, "symbol"] = symbol
         forecast_params.loc[:, "snapshot_id"] = snapshot_id
         forecast_params.loc[:, "holiday"] = forecast_params["date"].apply(
@@ -1104,6 +1108,7 @@ def train_predict(
         )
         forecast = m.predict(future)
 
+    set_forecast_columns(forecast)
     return forecast, metrics
 
 
@@ -1230,7 +1235,7 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
     metrics = results[0][1]
     forecast, metrics_final = results[1][0], results[1][1]
 
-    logger.info("forecast columns: %s", forecast.columns)
+    logger.debug("forecast columns: %s", forecast.columns)
     # NOTE get forecasted y values directly from `forecast` output
     # calc_final_forecast(forecast,
     # hyperparams["seasonality_mode"] if "seasonality_mode" in hyperparams else None)
@@ -1520,9 +1525,9 @@ def save_ensemble_snapshot(
 
     for df, w in zip(top_forecasts, weights):
         df = trim_forecasts_by_dates(df)
-        yhat_col = max_yhat_col(df)
-        df = df[["ds", yhat_col]]
-        df.rename(columns={"ds": "date", yhat_col: "yhat_n"}, inplace=True)
+        
+        df = df[["ds", "yhat_n"]]
+        df.rename(columns={"ds": "date"}, inplace=True)
         df["yhat_n"] = df["yhat_n"] * w
 
         if ens_df is None:
