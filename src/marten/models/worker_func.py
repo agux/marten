@@ -483,11 +483,6 @@ def log_metrics_for_hyper_params(
             epochs=epochs,
             random_seed=random_seed,
             early_stopping=early_stopping,
-            # batch_size=params["batch_size"],
-            # n_lags=params["n_lags"],
-            # yearly_seasonality=params["yearly_seasonality"],
-            # ar_layers=params["ar_layers"],
-            # lagged_reg_layers=params["lagged_reg_layers"],
             weekly_seasonality=False,
             daily_seasonality=False,
             impute_missing=True,
@@ -495,7 +490,6 @@ def log_metrics_for_hyper_params(
             validate=True,
             country=region,
             changepoints_range=1.0,
-            # optimizer="AdamW" if "optimizer" not in params else params["optimizer"],
             **params,
         )
     except ValueError as e:
@@ -536,13 +530,13 @@ def log_metrics_for_hyper_params(
 
     return last_metric["Loss_val"]
 
+
 def sanitize_all_loss(df):
     columns_to_sanitize = ["Loss_val", "MAE_val", "RMSE_val", "MAE", "RMSE", "Loss"]
     for column in columns_to_sanitize:
         if column in df.columns:
-            df.loc[df.index[-1], column] = sanitize_loss(
-                df.loc[df.index[-1], column]
-            )
+            df.loc[df.index[-1], column] = sanitize_loss(df.loc[df.index[-1], column])
+
 
 def sanitize_loss(value):
     global LOSS_CAP
@@ -1056,7 +1050,7 @@ def save_forecast_snapshot(
 
         country_holidays = get_country_holidays(region)
 
-        forecast_params = forecast[["ds", "trend", "season_yearly", "forecast"]]
+        forecast_params = forecast[["ds", "trend", "season_yearly", "yhat1"]]
         forecast_params.rename(columns={"ds": "date"}, inplace=True)
         forecast_params.loc[:, "symbol"] = symbol
         forecast_params.loc[:, "snapshot_id"] = snapshot_id
@@ -1111,17 +1105,17 @@ def train_predict(
 
     return forecast, metrics
 
+
 def calc_final_forecast(forecast, mode):
     match mode:
         case "multiplicative":
             forecast["forecast"] = forecast["trend"] * forecast["season_yearly"]
-        case _: # "additive" | "auto" | None
+        case _:  # "additive" | "auto" | None
             forecast["forecast"] = forecast["trend"] + forecast["season_yearly"]
     return forecast
 
-def forecast(symbol, df, hps_metric, region, cutoff_date, group_id):
-    from marten.models.hp_search import augment_anchor_df_with_covars
 
+def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group_id):
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
 
@@ -1158,16 +1152,18 @@ def forecast(symbol, df, hps_metric, region, cutoff_date, group_id):
             alchemyEngine,
         )
     else:
-        new_df, _, ranked_features = augment_anchor_df_with_covars(
-            df,
-            SimpleNamespace(covar_set_id=covar_set_id, symbol=symbol),
-            alchemyEngine,
-            logger,
-            cutoff_date,
-        )
-        if hps_metric["sub_topk"] is not None:
+        # new_df, _, ranked_features = augment_anchor_df_with_covars(
+        #     df,
+        #     SimpleNamespace(covar_set_id=covar_set_id, symbol=symbol),
+        #     alchemyEngine,
+        #     logger,
+        #     cutoff_date,
+        # )
+        if hps_metric["sub_topk"] is None:
+            new_df = df
+        else:
             new_df = select_topk_features(
-                new_df, ranked_features, int(hps_metric["sub_topk"])
+                df, ranked_features, int(hps_metric["sub_topk"])
             )
 
     logger.info(
@@ -1195,16 +1191,16 @@ def forecast(symbol, df, hps_metric, region, cutoff_date, group_id):
             client.submit(
                 train,
                 df=df_future,
-                country=region,
                 epochs=args.epochs,
                 random_seed=args.random_seed,
                 early_stopping=args.early_stopping,
                 weekly_seasonality=False,
                 daily_seasonality=False,
                 impute_missing=True,
-                validate=True,
-                changepoints_range=1.0,
                 accelerator="gpu" if args.accelerator else None,
+                validate=True,
+                country=region,
+                changepoints_range=1.0,
                 **hyperparams,
             )
         )
@@ -1232,8 +1228,10 @@ def forecast(symbol, df, hps_metric, region, cutoff_date, group_id):
     metrics = results[0][1]
     forecast, metrics_final = results[1][0], results[1][1]
 
-    calc_final_forecast(forecast, 
-                        hyperparams["seasonality_mode"] if "seasonality_mode" in hyperparams else None)
+    logger.info("forecast columns: %s", forecast.columns)
+    # NOTE get forecasted y values directly from `forecast` output
+    # calc_final_forecast(forecast,
+    # hyperparams["seasonality_mode"] if "seasonality_mode" in hyperparams else None)
 
     # metrics.loc[metrics.index[-1]] is used to get a view of the last row,
     # and modifications to this view will be reflected in the original DataFrame.
@@ -1286,17 +1284,24 @@ def get_prediction_group_id(alchemyEngine):
 
 
 def ensemble_topk_prediction(
-    symbol, timestep_limit, random_seed, future_steps, topk, hps_id, cutoff_date
+    symbol,
+    timestep_limit,
+    random_seed,
+    future_steps,
+    topk,
+    hps_id,
+    cutoff_date,
+    ranked_features_future,
+    df,
+    df_future,
 ):
-    from marten.models.hp_search import load_anchor_ts
-
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
 
     # NOTE: we don't specify the cutoff_date to load TS, such that
     # we can predict based off latest historical data. Some model HPs
     # may not generalize well to unseen data.
-    df, _ = load_anchor_ts(symbol, timestep_limit, alchemyEngine)
+    # df, _ = load_anchor_ts(symbol, timestep_limit, alchemyEngine)
 
     region = get_holiday_region(alchemyEngine, symbol)
     logger.info("%s - inferred holiday region: %s", symbol, region)
@@ -1312,11 +1317,10 @@ def ensemble_topk_prediction(
 
     with worker_client() as client:
         futures = []
-        df_fut = client.scatter(df)
         for _, row in settings.iterrows():
             futures.append(
                 client.submit(
-                    forecast, symbol, df_fut, row, region, cutoff_date, group_id
+                    forecast, symbol, df_future, ranked_features_future, row, region, cutoff_date, group_id
                 )
             )
 
@@ -1515,9 +1519,9 @@ def save_ensemble_snapshot(
     for df, w in zip(top_forecasts, weights):
         df = trim_forecasts_by_dates(df)
 
-        df = df[["ds", "forecast"]]
+        df = df[["ds", "yhat1"]]
         df.rename(columns={"ds": "date"}, inplace=True)
-        df["forecast"] = df["forecast"] * w
+        df["yhat1"] = df["yhat1"] * w
 
         if ens_df is None:
             ens_df = df
@@ -1528,7 +1532,7 @@ def save_ensemble_snapshot(
             ens_df.set_index("date", inplace=True)
         else:
             df.set_index("date", inplace=True)
-            ens_df["forecast"] += df["forecast"]
+            ens_df["yhat1"] += df["yhat1"]
 
     ens_df.reset_index(inplace=True)
 
@@ -1793,7 +1797,7 @@ def covars_and_search(client, symbol):
     )
     await_futures(hps.futures)
 
-    return hps_id, cutoff_date
+    return hps_id, cutoff_date, ranked_features_future, df, df_future
 
 
 def predict_adhoc(symbol, args):
@@ -1801,7 +1805,9 @@ def predict_adhoc(symbol, args):
     logger = worker.logger
 
     with worker_client() as client:
-        hps_id, cutoff_date = covars_and_search(client, symbol)
+        hps_id, cutoff_date, ranked_features_future, df, df_future = (
+            covars_and_search(client, symbol)
+        )
 
     # predict
     logger.info("Starting adhoc prediction")
@@ -1814,6 +1820,9 @@ def predict_adhoc(symbol, args):
         args.topk,
         hps_id,
         cutoff_date,
+        ranked_features_future,
+        df,
+        df_future,
     )
     logger.info(
         "%s prediction completed. Time taken: %s seconds",
