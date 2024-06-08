@@ -66,8 +66,8 @@ def configure_parser(parser):
         "--future_steps",
         action="store",
         type=int,
-        default=60,
-        help="Specify how many time steps (days) into the future will be predicted. Defaults to 60.",
+        default=20,
+        help="Specify how many time steps (days) into the future will be predicted. Defaults to 20.",
     )
     parser.add_argument(
         "--topk",
@@ -80,43 +80,43 @@ def configure_parser(parser):
         "--gpu_util_threshold",
         action="store",
         type=int,
-        default=80,
+        default=85,
         help=(
             "When accelerator is switched on, "
             "it will fall back to CPU when GPU processor utilization is over the given percentage. "
-            "Default is 80."
+            "Default is 85."
         ),
     )
     parser.add_argument(
         "--gpu_ram_threshold",
         action="store",
         type=int,
-        default=80,
+        default=85,
         help=(
             "When accelerator is switched on, "
             "it will fall back to CPU when GPU vRAM utilization is over the given percentage. "
-            "Default is 80."
+            "Default is 85."
         ),
     )
     parser.add_argument(
         "--batch_size",
         action="store",
         type=int,
-        default=500,
+        default=200,
         help=(
             "Batch size for each iteration of the Bayesian optimized search. "
-            "Defaults to 500"
+            "Defaults to 200"
         ),
     )
     parser.add_argument(
         "--mini_itr",
         action="store",
         type=int,
-        default=20,
+        default=5,
         help=(
             "Mini-iteration for an inner Bayes Optimization run "
             "until `topk` HP of which Loss_val is less than baseline. "
-            "Defaults to 20"
+            "Defaults to 5"
         ),
     )
     parser.add_argument(
@@ -139,14 +139,14 @@ def configure_parser(parser):
         help=(
             "Perform adhoc prediction. "
             "Re-calculate the covariate validation loss and perform HP search using latest historical data. "
-            "The search will be stopped once `topk` HP has been found for ensemble predictions."
+            "The search will be stopped at least`topk` HP has been found for ensemble predictions."
         ),
     )
     parser.add_argument(
         "--loss_quantile",
         action="store",
         type=float,
-        default=0.9,
+        default=0.85,
         help=(
             "During Bayesian HP search, only those with loss_val below `baseline_loss_val * loss_quantile` "
             "will be considered qualified HP for ensemble prediction. "

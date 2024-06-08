@@ -536,6 +536,13 @@ def log_metrics_for_hyper_params(
 
     return last_metric["Loss_val"]
 
+def sanitize_all_loss(metric):
+    metric["Loss_val"] = sanitize_loss(metric["Loss_val"])
+    metric["MAE_val"] = sanitize_loss(metric["MAE_val"])
+    metric["RMSE_val"] = sanitize_loss(metric["RMSE_val"])
+    metric["MAE"] = sanitize_loss(metric["MAE"])
+    metric["RMSE"] = sanitize_loss(metric["RMSE"])
+    metric["Loss"] = sanitize_loss(metric["Loss"])
 
 def sanitize_loss(value):
     global LOSS_CAP
@@ -1049,7 +1056,7 @@ def save_forecast_snapshot(
 
         country_holidays = get_country_holidays(region)
 
-        forecast_params = forecast[["ds", "trend", "season_yearly"]]
+        forecast_params = forecast[["ds", "trend", "season_yearly", "forecast"]]
         forecast_params.rename(columns={"ds": "date"}, inplace=True)
         forecast_params.loc[:, "symbol"] = symbol
         forecast_params.loc[:, "snapshot_id"] = snapshot_id
@@ -1083,9 +1090,6 @@ def train_predict(
         **kwargs,
     )
 
-    set_log_level("ERROR")
-    set_random_seed(random_seed)
-
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
         # WARNING - (py.warnings._showwarnmsg) - .../python3.12/site-packages/neuralprophet/data/process.py:127:
@@ -1095,6 +1099,10 @@ def train_predict(
         # Consider joining all columns at once using pd.concat(axis=1) instead.
         # To get a de-fragmented frame, use `newframe = frame.copy()`
         # df_forecast[name] = yhat
+        
+        set_log_level("ERROR")
+        set_random_seed(random_seed)
+
         future = m.make_future_dataframe(
             df, n_historic_predictions=True, periods=future_steps
         )
@@ -1102,6 +1110,14 @@ def train_predict(
 
     return forecast, metrics
 
+def calc_final_forecast(forecast, mode):
+    if mode == "additive":
+        forecast["forecast"] = forecast["trend"] + forecast["season_yearly"]
+    elif mode == "multiplicative":
+        forecast["forecast"] = forecast["trend"] * forecast["season_yearly"]
+    else:
+        raise ValueError("seasonality_mode should be either 'additive' or 'multiplicative'")
+    return forecast
 
 def forecast(symbol, df, hps_metric, region, cutoff_date, group_id):
     from marten.models.hp_search import augment_anchor_df_with_covars
@@ -1216,8 +1232,14 @@ def forecast(symbol, df, hps_metric, region, cutoff_date, group_id):
     metrics = results[0][1]
     forecast, metrics_final = results[1][0], results[1][1]
 
-    metrics.iloc[-1]["Loss_val"] = sanitize_loss(metrics.iloc[-1]["Loss_val"])
-    metrics_final.iloc[-1]["Loss"] = sanitize_loss(metrics.iloc[-1]["Loss"])
+    calc_final_forecast(forecast, 
+                        hyperparams["seasonality_mode"] if "seasonality_mode" in hyperparams else None)
+
+    sanitize_all_loss(metrics.iloc[-1])
+    sanitize_all_loss(metrics_final.iloc[-1])
+
+    # metrics.iloc[-1]["Loss_val"] = sanitize_loss(metrics.iloc[-1]["Loss_val"])
+    # metrics_final.iloc[-1]["Loss"] = sanitize_loss(metrics_final.iloc[-1]["Loss"])
     avg_loss = round(
         (metrics.iloc[-1]["Loss_val"] + metrics_final.iloc[-1]["Loss"]) / 2.0, 5
     )
@@ -1269,7 +1291,7 @@ def ensemble_topk_prediction(
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
 
-    # TODO: we don't specify the cutoff_date to load TS, such that
+    # NOTE: we don't specify the cutoff_date to load TS, such that
     # we can predict based off latest historical data. Some model HPs
     # may not generalize well to unseen data.
     df, _ = load_anchor_ts(symbol, timestep_limit, alchemyEngine)
@@ -1298,7 +1320,7 @@ def ensemble_topk_prediction(
 
         results = client.gather(futures)
 
-    # each row of results is a tuple consisting snapshot_id, forecast, agg_loss
+    # each row of results is a tuple consisting snapshot_id, forecast, avg_loss
     # select the topk rows with lowest agg_loss value
     topk_results = sorted(results, key=lambda x: x[2])[:topk]
     snapshot_ids = [t[0] for t in topk_results]
@@ -1491,9 +1513,9 @@ def save_ensemble_snapshot(
     for df, w in zip(top_forecasts, weights):
         df = trim_forecasts_by_dates(df)
 
-        df = df[["ds", "trend", "season_yearly"]]
+        df = df[["ds", "forecast"]]
         df.rename(columns={"ds": "date"}, inplace=True)
-        df[["trend", "season_yearly"]] = df[["trend", "season_yearly"]] * w
+        df["forecast"] = df["forecast"] * w
 
         if ens_df is None:
             ens_df = df
@@ -1504,7 +1526,7 @@ def save_ensemble_snapshot(
             ens_df.set_index("date", inplace=True)
         else:
             df.set_index("date", inplace=True)
-            ens_df[["trend", "season_yearly"]] += df[["trend", "season_yearly"]]
+            ens_df["forecast"] += df["forecast"]
 
     ens_df.reset_index(inplace=True)
 

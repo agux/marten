@@ -651,6 +651,14 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
 
         return tuples if len(tuples) > 0 else None
 
+def reg_search_params(params):
+    if "ar_reg" in params:
+        params["ar_reg"] = round(params["ar_reg"], 5)
+    if "seasonality_reg" in params:
+        params["seasonality_reg"] = round(params["seasonality_reg"], 5)
+    if "trend_reg" in params:
+        params["trend_reg"] = round(params["trend_reg"], 5)
+
 def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args, iteration, resume):
     global logger, client
 
@@ -658,7 +666,10 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
     def objective(params_batch):
         jobs = []
         for params in params_batch:
-            future = client.submit(
+
+            reg_search_params(params)
+
+            jobs.append(client.submit(
                 log_metrics_for_hyper_params,
                 args.symbol,
                 df,
@@ -666,15 +677,15 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
                 args.epochs,
                 args.random_seed,
                 select_device(args.accelerator,
-                              getattr(args, "gpu_util_threshold", None), 
-                          getattr(args, "gpu_ram_threshold", None)),
+                    getattr(args, "gpu_util_threshold", None), 
+                    getattr(args, "gpu_ram_threshold", None)),
                 covar_set_id,
                 hps_id,
                 args.early_stopping,
                 args.infer_holiday,
                 ranked_features,
-            )
-            jobs.append(future)
+            ))
+
         return client.gather(jobs)
     
     warmstart_tuples=None
