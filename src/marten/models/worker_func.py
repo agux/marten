@@ -1643,10 +1643,7 @@ def init_hps(hps, symbol, args, client, alchemyEngine, logger):
     return args
 
 
-def count_topk_hp(hps_id, base_loss):
-    worker = get_worker()
-    alchemyEngine = worker.alchemyEngine
-
+def count_topk_hp(hps_id, base_loss, alchemyEngine):
     with alchemyEngine.connect() as conn:
         result = conn.execute(
             text(
@@ -1666,7 +1663,7 @@ def count_topk_hp(hps_id, base_loss):
         return result.fetchone()[0]
 
 
-def fast_bayesopt(df, covar_set_id, hps_id, ranked_features, base_loss, args):
+def fast_bayesopt(alchemyEngine, df, covar_set_id, hps_id, ranked_features, base_loss, args):
     worker = get_worker()
     logger = worker.logger
 
@@ -1708,7 +1705,7 @@ def fast_bayesopt(df, covar_set_id, hps_id, ranked_features, base_loss, args):
         if min_loss is None or min_loss > base_loss:
             continue
 
-        topk_count = count_topk_hp(hps_id, base_loss)
+        topk_count = count_topk_hp(alchemyEngine, hps_id, base_loss)
 
         if topk_count >= args.topk:
             logger.info(
@@ -1802,7 +1799,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     ranked_features_future = client.scatter(ranked_features)
 
     # if in resume mode, check if the topk HP is present, and further check if prediction is already conducted.
-    topk_count = count_topk_hp(hps_id, base_loss)
+    topk_count = count_topk_hp(alchemyEngine, hps_id, base_loss)
     if args.resume and topk_count >= args.topk:
         logger.info(
             "Found %s HP with Loss_val less than %s in HP search history already. Skipping covariate and HP search.",
@@ -1843,6 +1840,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     update_covar_set_id(alchemyEngine, hps_id, covar_set_id)
 
     fast_bayesopt(
+        alchemyEngine,
         df_future,
         covar_set_id,
         hps_id,
