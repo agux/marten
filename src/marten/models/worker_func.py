@@ -304,6 +304,7 @@ def _try_fitting(
                 epochs=epochs,
                 early_stopping=early_stopping,
                 freq="B",
+                checkpointing=False,
             )
         else:
             metrics = m.fit(
@@ -312,6 +313,7 @@ def _try_fitting(
                 epochs=epochs,
                 early_stopping=early_stopping,
                 freq="B",
+                checkpointing=False,
             )
         return m, metrics
     except ValueError as e:
@@ -338,10 +340,11 @@ def log_train_args(df, *args, **kwargs):
     logger.info(
         (
             "Model training arguments:\n"
-            "Dataframe:\n%s\n"
+            "Dataframe %s:\n%s\n"
             "Positional arguments:%s\n"
             "Keyword arguments:%s"
         ),
+        df.shape,
         df.describe().to_string(),
         args,
         kwargs,

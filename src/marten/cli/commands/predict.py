@@ -11,13 +11,13 @@ def configure_parser(parser):
         help="Maximum epochs for model fitting. Defaults to 5000",
     )
     parser.add_argument(
-        "--worker",
+        "--max_worker",
         action="store",
         type=int,
         default=-1,
         help=(
-            "Number of parallel workers (python processes). "
-            "Defaults to the number of symbols provided, or the number of cpu cores, whichever is smaller."
+            "Specifies maximum parallel workers (python processes). "
+            "Defaults to the number of cpu cores."
         ),
     )
     parser.add_argument(
