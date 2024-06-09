@@ -49,7 +49,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     )
     cluster.adapt(
         interval="30s",
-        target_duration="5min",
+        target_duration="5m",
         wait_count="5",
         minimum=1, 
         maximum=multiprocessing.cpu_count() if max_worker <= 0 else max_worker)
