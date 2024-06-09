@@ -627,7 +627,7 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
         tuples = []
         for row in results:
             # param_dict = json.loads(row[0], object_hook=hp_deserializer)
-            param_dict = json.loads(row[0])
+            param_dict = row[0]
             # Fill in default values if not exists in historical HP
             # To match the size of tensors in bayesopt
             if "optimizer" not in param_dict:

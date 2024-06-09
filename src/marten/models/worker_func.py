@@ -917,7 +917,7 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, df, topk, nth_top
             best_setting["ts_date"],
         )
 
-        hyperparams = json.loads(best_setting["hyper_params"])
+        hyperparams = best_setting["hyper_params"]
         new_df, _, ranked_features = augment_anchor_df_with_covars(
             df,
             SimpleNamespace(covar_set_id=covar_set_id, symbol=symbol),
