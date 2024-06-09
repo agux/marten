@@ -682,9 +682,9 @@ def new_metric_keys(
             return action()
 
 
-def get_topk_foundation_settings(symbol, hps_id, topk, ts_date, nan_limit):
-    worker = get_worker()
-    alchemyEngine = worker.alchemyEngine
+def get_topk_foundation_settings(alchemyEngine, symbol, hps_id, topk, ts_date, nan_limit):
+    # worker = get_worker()
+    # alchemyEngine = worker.alchemyEngine
 
     query = """
         WITH univ_baseline_nc as (
@@ -764,9 +764,9 @@ def get_topk_foundation_settings(symbol, hps_id, topk, ts_date, nan_limit):
     return df
 
 
-def get_topk_prediction_settings(symbol, hps_id, topk):
-    worker = get_worker()
-    alchemyEngine = worker.alchemyEngine
+def get_topk_prediction_settings(alchemyEngine, symbol, hps_id, topk):
+    # worker = get_worker()
+    # alchemyEngine = worker.alchemyEngine
 
     query = """
         WITH baseline as (
@@ -1158,7 +1158,7 @@ def measure_needed_mem(df, hp):
         lrl_dim = 1
     else:
         lrl_dim = len(lagged_reg_layer) * lagged_reg_layer[0]
-        
+
     return dim * al_dim * lrl_dim / 10.5
 
 
@@ -1361,10 +1361,10 @@ def ensemble_topk_prediction(
     region = get_holiday_region(alchemyEngine, symbol)
     logger.info("%s - inferred holiday region: %s", symbol, region)
 
-    s1 = get_topk_prediction_settings(symbol, hps_id, topk)
+    s1 = get_topk_prediction_settings(alchemyEngine, symbol, hps_id, topk)
     # get univariate and 2*topk 2-pair covariate settings
     nan_threshold = round(len(df) * args.nan_limit, 0)
-    s2 = get_topk_foundation_settings(symbol, hps_id, topk, cutoff_date, nan_threshold)
+    s2 = get_topk_foundation_settings(alchemyEngine, symbol, hps_id, topk, cutoff_date, nan_threshold)
     settings = pd.concat([s1, s2], axis=0, ignore_index=True)
 
     group_id = get_prediction_group_id(alchemyEngine)
