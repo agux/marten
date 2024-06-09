@@ -1675,9 +1675,9 @@ def count_topk_hp(alchemyEngine, hps_id, base_loss):
         return result.fetchone()[0]
 
 
-def fast_bayesopt(alchemyEngine, df, covar_set_id, hps_id, ranked_features, base_loss, args):
-    worker = get_worker()
-    logger = worker.logger
+def fast_bayesopt(alchemyEngine, logger, df, covar_set_id, hps_id, ranked_features, base_loss, args):
+    # worker = get_worker()
+    # logger = worker.logger
 
     from scipy.stats import uniform
     from marten.models.hp_search import (
@@ -1859,6 +1859,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
 
     fast_bayesopt(
         alchemyEngine,
+        logger,
         df_future,
         covar_set_id,
         hps_id,
