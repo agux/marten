@@ -35,7 +35,7 @@ class LocalWorkerPlugin(WorkerPlugin):
 
 
 def init_client(name, worker=-1, threads=1, dashboard_port=None, args=None):
-    dask.config.set({"distributed.scheduler.worker-ttl": "15 minutes"})
+    dask.config.set({"distributed.scheduler.worker-ttl": "20 minutes"})
 
     cluster = LocalCluster(
         host="0.0.0.0",
@@ -47,6 +47,7 @@ def init_client(name, worker=-1, threads=1, dashboard_port=None, args=None):
         # memory_limit="2GB",
         memory_limit=0,  # no limit
     )
+    cluster.adapt(minimum=1, maximum=max(multiprocessing.cpu_count(), worker))
     client = Client(cluster)
     client.register_plugin(LocalWorkerPlugin(name, args))
     client.forward_logging()

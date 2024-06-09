@@ -332,6 +332,22 @@ def should_retry(exception):
     )
 
 
+def log_train_args(df, *args, **kwargs):
+    worker = get_worker()
+    logger = worker.logger
+    logger.info(
+        (
+            "Model training arguments:\n"
+            "Dataframe:\n%s\n"
+            "Positional arguments:%s\n"
+            "Keyword arguments:%s"
+        ),
+        df.describe().to_string(),
+        args,
+        kwargs,
+    )
+
+
 def train(
     df,
     epochs=None,
@@ -343,6 +359,11 @@ def train(
 ):
     worker = get_worker()
     logger, args = worker.logger, worker.args
+
+    if getattr(args, "log_train_args", False):
+        log_train_args(
+            df, epochs, random_seed, early_stopping, country, validate, **kwargs
+        )
 
     def _train_with_cpu():
         logger.debug("modifying **kwargs to train with cpu: %s", kwargs)
@@ -976,7 +997,7 @@ def save_forecast_snapshot(
     metrics,
     metrics_final,
     forecast,
-    fit_time,
+    proc_time,
     region,
     random_seed,
     future_steps,
@@ -989,7 +1010,7 @@ def save_forecast_snapshot(
 ):
     metric = metrics.iloc[-1]
     metric_final = metrics_final.iloc[-1]
-    
+
     mean_diff = (forecast["yhat_n"] - forecast["y"]).mean()
     std_diff = (forecast["yhat_n"] - forecast["y"]).std()
 
@@ -1002,12 +1023,12 @@ def save_forecast_snapshot(
                     predict_snapshots
                     (
                         model,symbol,hyper_params,covar_set_id,mae_val,rmse_val,loss_val,mae,rmse,loss,
-                        predict_diff_mean,predict_diff_stddev,epochs,fit_time,mae_final,rmse_final,loss_final,
+                        predict_diff_mean,predict_diff_stddev,epochs,proc_time,mae_final,rmse_final,loss_final,
                         region,random_seed,future_steps,n_covars,cutoff_date,group_id,hpid,avg_loss,covar
                     )
                 values(
                     :model,:symbol,:hyper_params,:covar_set_id,:mae_val,:rmse_val,:loss_val,
-                    :mae,:rmse,:loss,:predict_diff_mean,:predict_diff_stddev,:epochs,:fit_time,
+                    :mae,:rmse,:loss,:predict_diff_mean,:predict_diff_stddev,:epochs,:proc_time,
                     :mae_final,:rmse_final,:loss_final,:region,:random_seed,:future_steps,:n_covars,
                     :cutoff_date,:group_id,:hpid,:avg_loss,:covar
                 ) RETURNING id
@@ -1027,8 +1048,8 @@ def save_forecast_snapshot(
                 "predict_diff_mean": mean_diff,
                 "predict_diff_stddev": std_diff,
                 "epochs": metric["epoch"] + 1,
-                "fit_time": (
-                    f"{str(fit_time)} seconds" if fit_time is not None else None
+                "proc_time": (
+                    f"{str(proc_time)} seconds" if proc_time is not None else None
                 ),
                 "mae_final": metric_final["MAE"],
                 "rmse_final": metric_final["RMSE"],
@@ -1185,7 +1206,7 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
     if "topk_covar" in hyperparams:
         hyperparams.pop("topk_covar")
 
-    # start_time = time.time()
+    start_time = time.time()
     with worker_client() as client:
         df_future = client.scatter(new_df)
         futures = []
@@ -1228,6 +1249,7 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
         )
         results = client.gather(futures)
 
+    proc_time = time.time() - start_time
     metrics = results[0][1]
     forecast, metrics_final = results[1][0], results[1][1]
 
@@ -1258,7 +1280,7 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
         metrics,
         metrics_final,
         forecast,
-        None,
+        proc_time,
         region,
         args.random_seed,
         args.future_steps,
@@ -1323,7 +1345,14 @@ def ensemble_topk_prediction(
         for _, row in settings.iterrows():
             futures.append(
                 client.submit(
-                    forecast, symbol, df_future, ranked_features_future, row, region, cutoff_date, group_id
+                    forecast,
+                    symbol,
+                    df_future,
+                    ranked_features_future,
+                    row,
+                    region,
+                    cutoff_date,
+                    group_id,
                 )
             )
 
@@ -1521,7 +1550,7 @@ def save_ensemble_snapshot(
 
     for df, w in zip(top_forecasts, weights):
         df = trim_forecasts_by_dates(df)
-        
+
         df = df[["ds", "yhat_n"]]
         df.rename(columns={"ds": "date"}, inplace=True)
         df["yhat_n"] = df["yhat_n"] * w
@@ -1810,8 +1839,8 @@ def predict_adhoc(symbol, args):
     logger = worker.logger
 
     with worker_client() as client:
-        hps_id, cutoff_date, ranked_features_future, df, df_future = (
-            covars_and_search(client, symbol)
+        hps_id, cutoff_date, ranked_features_future, df, df_future = covars_and_search(
+            client, symbol
         )
 
     # predict

@@ -125,6 +125,11 @@ def configure_parser(parser):
         help="Use early stopping during model fitting",
     )
     parser.add_argument(
+        "--log_train_args",
+        action="store_true",
+        help="Logs model training arguments at info level.",
+    )
+    parser.add_argument(
         "--resume",
         action="store_true",
         help=(

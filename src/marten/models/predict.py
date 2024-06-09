@@ -11,16 +11,18 @@ from types import SimpleNamespace
 logger = get_logger(__name__)
 client = None
 
-
+def choose_worker_scale(args):
+    if args.worker < 1:
+        # return min(len(args.symbols), int(multiprocessing.cpu_count() * 0.9))
+        return min(len(args.symbols), int(multiprocessing.cpu_count() * 0.9))
+    else:
+        return args.worker
+        
 def init(args):
     global client
     client = init_client(
         __name__,
-        (
-            min(len(args.symbols), int(multiprocessing.cpu_count() * 0.9))
-            if args.worker < 1
-            else args.worker
-        ),
+        choose_worker_scale(args),
         threads=args.threads,
         dashboard_port=args.dashboard_port,
         args=args,
