@@ -1075,7 +1075,8 @@ def save_forecast_snapshot(
 
         country_holidays = get_country_holidays(region)
 
-        forecast_params = forecast[["ds", "trend", "season_yearly", "yhat_n"]]
+        forecast_params = forecast[["ds", "trend", "season_yearly", "yhat_n"]].copy()
+
         forecast_params.rename(columns={"ds": "date"}, inplace=True)
         forecast_params.loc[:, "symbol"] = symbol
         forecast_params.loc[:, "snapshot_id"] = snapshot_id
