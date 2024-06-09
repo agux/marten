@@ -35,7 +35,14 @@ class LocalWorkerPlugin(WorkerPlugin):
 
 
 def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
-    dask.config.set({"distributed.scheduler.worker-ttl": "20 minutes"})
+    dask.config.set(
+        {
+            "distributed.scheduler.worker-ttl": "30 minutes",
+            "distributed.worker.memory.terminate": False,
+            "distributed.comm.retry.count": 10,
+            "distributed.comm.timeouts.connect": 120,
+        }
+    )
 
     cluster = LocalCluster(
         host="0.0.0.0",
