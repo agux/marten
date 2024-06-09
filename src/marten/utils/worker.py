@@ -40,24 +40,29 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     cluster = LocalCluster(
         host="0.0.0.0",
         scheduler_port=getattr(args, "scheduler_port", 0),
-        n_workers=1,
+        n_workers=getattr(
+            args,
+            "min_worker",
+            int(round(max_worker / 10.0, 0)) if max_worker > 0 else 4,
+        ),
         threads_per_worker=threads,
         processes=True,
         dashboard_address=":8787" if dashboard_port is None else f":{dashboard_port}",
         # memory_limit="2GB",
         memory_limit=0,  # no limit
     )
-    cluster.adapt(
-        interval="15s",
-        target_duration="5m",
-        wait_count="2000",
-        minimum=getattr(
-            args,
-            "min_worker",
-            int(round(max_worker / 10.0, 0)) if max_worker > 0 else 4,
-        ),
-        maximum=max_worker if max_worker > 0 else multiprocessing.cpu_count(),
-    )
+    # unstable. worker got killed prematurely even there's job running
+    # cluster.adapt(
+    #     interval="15s",
+    #     target_duration="5m",
+    #     wait_count="2000",
+    #     minimum=getattr(
+    #         args,
+    #         "min_worker",
+    #         int(round(max_worker / 10.0, 0)) if max_worker > 0 else 4,
+    #     ),
+    #     maximum=max_worker if max_worker > 0 else multiprocessing.cpu_count(),
+    # )
     client = Client(cluster)
     client.register_plugin(LocalWorkerPlugin(name, args))
     client.forward_logging()

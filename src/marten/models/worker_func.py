@@ -1143,6 +1143,14 @@ def calc_final_forecast(forecast, mode):
             forecast["forecast"] = forecast["trend"] + forecast["season_yearly"]
     return forecast
 
+def measure_needed_mem(df, hp):
+    df_shape = df.shape
+    dim = df_shape[0] * df_shape[1]
+    ar_layer = hp["ar_layer"]
+    lagged_reg_layer = hp["lagged_reg_layer"]
+    al_dim = len(ar_layer) * ar_layer[0]
+    lrl_dim = len(lagged_reg_layer) * lagged_reg_layer[0]
+    return dim*al_dim*lrl_dim / 10.5
 
 def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group_id):
     worker = get_worker()
@@ -1235,6 +1243,9 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
             )
         )
         # train with full dataset without validation split
+        worker_mem_needed = measure_needed_mem(
+            new_df, hyperparams
+        )
         futures.append(
             client.submit(
                 train_predict,
@@ -1251,6 +1262,7 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
                 changepoints_range=1.0,
                 accelerator="gpu" if args.accelerator else None,
                 **hyperparams,
+                resources={'MEMORY': worker_mem_needed}
             )
         )
         results = client.gather(futures)
@@ -1347,6 +1359,9 @@ def ensemble_topk_prediction(
     logger.info("prediction settings loaded: %s, group id: %s", len(settings), group_id)
 
     with worker_client() as client:
+        # scale-in to preserve more memory for prediction
+        client.cluster.scale(args.min_worker)
+
         futures = []
         for _, row in settings.iterrows():
             futures.append(
@@ -1799,6 +1814,9 @@ def covars_and_search(client, symbol):
             topk_count,
             base_loss,
         )
+
+    #scale up the cluster to args.max_worker
+    client.cluster.scale(args.max_worker)
 
     # run covariate loss calculation in batch
     logger.info("Starting covariate loss calculation")
