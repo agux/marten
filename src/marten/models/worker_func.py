@@ -1643,7 +1643,7 @@ def init_hps(hps, symbol, args, client, alchemyEngine, logger):
     return args
 
 
-def count_topk_hp(hps_id, base_loss, alchemyEngine):
+def count_topk_hp(alchemyEngine, hps_id, base_loss):
     with alchemyEngine.connect() as conn:
         result = conn.execute(
             text(
