@@ -1253,7 +1253,7 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
             )
         )
         # train with full dataset without validation split
-        worker_mem_needed = measure_needed_mem(new_df, hyperparams)
+        # worker_mem_needed = measure_needed_mem(new_df, hyperparams)
         futures.append(
             client.submit(
                 train_predict,
@@ -1270,7 +1270,7 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
                 changepoints_range=1.0,
                 accelerator="gpu" if args.accelerator else None,
                 **hyperparams,
-                resources={"MEMORY": worker_mem_needed},
+                # resources={"MEMORY": worker_mem_needed},
             )
         )
         results = client.gather(futures)
