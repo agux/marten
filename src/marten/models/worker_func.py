@@ -1145,10 +1145,20 @@ def calc_final_forecast(forecast, mode):
 def measure_needed_mem(df, hp):
     df_shape = df.shape
     dim = df_shape[0] * df_shape[1]
-    ar_layer = hp["ar_layer"]
-    lagged_reg_layer = hp["lagged_reg_layer"]
-    al_dim = len(ar_layer) * ar_layer[0]
-    lrl_dim = len(lagged_reg_layer) * lagged_reg_layer[0]
+    
+    ar_layer = getattr(hp, "ar_layer", None)
+    lagged_reg_layer = getattr(hp, "lagged_reg_layer", None)
+    
+    if ar_layer is None or len(ar_layer) == 0:
+        al_dim = 1
+    else:
+        al_dim = len(ar_layer) * ar_layer[0]
+
+    if lagged_reg_layer is None or len(lagged_reg_layer) == 0:
+        lrl_dim = 1
+    else:
+        lrl_dim = len(lagged_reg_layer) * lagged_reg_layer[0]
+        
     return dim * al_dim * lrl_dim / 10.5
 
 
