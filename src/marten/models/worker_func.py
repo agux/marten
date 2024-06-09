@@ -421,9 +421,7 @@ def train(
             if "OutOfMemoryError" in str(e) or "out of memory" in full_traceback:
                 # final attempt to train on CPU
                 # remove `accelerator` parameter from **kwargs
-                get_logger().warning(
-                    "falling back to CPU due to OutOfMemoryError"
-                )
+                get_logger().warning("falling back to CPU due to OutOfMemoryError")
                 return _train_with_cpu()
             else:
                 get_logger().warning(f"falling back to CPU due to RetryError: {str(e)}")
@@ -1143,6 +1141,7 @@ def calc_final_forecast(forecast, mode):
             forecast["forecast"] = forecast["trend"] + forecast["season_yearly"]
     return forecast
 
+
 def measure_needed_mem(df, hp):
     df_shape = df.shape
     dim = df_shape[0] * df_shape[1]
@@ -1150,7 +1149,8 @@ def measure_needed_mem(df, hp):
     lagged_reg_layer = hp["lagged_reg_layer"]
     al_dim = len(ar_layer) * ar_layer[0]
     lrl_dim = len(lagged_reg_layer) * lagged_reg_layer[0]
-    return dim*al_dim*lrl_dim / 10.5
+    return dim * al_dim * lrl_dim / 10.5
+
 
 def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group_id):
     worker = get_worker()
@@ -1243,9 +1243,7 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
             )
         )
         # train with full dataset without validation split
-        worker_mem_needed = measure_needed_mem(
-            new_df, hyperparams
-        )
+        worker_mem_needed = measure_needed_mem(new_df, hyperparams)
         futures.append(
             client.submit(
                 train_predict,
@@ -1262,7 +1260,7 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
                 changepoints_range=1.0,
                 accelerator="gpu" if args.accelerator else None,
                 **hyperparams,
-                resources={'MEMORY': worker_mem_needed}
+                resources={"MEMORY": worker_mem_needed},
             )
         )
         results = client.gather(futures)
@@ -1739,11 +1737,12 @@ def update_covar_set_id(alchemyEngine, hps_id, covar_set_id):
         conn.execute(text(sql), {"hps_id": hps_id, "covar_set_id": covar_set_id})
 
 
-def _univariate_default_hp(anchor_df, args, hps_id):
+def _univariate_default_hp(client, anchor_df, args, hps_id):
     from marten.models.hp_search import default_params
 
     df = anchor_df[["ds", "y"]]
-    return log_metrics_for_hyper_params(
+    return client.submit(
+        log_metrics_for_hyper_params,
         args.symbol,
         df,
         default_params,
@@ -1759,7 +1758,7 @@ def _univariate_default_hp(anchor_df, args, hps_id):
         args.early_stopping,
         args.infer_holiday,
         None,
-    )
+    ).result()
 
 
 def covars_and_search(client, symbol, alchemyEngine, logger, args):
@@ -1793,7 +1792,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
         covar_set_id,
     )
 
-    univ_loss = _univariate_default_hp(anchor_df, args, hps_id)
+    univ_loss = _univariate_default_hp(client, anchor_df, args, hps_id)
     base_loss = float(univ_loss) * args.loss_quantile
 
     df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
@@ -1818,7 +1817,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
             base_loss,
         )
 
-    #scale up the cluster to args.max_worker
+    # scale up the cluster to args.max_worker
     client.cluster.scale(args.max_worker)
 
     # run covariate loss calculation in batch
