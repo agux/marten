@@ -104,11 +104,16 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None):
         "index_daily_em_view"  # Default table, replace with actual logic if necessary
     )
     with alchemyEngine.connect() as conn:
-        result = conn.execute(
+        results = conn.execute(
             text("""SELECT "table" FROM symbol_dict WHERE symbol = :symbol"""),
             {"symbol": symbol},
-        ).fetchone()
-    anchor_table = result[0] if result else anchor_table
+        )
+        for row in results:
+            table_name = row[0]
+            if table_name in tbl_cols_dict:
+                anchor_table = table_name
+                break
+        
 
     # load anchor TS
     query = f"""

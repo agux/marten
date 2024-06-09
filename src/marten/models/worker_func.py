@@ -1404,6 +1404,7 @@ def ensemble_topk_prediction(
         alchemyEngine,
         symbol,
         forecasts,
+        avg_loss,
         weights,
         region,
         snapshot_ids,
@@ -1566,6 +1567,7 @@ def save_ensemble_snapshot(
     alchemyEngine,
     symbol,
     top_forecasts,
+    avg_loss,
     weights,
     region,
     snapshot_ids,
@@ -1576,7 +1578,7 @@ def save_ensemble_snapshot(
     ens_df = None
     country_holidays = get_country_holidays(region)
     hyper_params = json.dumps(
-        [{"snapshot_id": sid, "weight": w} for sid, w in zip(snapshot_ids, weights)],
+        [{"snapshot_id": sid, "weight": w, "avg_loss": loss} for sid, w, loss in zip(snapshot_ids, weights, avg_loss)],
         sort_keys=True,
     )
 
@@ -1793,20 +1795,15 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     )
     args.covar_set_id = covar_set_id
     logger.info(
-        "HPS session ID: %s, Cutoff date: %s, CovarSet ID: %s",
+        "HPS session ID: %s, Cutoff date: %s, CovarSet ID: %s, Anchor Table: %s",
         hps_id,
         cutoff_date,
         covar_set_id,
+        anchor_table,
     )
 
     univ_loss = _univariate_default_hp(client, anchor_df, args, hps_id)
     base_loss = float(univ_loss) * args.loss_quantile
-
-    df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
-        anchor_df, args, alchemyEngine, logger, cutoff_date
-    )
-    df_future = client.scatter(df)
-    ranked_features_future = client.scatter(ranked_features)
 
     # if in resume mode, check if the topk HP is present, and further check if prediction is already conducted.
     topk_count = count_topk_hp(alchemyEngine, hps_id, base_loss)
@@ -1816,6 +1813,11 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
             topk_count,
             base_loss,
         )
+        df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
+            anchor_df, args, alchemyEngine, logger, cutoff_date
+        )
+        df_future = client.scatter(df)
+        ranked_features_future = client.scatter(ranked_features)
         return hps_id, cutoff_date, ranked_features_future, df, df_future
     else:
         logger.info(
@@ -1839,6 +1841,12 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
         args.symbol,
         round(time.time() - t1_start, 3),
     )
+
+    df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
+        anchor_df, args, alchemyEngine, logger, cutoff_date
+    )
+    df_future = client.scatter(df)
+    ranked_features_future = client.scatter(ranked_features)
 
     # run HP search using Bayeopt and check whether needed HP(s) are found
     logger.info(
