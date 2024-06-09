@@ -48,11 +48,11 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
         memory_limit=0,  # no limit
     )
     cluster.adapt(
-        interval="30s",
+        interval="15s",
         target_duration="5m",
-        wait_count="5",
-        minimum=1, 
-        maximum=multiprocessing.cpu_count() if max_worker <= 0 else max_worker)
+        wait_count="2000",
+        minimum=int(round(max_worker/10., 0)) if max_worker > 0 else 4, 
+        maximum=max_worker if max_worker > 0 else multiprocessing.cpu_count())
     client = Client(cluster)
     client.register_plugin(LocalWorkerPlugin(name, args))
     client.forward_logging()
