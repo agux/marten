@@ -3,6 +3,7 @@ import pandas as pd
 import json
 import hashlib
 import warnings
+import traceback
 import math
 import torch
 
@@ -416,16 +417,17 @@ def train(
                     )
                     return m, metrics
         except RetryError as e:
-            if "OutOfMemoryError" in str(e) or "out of memory" in str(e):
+            full_traceback = traceback.format_exc()
+            if "OutOfMemoryError" in str(e) or "out of memory" in full_traceback:
                 # final attempt to train on CPU
                 # remove `accelerator` parameter from **kwargs
                 get_logger().warning(
-                    "falling back to CPU due to torch.cuda.OutOfMemoryError"
+                    "falling back to CPU due to OutOfMemoryError"
                 )
                 return _train_with_cpu()
             else:
-                get_logger().exception(f"unhandled error: {str(e)}")
-                raise e
+                get_logger().warning(f"falling back to CPU due to RetryError: {str(e)}")
+                return _train_with_cpu()
 
 
 def log_metrics_for_hyper_params(
