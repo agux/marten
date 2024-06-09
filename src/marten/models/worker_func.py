@@ -1860,7 +1860,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     fast_bayesopt(
         alchemyEngine,
         logger,
-        df_future,
+        df,
         covar_set_id,
         hps_id,
         ranked_features_future,
