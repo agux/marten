@@ -1,18 +1,29 @@
 import time
+import os
 import multiprocessing
 
 from marten.utils.logger import get_logger
-from marten.utils.worker import await_futures, init_client
+from marten.utils.worker import init_client
+from marten.utils.database import get_database_engine
 from marten.utils.neuralprophet import select_device
-from marten.models.worker_func import predict_best, predict_adhoc
+from marten.models.worker_func import (
+    predict_best,
+    predict_adhoc,
+    covars_and_search,
+    ensemble_topk_prediction,
+)
 
 from types import SimpleNamespace
 
+from dotenv import load_dotenv
+
 logger = get_logger(__name__)
 client = None
+alchemyEngine = None
+
 
 def init(args):
-    global client
+    global client, alchemyEngine
     client = init_client(
         __name__,
         args.max_worker,
@@ -21,20 +32,56 @@ def init(args):
         args=args,
     )
 
+    if alchemyEngine is None:
+        load_dotenv()  # take environment variables from .env.
+
+        DB_USER = os.getenv("DB_USER")
+        DB_PASSWORD = os.getenv("DB_PASSWORD")
+        DB_HOST = os.getenv("DB_HOST")
+        DB_PORT = os.getenv("DB_PORT")
+        DB_NAME = os.getenv("DB_NAME")
+
+        db_url = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+        alchemyEngine = get_database_engine(db_url)
+
 
 def main(args):
-    global client
+    global client, alchemyEngine, logger
 
     t_start = time.time()
     init(args)
 
-    futures = []
     for symbol in args.symbols:
         if args.adhoc:
-            future = client.submit(predict_adhoc, symbol, args)
+            # future = client.submit(predict_adhoc, symbol, args)
+            hps_id, cutoff_date, ranked_features_future, df, df_future = (
+                covars_and_search(client, symbol, alchemyEngine, logger, args)
+            )
+            logger.info("Starting adhoc prediction")
+            t3_start = time.time()
+            ensemble_topk_prediction(
+                client,
+                symbol,
+                args.timestep_limit,
+                args.random_seed,
+                args.future_steps,
+                args.topk,
+                hps_id,
+                cutoff_date,
+                ranked_features_future,
+                df,
+                df_future,
+                alchemyEngine,
+                logger,
+                args,
+            )
+            logger.info(
+                "%s prediction completed. Time taken: %s seconds",
+                symbol,
+                round(time.time() - t3_start, 3),
+            )
         else:
-            future = client.submit(
-                predict_best,
+            predict_best(
                 symbol,
                 args.early_stopping,
                 args.timestep_limit,
@@ -48,9 +95,6 @@ def main(args):
                     getattr(args, "gpu_ram_threshold", None),
                 ),
             )
-        futures.append(future)
-
-    await_futures(futures)
 
     if client is not None:
         client.close()

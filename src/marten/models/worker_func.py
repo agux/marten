@@ -1327,6 +1327,7 @@ def get_prediction_group_id(alchemyEngine):
 
 
 def ensemble_topk_prediction(
+    client,
     symbol,
     timestep_limit,
     random_seed,
@@ -1337,9 +1338,12 @@ def ensemble_topk_prediction(
     ranked_features_future,
     df,
     df_future,
+    alchemyEngine,
+    logger,
+    args,
 ):
-    worker = get_worker()
-    alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
+    # worker = get_worker()
+    # alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
 
     # NOTE: we don't specify the cutoff_date to load TS, such that
     # we can predict based off latest historical data. Some model HPs
@@ -1358,26 +1362,25 @@ def ensemble_topk_prediction(
     group_id = get_prediction_group_id(alchemyEngine)
     logger.info("prediction settings loaded: %s, group id: %s", len(settings), group_id)
 
-    with worker_client() as client:
-        # scale-in to preserve more memory for prediction
-        client.cluster.scale(args.min_worker)
+    # scale-in to preserve more memory for prediction
+    client.cluster.scale(args.min_worker)
 
-        futures = []
-        for _, row in settings.iterrows():
-            futures.append(
-                client.submit(
-                    forecast,
-                    symbol,
-                    df_future,
-                    ranked_features_future,
-                    row,
-                    region,
-                    cutoff_date,
-                    group_id,
-                )
+    futures = []
+    for _, row in settings.iterrows():
+        futures.append(
+            client.submit(
+                forecast,
+                symbol,
+                df_future,
+                ranked_features_future,
+                row,
+                region,
+                cutoff_date,
+                group_id,
             )
+        )
 
-        results = client.gather(futures)
+    results = client.gather(futures)
 
     # each row of results is a tuple consisting snapshot_id, forecast, avg_loss
     # select the topk rows with lowest agg_loss value
@@ -1759,7 +1762,7 @@ def _univariate_default_hp(anchor_df, args, hps_id):
     )
 
 
-def covars_and_search(client, symbol):
+def covars_and_search(client, symbol, alchemyEngine, logger, args):
     import marten.models.hp_search as hps
     from marten.models.hp_search import (
         _get_cutoff_date,
@@ -1769,8 +1772,8 @@ def covars_and_search(client, symbol):
         augment_anchor_df_with_covars,
     )
 
-    worker = get_worker()
-    alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
+    # worker = get_worker()
+    # alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
 
     args = init_hps(hps, symbol, args, client)
     cutoff_date = _get_cutoff_date(args)
