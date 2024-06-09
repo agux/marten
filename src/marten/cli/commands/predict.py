@@ -11,6 +11,16 @@ def configure_parser(parser):
         help="Maximum epochs for model fitting. Defaults to 5000",
     )
     parser.add_argument(
+        "--min_worker",
+        action="store",
+        type=int,
+        default=4,
+        help=(
+            "Specifies minimum parallel workers (python processes) to keep. "
+            "Defaults to 4."
+        ),
+    )
+    parser.add_argument(
         "--max_worker",
         action="store",
         type=int,
