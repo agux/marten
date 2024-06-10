@@ -12,7 +12,7 @@ from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
 from marten.utils.worker import await_futures, init_client
 from marten.utils.neuralprophet import select_device
-from marten.models.worker_func import fit_with_covar, log_metrics_for_hyper_params
+from marten.models.worker_func import fit_with_covar, log_metrics_for_hyper_params, validate_hyperparams
 
 from sqlalchemy import text
 
@@ -533,6 +533,9 @@ def _search_space(max_covars):
     #     optimizer=["AdamW", "SGD"],
     # )
 
+    # NOTE buggy HP in neuralprophet:
+    # trend_reg_threshold=[True, False]
+
     ss = f'''dict(
         growth=["linear", "discontinuous"],
         batch_size=[None, 100, 200, 300, 400, 500],
@@ -544,7 +547,6 @@ def _search_space(max_covars):
         topk_covar=list(range(0, {max_covars}+1)),
         optimizer=["AdamW", "SGD"],
         trend_reg=uniform(0, 100),
-        trend_reg_threshold=[True, False],
         seasonality_reg=uniform(0, 100),
         seasonality_mode=["additive", "multiplicative"],
         normalize=["off", "standardize", "soft", "soft1"],
@@ -675,23 +677,18 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
             reg_search_params(params)
 
             jobs.append(client.submit(
-                log_metrics_for_hyper_params,
-                args.symbol,
+                validate_hyperparams,
+                args,
                 df,
-                params,
-                args.epochs,
-                args.random_seed,
-                select_device(args.accelerator,
-                    getattr(args, "gpu_util_threshold", None), 
-                    getattr(args, "gpu_ram_threshold", None)),
+                ranked_features,
                 covar_set_id,
                 hps_id,
-                args.early_stopping,
-                args.infer_holiday,
-                ranked_features,
+                params,
             ))
 
-        return client.gather(jobs)
+        params, loss = zip(*client.gather(jobs, errors="skip"))
+
+        return list(params), list(loss)
     
     warmstart_tuples=None
     if resume:

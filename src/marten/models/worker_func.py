@@ -427,6 +427,22 @@ def train(
                 get_logger().warning(f"falling back to CPU due to RetryError: {str(e)}")
                 return _train_with_cpu()
 
+def validate_hyperparams(args, df, ranked_features, covar_set_id, hps_id, params):
+    return params, log_metrics_for_hyper_params(
+        args.symbol,
+        df,
+        params,
+        args.epochs,
+        args.random_seed,
+        select_device(args.accelerator,
+            getattr(args, "gpu_util_threshold", None), 
+            getattr(args, "gpu_ram_threshold", None)),
+        covar_set_id,
+        hps_id,
+        args.early_stopping,
+        args.infer_holiday,
+        ranked_features,
+    )
 
 def log_metrics_for_hyper_params(
     anchor_symbol,
@@ -1375,6 +1391,7 @@ def ensemble_topk_prediction(
     logger.info("prediction settings loaded: %s, group id: %s", len(settings), group_id)
 
     # scale-in to preserve more memory for prediction
+    logger.info("Scaling dask cluster to %s", args.min_worker)
     client.cluster.scale(args.min_worker)
 
     futures = []
@@ -1781,8 +1798,27 @@ def _univariate_default_hp(client, anchor_df, args, hps_id):
         None,
     ).result()
 
+def min_covar_loss_val(alchemyEngine, symbol, ts_date):
+    with alchemyEngine.connect() as conn:
+        result = conn.execute(
+            text(
+                """
+                    select min(loss_val)
+                    from neuralprophet_corel
+                    where symbol = :symbol 
+                        and ts_date = :ts_date
+                """
+            ),
+            {
+                "symbol": symbol,
+                "ts_date": ts_date,
+            },
+        )
+        return result.fetchone()[0]
 
 def covars_and_search(client, symbol, alchemyEngine, logger, args):
+    global LOSS_CAP
+
     import marten.models.hp_search as hps
     from marten.models.hp_search import (
         _get_cutoff_date,
@@ -1815,7 +1851,11 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     )
 
     univ_loss = _univariate_default_hp(client, anchor_df, args, hps_id)
-    base_loss = float(univ_loss) * args.loss_quantile
+
+    min_covar_loss = min_covar_loss_val(alchemyEngine, symbol, cutoff_date)
+    min_covar_loss = min_covar_loss if min_covar_loss is not None else LOSS_CAP
+
+    base_loss = min(float(univ_loss) * args.loss_quantile, min_covar_loss)
 
     # if in resume mode, check if the topk HP is present, and further check if prediction is already conducted.
     topk_count = count_topk_hp(alchemyEngine, hps_id, base_loss)
@@ -1839,6 +1879,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
         )
 
     # scale up the cluster to args.max_worker
+    logger.info("Scaling dask cluster to %s", args.max_worker)
     client.cluster.scale(args.max_worker)
 
     # run covariate loss calculation in batch
@@ -1854,10 +1895,14 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
         round(time.time() - t1_start, 3),
     )
 
+    min_covar_loss = min_covar_loss_val(alchemyEngine, symbol, cutoff_date)
+    min_covar_loss = min_covar_loss if min_covar_loss is not None else LOSS_CAP
+    base_loss = min(base_loss, min_covar_loss)
+
     # run HP search using Bayeopt and check whether needed HP(s) are found
     logger.info(
         "Starting Bayesian optimization search for hyper-parameters. Loss_val threshold: %s",
-        round(base_loss, 3),
+        round(base_loss, 5),
     )
 
     # scale-in to preserve more memory for hps
