@@ -660,8 +660,7 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
 
 def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args, iteration, resume):
     global logger, client
-
-    @scheduler.custom(n_jobs=n_jobs)
+    # @scheduler.custom(n_jobs=n_jobs)
     def objective(params_batch):
         jobs = []
         for params in params_batch:
@@ -674,15 +673,11 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
                 hps_id,
                 params,
             ))
-
         results = client.gather(jobs, errors="skip")
         # logger.info("gathered results type %s, len: %s", type(results), len(results))
         # logger.info("gathered results: %s", results)
-        
         params, loss = zip(*results)
-
         return list(params), list(loss)
-    
     warmstart_tuples=None
     if resume:
         warmstart_tuples = preload_warmstart_tuples(
@@ -699,21 +694,19 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
         )
     else:
         logger.info("no available historical data for warm-start")
-
     tuner = Tuner(
         space,
         objective,
         dict(
             initial_random=n_jobs,
+            batch_size=n_jobs,
             num_iteration=iteration,
             initial_custom=warmstart_tuples,
         ),
     )
-    
     results = tuner.minimize()
     logger.info("best parameters: %s", results["best_params"])
     logger.info("best objective: %s", results["best_objective"])
-
     return results["best_objective"]
 
 

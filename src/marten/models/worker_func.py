@@ -436,7 +436,7 @@ def reg_search_params(params):
         params["trend_reg"] = round(params["trend_reg"], 5)
 
 def validate_hyperparams(args, df, ranked_features, covar_set_id, hps_id, params):
-    reg_params = params.deepcopy()
+    reg_params = params.copy()
     reg_search_params(reg_params)
     return params, log_metrics_for_hyper_params(
         args.symbol,
