@@ -436,9 +436,8 @@ def reg_search_params(params):
         params["trend_reg"] = round(params["trend_reg"], 5)
 
 def validate_hyperparams(args, df, ranked_features, covar_set_id, hps_id, params):
-    
-    reg_params = reg_search_params(params)
-    
+    reg_params = params.deepcopy()
+    reg_search_params(reg_params)
     return params, log_metrics_for_hyper_params(
         args.symbol,
         df,
@@ -700,7 +699,7 @@ def new_metric_keys(
             if "duplicate key value violates unique constraint" in str(e):
                 return False
             else:
-                raise
+                raise e
 
     for attempt in Retrying(
         stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=5)
