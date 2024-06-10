@@ -679,7 +679,7 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
         params, loss = zip(*results)
         params = list(params)
         loss = list(loss)
-        logger.info("successful results: len(params): %s, len(loss): %s")
+        logger.info("successful results: len(params): %s, len(loss): %s", len(params), len(loss))
         return params, loss
     warmstart_tuples=None
     if resume:
