@@ -1,6 +1,8 @@
 import time
 import os
-import multiprocessing
+OPENBLAS_NUM_THREADS = 64
+os.environ["OPENBLAS_NUM_THREADS"] = f"{OPENBLAS_NUM_THREADS}"
+
 
 from marten.utils.logger import get_logger
 from marten.utils.worker import init_client
@@ -8,7 +10,7 @@ from marten.utils.database import get_database_engine
 from marten.utils.neuralprophet import select_device
 from marten.models.worker_func import (
     predict_best,
-    predict_adhoc,
+    # predict_adhoc,
     covars_and_search,
     ensemble_topk_prediction,
 )

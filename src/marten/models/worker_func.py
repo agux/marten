@@ -682,7 +682,9 @@ def new_metric_keys(
             return action()
 
 
-def get_topk_foundation_settings(alchemyEngine, symbol, hps_id, topk, ts_date, nan_limit):
+def get_topk_foundation_settings(
+    alchemyEngine, symbol, hps_id, topk, ts_date, nan_limit
+):
     # worker = get_worker()
     # alchemyEngine = worker.alchemyEngine
 
@@ -1145,10 +1147,10 @@ def calc_final_forecast(forecast, mode):
 def measure_needed_mem(df, hp):
     df_shape = df.shape
     dim = df_shape[0] * df_shape[1]
-    
+
     ar_layer = getattr(hp, "ar_layer", None)
     lagged_reg_layer = getattr(hp, "lagged_reg_layer", None)
-    
+
     if ar_layer is None or len(ar_layer) == 0:
         al_dim = 1
     else:
@@ -1364,7 +1366,9 @@ def ensemble_topk_prediction(
     s1 = get_topk_prediction_settings(alchemyEngine, symbol, hps_id, topk)
     # get univariate and 2*topk 2-pair covariate settings
     nan_threshold = round(len(df) * args.nan_limit, 0)
-    s2 = get_topk_foundation_settings(alchemyEngine, symbol, hps_id, topk, cutoff_date, nan_threshold)
+    s2 = get_topk_foundation_settings(
+        alchemyEngine, symbol, hps_id, topk, cutoff_date, nan_threshold
+    )
     settings = pd.concat([s1, s2], axis=0, ignore_index=True)
 
     group_id = get_prediction_group_id(alchemyEngine)
@@ -1578,7 +1582,10 @@ def save_ensemble_snapshot(
     ens_df = None
     country_holidays = get_country_holidays(region)
     hyper_params = json.dumps(
-        [{"snapshot_id": sid, "weight": w, "avg_loss": loss} for sid, w, loss in zip(snapshot_ids, weights, avg_loss)],
+        [
+            {"snapshot_id": sid, "weight": w, "avg_loss": loss}
+            for sid, w, loss in zip(snapshot_ids, weights, avg_loss)
+        ],
         sort_keys=True,
     )
 
@@ -1675,7 +1682,9 @@ def count_topk_hp(alchemyEngine, hps_id, base_loss):
         return result.fetchone()[0]
 
 
-def fast_bayesopt(alchemyEngine, logger, df, covar_set_id, hps_id, ranked_features, base_loss, args):
+def fast_bayesopt(
+    alchemyEngine, logger, df, covar_set_id, hps_id, ranked_features, base_loss, args
+):
     # worker = get_worker()
     # logger = worker.logger
 
@@ -1853,6 +1862,10 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
         "Starting Bayesian optimization search for hyper-parameters. Loss_val threshold: %s",
         round(base_loss, 3),
     )
+
+    # scale-in to preserve more memory for hps
+    client.cluster.scale(max(args.min_worker, round(args.max_worker * 0.8)))
+
     t2_start = time.time()
 
     update_covar_set_id(alchemyEngine, hps_id, covar_set_id)
