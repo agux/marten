@@ -109,6 +109,17 @@ def configure_parser(parser):
         ),
     )
     parser.add_argument(
+        "--wait_gpu",
+        action="store",
+        type=int,
+        default=600,
+        help=(
+            "When the number of covariates exceed the given value, "
+            "the task will try to wait for the availability of GPU before falling back to CPU. "
+            "Defaults to 600."
+        ),
+    )
+    parser.add_argument(
         "--batch_size",
         action="store",
         type=int,

@@ -364,6 +364,9 @@ def train(
     worker = get_worker()
     logger, args = worker.logger, worker.args
 
+    covars = [col for col in df.columns if col not in ("ds", "y")]
+    wait_gpu = "wait_gpu" in args and len(covars) >= args.wait_gpu
+
     if getattr(args, "log_train_args", False):
         log_train_args(
             df, epochs, random_seed, early_stopping, country, validate, **kwargs
@@ -396,12 +399,13 @@ def train(
                     getattr(args, "gpu_ram_threshold", None),
                 )
                 is None
+                and not wait_gpu
             ):
                 return _train_with_cpu()
 
             for attempt in Retrying(
-                stop=stop_after_attempt(1),
-                wait=wait_exponential(multiplier=1, max=5),
+                stop=stop_after_attempt(5 if wait_gpu else 1),
+                wait=wait_exponential(multiplier=1, max=10),
                 retry=retry_if_exception(should_retry),
                 before_sleep=log_retry,
             ):
@@ -427,6 +431,7 @@ def train(
                 get_logger().warning(f"falling back to CPU due to RetryError: {str(e)}")
                 return _train_with_cpu()
 
+
 def reg_search_params(params):
     if "ar_reg" in params:
         params["ar_reg"] = round(params["ar_reg"], 5)
@@ -435,24 +440,29 @@ def reg_search_params(params):
     if "trend_reg" in params:
         params["trend_reg"] = round(params["trend_reg"], 5)
 
+
 def validate_hyperparams(args, df, ranked_features, covar_set_id, hps_id, params):
     reg_params = params.copy()
     reg_search_params(reg_params)
-    return params, log_metrics_for_hyper_params(
+    loss_val = log_metrics_for_hyper_params(
         args.symbol,
         df,
         reg_params,
         args.epochs,
         args.random_seed,
-        select_device(args.accelerator,
-            getattr(args, "gpu_util_threshold", None), 
-            getattr(args, "gpu_ram_threshold", None)),
+        select_device(
+            args.accelerator,
+            getattr(args, "gpu_util_threshold", None),
+            getattr(args, "gpu_ram_threshold", None),
+        ),
         covar_set_id,
         hps_id,
         args.early_stopping,
         args.infer_holiday,
         ranked_features,
     )
+    return (params, loss_val)
+
 
 def log_metrics_for_hyper_params(
     anchor_symbol,
@@ -468,7 +478,7 @@ def log_metrics_for_hyper_params(
     ranked_features,
 ):
     worker = get_worker()
-    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+    alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
 
     # to support distributed processing, we try to insert a new record (with primary keys only)
     # into hps_metrics first. If we hit duplicated key error, return None.
@@ -1750,7 +1760,7 @@ def fast_bayesopt(
             args.resume or i > 0,
         )
 
-        #TODO: restart client here?
+        # TODO: restart client here?
 
         i += 1
         if min_loss is None or min_loss > base_loss:
@@ -1808,6 +1818,7 @@ def _univariate_default_hp(client, anchor_df, args, hps_id):
         None,
     ).result()
 
+
 def min_covar_loss_val(alchemyEngine, symbol, ts_date):
     with alchemyEngine.connect() as conn:
         result = conn.execute(
@@ -1825,6 +1836,7 @@ def min_covar_loss_val(alchemyEngine, symbol, ts_date):
             },
         )
         return result.fetchone()[0]
+
 
 def covars_and_search(client, symbol, alchemyEngine, logger, args):
     global LOSS_CAP

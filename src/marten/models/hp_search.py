@@ -677,7 +677,11 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
         # logger.info("gathered results type %s, len: %s", type(results), len(results))
         # logger.info("gathered results: %s", results)
         params, loss = zip(*results)
-        return list(params), list(loss)
+        params = list(params)
+        loss = list(loss)
+        if len(params) != len(loss):
+            logger.warn("len(params): %s, len(loss): %s, not equal!")
+        return params, loss
     warmstart_tuples=None
     if resume:
         warmstart_tuples = preload_warmstart_tuples(
