@@ -660,7 +660,7 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
 
 def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args, iteration, resume):
     global logger, client
-    # @scheduler.custom(n_jobs=n_jobs)
+    @scheduler.custom(n_jobs=n_jobs)
     def objective(params_batch):
         jobs = []
         for params in params_batch:
@@ -679,8 +679,7 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
         params, loss = zip(*results)
         params = list(params)
         loss = list(loss)
-        if len(params) != len(loss):
-            logger.warn("len(params): %s, len(loss): %s, not equal!")
+        logger.info("successful results: len(params): %s, len(loss): %s")
         return params, loss
     warmstart_tuples=None
     if resume:
