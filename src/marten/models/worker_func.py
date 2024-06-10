@@ -1722,6 +1722,9 @@ def fast_bayesopt(
             args.mini_itr,
             args.resume or i > 0,
         )
+
+        #TODO: restart client here?
+
         i += 1
         if min_loss is None or min_loss > base_loss:
             continue
@@ -1851,12 +1854,6 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
         round(time.time() - t1_start, 3),
     )
 
-    df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
-        anchor_df, args, alchemyEngine, logger, cutoff_date
-    )
-    df_future = client.scatter(df)
-    ranked_features_future = client.scatter(ranked_features)
-
     # run HP search using Bayeopt and check whether needed HP(s) are found
     logger.info(
         "Starting Bayesian optimization search for hyper-parameters. Loss_val threshold: %s",
@@ -1864,7 +1861,17 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     )
 
     # scale-in to preserve more memory for hps
-    client.cluster.scale(max(args.min_worker, round(args.max_worker * 0.8)))
+    worker_size = max(args.min_worker, round(args.max_worker * 0.8))
+    logger.info("Scaling down dask cluster to %s", worker_size)
+    client.cluster.scale(worker_size)
+
+    # NOTE: if data is scattered before scale-down, the error will be thrown:
+    # Removing worker 'tcp://<worker IP & port>' caused the cluster to lose scattered data, which can't be recovered
+    df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
+        anchor_df, args, alchemyEngine, logger, cutoff_date
+    )
+    df_future = client.scatter(df)
+    ranked_features_future = client.scatter(ranked_features)
 
     t2_start = time.time()
 
@@ -1873,7 +1880,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     fast_bayesopt(
         alchemyEngine,
         logger,
-        df,
+        df_future,
         covar_set_id,
         hps_id,
         ranked_features_future,
