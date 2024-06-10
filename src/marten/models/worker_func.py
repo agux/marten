@@ -427,11 +427,22 @@ def train(
                 get_logger().warning(f"falling back to CPU due to RetryError: {str(e)}")
                 return _train_with_cpu()
 
+def reg_search_params(params):
+    if "ar_reg" in params:
+        params["ar_reg"] = round(params["ar_reg"], 5)
+    if "seasonality_reg" in params:
+        params["seasonality_reg"] = round(params["seasonality_reg"], 5)
+    if "trend_reg" in params:
+        params["trend_reg"] = round(params["trend_reg"], 5)
+
 def validate_hyperparams(args, df, ranked_features, covar_set_id, hps_id, params):
+    
+    reg_params = reg_search_params(params)
+    
     return params, log_metrics_for_hyper_params(
         args.symbol,
         df,
-        params,
+        reg_params,
         args.epochs,
         args.random_seed,
         select_device(args.accelerator,

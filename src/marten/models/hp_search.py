@@ -658,14 +658,6 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
 
         return tuples if len(tuples) > 0 else None
 
-def reg_search_params(params):
-    if "ar_reg" in params:
-        params["ar_reg"] = round(params["ar_reg"], 5)
-    if "seasonality_reg" in params:
-        params["seasonality_reg"] = round(params["seasonality_reg"], 5)
-    if "trend_reg" in params:
-        params["trend_reg"] = round(params["trend_reg"], 5)
-
 def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args, iteration, resume):
     global logger, client
 
@@ -673,9 +665,6 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
     def objective(params_batch):
         jobs = []
         for params in params_batch:
-
-            reg_search_params(params)
-
             jobs.append(client.submit(
                 validate_hyperparams,
                 args,
@@ -686,7 +675,10 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
                 params,
             ))
 
-        params, loss = zip(*client.gather(jobs, errors="skip"))
+        results = client.gather(jobs, errors="skip")
+        logger.info("gathered results type %s, len: %s", type(results), len(results))
+        
+        params, loss = zip(*results)
 
         return list(params), list(loss)
     
