@@ -53,7 +53,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
         n_workers=getattr(
             args,
             "min_worker",
-            int(round(max_worker / 10.0, 0)) if max_worker > 0 else 4,
+            int(max_worker) if max_worker > 0 else multiprocessing.cpu_count(),
         ),
         threads_per_worker=threads,
         processes=True,

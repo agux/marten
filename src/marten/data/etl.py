@@ -99,7 +99,7 @@ def init():
         threads,
         port,
     )
-    client.cluster.scale(workers if workers > 0 else multiprocessing.cpu_count())
+    # client.cluster.scale(workers if workers > 0 else multiprocessing.cpu_count())
 
 
 def run(task, *args, **kwargs):
