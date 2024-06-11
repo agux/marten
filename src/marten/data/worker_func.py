@@ -438,6 +438,7 @@ def stock_zh_index_daily_em(symbol, src):
 
         end_date = datetime.now().strftime("%Y%m%d")
 
+        logger.debug(f"calling ak.stock_zh_index_daily_em({src}{symbol}, {start_date}, {end_date})")
         szide = ak.stock_zh_index_daily_em(f"{src}{symbol}", start_date, end_date)
 
         # if shide is empty, return immediately
