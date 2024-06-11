@@ -547,7 +547,7 @@ def _search_space(max_covars):
         topk_covar=list(range(0, {max_covars}+1)),
         optimizer=["AdamW", "SGD"],
         trend_reg=uniform(0, 100),
-        trend_reg_threshold=False,
+        trend_reg_threshold=[True, False],
         seasonality_reg=uniform(0, 100),
         seasonality_mode=["additive", "multiplicative"],
         normalize=["off", "standardize", "soft", "soft1"],
