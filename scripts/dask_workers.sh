@@ -29,6 +29,6 @@ if command -v pyenv 1>/dev/null 2>&1; then
   eval "$(pyenv init -)"
 fi
 
-export MALLOC_TRIM_THRESHOLD_=0
+# export MALLOC_TRIM_THRESHOLD_=0
 # Start the Dask worker with the specified parameters
 nohup dask worker tcp://$SCHEDULER_IP:$PORT --nworkers $NWORKERS --nthreads $NTHREADS --memory-limit 0 > >(tee -a $OUTPUT_LOG) 2>&1 &
