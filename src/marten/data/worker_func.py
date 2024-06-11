@@ -411,7 +411,7 @@ def cn_index_daily(future_cn_index_list):
     cn_index_fulllist = pd.read_sql(
         "SELECT symbol, src FROM index_spot_em", alchemyEngine
     )
-    logger.info("starting tasks on function stock_zh_index_daily_em()...")
+    logger.info("starting tasks on function stock_zh_index_daily_em(), length: %s", len(cn_index_fulllist))
 
     futures = []
     with worker_client() as client:
