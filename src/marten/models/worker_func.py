@@ -1728,7 +1728,7 @@ def count_topk_hp(alchemyEngine, hps_id, base_loss):
 
 
 def fast_bayesopt(
-    alchemyEngine, logger, df, covar_set_id, hps_id, ranked_features, base_loss, args
+    client, alchemyEngine, logger, df, covar_set_id, hps_id, ranked_features, base_loss, args
 ):
     # worker = get_worker()
     # logger = worker.logger
@@ -1753,9 +1753,8 @@ def fast_bayesopt(
     n_jobs = args.batch_size
 
     # split large iterations into smaller runs to avoid OOM / memory leak
-    i = 0
-    while True:
-        logger.info("running bayesopt mini-iteration %s", i)
+    for i in range(args.max_itr):
+        logger.info("running bayesopt mini-iteration %s/%s", i + 1, args.max_itr)
         min_loss = _bayesopt_run(
             df,
             n_jobs,
@@ -1768,9 +1767,6 @@ def fast_bayesopt(
             args.resume or i > 0,
         )
 
-        # TODO: restart client here?
-
-        i += 1
         if min_loss is None or min_loss > base_loss:
             continue
 
@@ -1945,20 +1941,21 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
         anchor_df, args, alchemyEngine, logger, cutoff_date
     )
-    df_future = client.scatter(df)
-    ranked_features_future = client.scatter(ranked_features)
+    # df_future = client.scatter(df)
+    # ranked_features_future = client.scatter(ranked_features)
 
     t2_start = time.time()
 
     update_covar_set_id(alchemyEngine, hps_id, covar_set_id)
 
     fast_bayesopt(
+        client,
         alchemyEngine,
         logger,
-        df_future,
+        df,
         covar_set_id,
         hps_id,
-        ranked_features_future,
+        ranked_features,
         base_loss,
         args,
     )

@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
 from marten.utils.worker import await_futures, init_client
-from marten.utils.neuralprophet import select_device
+from marten.utils.neuralprophet import select_device, select_topk_features
 from marten.models.worker_func import fit_with_covar, log_metrics_for_hyper_params, validate_hyperparams
 
 from sqlalchemy import text
@@ -669,6 +669,8 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
     def objective(params_batch):
         jobs = []
         for params in params_batch:
+            if "topk_covar" in params:
+                df = select_topk_features(df, ranked_features, params["topk_covar"])
             jobs.append(client.submit(
                 validate_hyperparams,
                 args,
@@ -685,6 +687,8 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
         params = list(params)
         loss = list(loss)
         logger.info("successful results: len(params): %s, len(loss): %s", len(params), len(loss))
+        # TODO: restart client here to free up memory?
+        client.restart()
         return params, loss
     warmstart_tuples=None
     if resume:

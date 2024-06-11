@@ -141,6 +141,17 @@ def configure_parser(parser):
         ),
     )
     parser.add_argument(
+        "--max_itr",
+        action="store",
+        type=int,
+        default=10,
+        help=(
+            "Max iteration for the outer Bayes Optimization. "
+            "Total HP searched would be (batch_size * mini_itr * max_itr). "
+            "Defaults to 10"
+        ),
+    )
+    parser.add_argument(
         "--early_stopping",
         action="store_true",
         help="Use early stopping during model fitting",
