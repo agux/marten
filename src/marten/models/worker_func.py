@@ -6,6 +6,10 @@ import warnings
 import traceback
 import math
 import torch
+import os
+
+OPENBLAS_NUM_THREADS = 1
+os.environ["OPENBLAS_NUM_THREADS"] = f"{OPENBLAS_NUM_THREADS}"
 
 from datetime import datetime, timedelta
 
@@ -365,7 +369,11 @@ def train(
     logger, args = worker.logger, worker.args
 
     covars = [col for col in df.columns if col not in ("ds", "y")]
-    wait_gpu = "wait_gpu" in args and len(covars) >= args.wait_gpu
+    wait_gpu = getattr(args, "wait_gpu", False) and (
+        len(covars) >= args.wait_gpu
+        or ("ar_layer" in kwargs and kwargs["ar_layer"][0] >= 512)
+        or ("lagged_reg_layer" in kwargs and kwargs["lagged_reg_layer"][0] >= 512)
+    )
 
     if getattr(args, "log_train_args", False):
         log_train_args(
