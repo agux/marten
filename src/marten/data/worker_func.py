@@ -151,7 +151,7 @@ def hk_index_daily(future_hk_index_list):
             futures.append(client.submit(update_hk_indices, symbol, priority=1))
             await_futures(futures, False)
 
-    await_futures(futures)
+        await_futures(futures)
     return len(index_list)
 
 
@@ -201,7 +201,7 @@ def get_us_indices(us_index_list):
             futures.append(client.submit(update_us_indices, symbol))
             await_futures(futures, False)
 
-    await_futures(futures)
+        await_futures(futures)
     return len(us_index_list)
 
 
@@ -365,7 +365,7 @@ def bond_daily_hs(future_bond_spot, n_threads):
 
             await_futures(futures, False, task_timeout, shared_vars, n_threads)
 
-    await_futures(futures, True, task_timeout, shared_vars)
+        await_futures(futures, True, task_timeout, shared_vars)
 
     return len(bond_list)
 
@@ -421,7 +421,8 @@ def cn_index_daily(future_cn_index_list):
             )
             await_futures(futures, False)
 
-    await_futures(futures)
+        await_futures(futures)
+
     return len(cn_index_fulllist)
 
 
@@ -512,7 +513,7 @@ def get_cn_index_list(cn_index_types):
             futures.append(client.submit(stock_zh_index_spot_em, symbol, src))
             await_futures(futures, False)
 
-    await_futures(futures)
+        await_futures(futures)
     return True
 
 
@@ -636,7 +637,7 @@ def update_etf_metrics(future_etf_list, future_bond_ir):
             )
             await_futures(futures, False)
 
-    await_futures(futures)
+        await_futures(futures)
 
     return len(etf_list)
 
@@ -787,7 +788,7 @@ def etf_list():
                 futures.append(client.submit(cash_inflow, symbol, exch, priority=1))
                 await_futures(futures, False, multiplier=3)
 
-        await_futures(futures)
+            await_futures(futures)
 
         return len(df)
     except Exception as e:
@@ -1039,7 +1040,7 @@ def stock_zh_daily_hist(stock_list, threads):
             futures.append(client.submit(get_stock_daily, symbol, priority=1))
             await_futures(futures, False, multiplier=threads)
 
-    await_futures(futures)
+        await_futures(futures)
 
     return len(stock_list)
 
@@ -1079,7 +1080,7 @@ def sge_spot_daily_hist(spot_list):
             futures.append(client.submit(get_sge_spot_daily, symbol, priority=1))
             await_futures(futures, False)
 
-    await_futures(futures)
+        await_futures(futures)
 
     return len(spot_list)
 
@@ -1250,7 +1251,7 @@ def cn_bond_index():
             )
             await_futures(futures, False)
 
-    await_futures(futures)
+        await_futures(futures)
 
     return len(df)
 
@@ -1442,7 +1443,7 @@ def interbank_rate():
             )
             await_futures(futures, False)
 
-    await_futures(futures)
+        await_futures(futures)
 
     return len(df)
 

@@ -35,6 +35,7 @@ class LocalWorkerPlugin(WorkerPlugin):
 
 
 def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
+    #TODO: consider re-enabling the following configs after await_futures() issue is fixed
     # dask.config.set(
     #     {
     #         # "distributed.scheduler.worker-ttl": "30 minutes",
