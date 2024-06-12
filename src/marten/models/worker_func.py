@@ -371,8 +371,8 @@ def train(
     covars = [col for col in df.columns if col not in ("ds", "y")]
     wait_gpu = getattr(args, "wait_gpu", False) and (
         len(covars) >= args.wait_gpu
-        or ("ar_layer" in kwargs and kwargs["ar_layer"][0] >= 512)
-        or ("lagged_reg_layer" in kwargs and kwargs["lagged_reg_layer"][0] >= 512)
+        or ("ar_layers" in kwargs and kwargs["ar_layers"][0] >= 512)
+        or ("lagged_reg_layers" in kwargs and kwargs["lagged_reg_layers"][0] >= 512)
     )
 
     if getattr(args, "log_train_args", False):
