@@ -35,6 +35,7 @@ if [ -n "$csv_files" ]; then
   mv *.csv csv/
 fi
 
+export MALLOC_TRIM_THRESHOLD_=0
 # Run the script with nohup
 # nohup "$PYENV_PYTHON" "$script" "$@" > >(tee -a output.log) 2>&1 &
 nohup "$COMMAND" "etl" "$@" > >(tee -a $OUTPUT_LOG) 2>&1 &
