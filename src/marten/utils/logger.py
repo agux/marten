@@ -9,6 +9,13 @@ from dotenv import load_dotenv
 
 logger = None
 
+
+# Get the logger instance for "NP.plotly"
+logger = logging.getLogger("NP.plotly")
+# Set the logger's level to CRITICAL to disable it
+# To suppress the overwhelming, ignorable error `Importing plotly failed. Interactive plots will not work.`
+logger.setLevel(logging.CRITICAL)
+
 class CustomFormatter(logging.Formatter):
     def format(self, record):
         # Check if 'worker' attribute exists, if not, set it to a default value

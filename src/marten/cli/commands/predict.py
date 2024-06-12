@@ -152,6 +152,17 @@ def configure_parser(parser):
         ),
     )
     parser.add_argument(
+        "--domain_size",
+        action="store",
+        type=int,
+        default=10000,
+        help=(
+            "Limit domain size for the Bayesian Optimization HP search space."
+            "Larger size demands more memory for search iteration. "
+            "Defaults to 10000"
+        ),
+    )
+    parser.add_argument(
         "--early_stopping",
         action="store_true",
         help="Use early stopping during model fitting",

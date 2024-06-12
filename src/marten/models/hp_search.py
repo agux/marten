@@ -714,6 +714,7 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
             batch_size=n_jobs,
             num_iteration=iteration,
             initial_custom=warmstart_tuples,
+            domain_size=args.domain_size,
         ),
     )
     results = tuner.minimize()
