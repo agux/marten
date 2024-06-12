@@ -104,23 +104,31 @@ def num_undone(futures, shared_vars):
     undone = 0
     len_before = len(futures)
     if isinstance(futures, list):
-        for f in futures:
+        for f in futures[:]:  # Iterate over a copy of the list to avoid mutation-within-loop issue
             if f.done():
                 get_result(f)
                 futures.remove(f)
             else:
                 undone += 1
+
     elif isinstance(futures, dict):
-        for k in list(futures.keys()):
+        keys_to_remove = []
+        for k in futures.keys():
             f = futures[k]
             if f.done():
                 get_result(f)
                 if k in shared_vars:
                     shared_vars[k].delete()
                     shared_vars.pop(k)
-                futures.pop(k)
+                keys_to_remove.append(k)
             else:
                 undone += 1
+        for k in keys_to_remove:
+            futures.pop(k)
+
+    else:
+        get_logger().warning("unsupported futures collection type: %s, %s", type(futures), futures)
+
     len_after = len(futures)
     get_logger().debug("len(futures) before: %s, after: %s", len_before, len_after)
     return undone
