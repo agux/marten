@@ -371,8 +371,16 @@ def train(
     covars = [col for col in df.columns if col not in ("ds", "y")]
     wait_gpu = getattr(args, "wait_gpu", False) and (
         len(covars) >= args.wait_gpu
-        or ("ar_layers" in kwargs and kwargs["ar_layers"][0] >= 512)
-        or ("lagged_reg_layers" in kwargs and kwargs["lagged_reg_layers"][0] >= 512)
+        or (
+            "ar_layers" in kwargs
+            and len(kwargs["ar_layers"]) > 0
+            and kwargs["ar_layers"][0] >= 512
+        )
+        or (
+            "lagged_reg_layers" in kwargs
+            and len(kwargs["lagged_reg_layers"]) > 0
+            and kwargs["lagged_reg_layers"][0] >= 512
+        )
     )
 
     if getattr(args, "log_train_args", False):
@@ -1752,6 +1760,15 @@ def fast_bayesopt(
 
     n_jobs = args.batch_size
 
+    domain_size = args.domain_size
+    base_ds = n_jobs * args.mini_itr * args.max_itr
+    if domain_size < 0:
+        domain_size = None
+    elif domain_size == 0:
+        domain_size = base_ds * 10
+    elif domain_size < base_ds:
+        domain_size = base_ds
+
     # split large iterations into smaller runs to avoid OOM / memory leak
     for i in range(args.max_itr):
         logger.info("running bayesopt mini-iteration %s/%s", i + 1, args.max_itr)
@@ -1764,6 +1781,7 @@ def fast_bayesopt(
             eval(space_str, {"uniform": uniform}),
             args,
             args.mini_itr,
+            domain_size,
             args.resume or i > 0,
         )
 
@@ -1932,7 +1950,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     )
 
     # scale-in to preserve more memory for hps
-    worker_size = max(args.min_worker, round(args.max_worker * 0.5))
+    worker_size = max(args.min_worker, round(args.max_worker * 0.6))
     logger.info("Scaling down dask cluster to %s", worker_size)
     client.cluster.scale(worker_size)
 

@@ -663,7 +663,7 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
 
         return tuples if len(tuples) > 0 else None
 
-def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args, iteration, resume):
+def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args, iteration, domain_size, resume):
     global logger, client
     @scheduler.custom(n_jobs=n_jobs)
     def objective(params_batch):
@@ -715,7 +715,7 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
             batch_size=n_jobs,
             num_iteration=iteration,
             initial_custom=warmstart_tuples,
-            domain_size=args.domain_size,
+            domain_size=domain_size,
         ),
     )
     results = tuner.minimize()
