@@ -670,11 +670,11 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
         jobs = []
         for params in params_batch:
             if "topk_covar" in params:
-                df = select_topk_features(df, ranked_features, params["topk_covar"])
+                new_df = select_topk_features(df, ranked_features, params["topk_covar"])
             jobs.append(client.submit(
                 validate_hyperparams,
                 args,
-                df,
+                new_df,
                 ranked_features,
                 covar_set_id,
                 hps_id,
