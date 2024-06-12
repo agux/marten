@@ -452,7 +452,7 @@ def stock_zh_index_daily_em(symbol, src):
         szide.insert(0, "symbol", symbol)
 
         with alchemyEngine.begin() as conn:
-            ignore_on_conflict(
+            update_on_conflict(
                 table_def_index_daily_em(), conn, szide, ["symbol", "date"]
             )
         return len(szide)
@@ -742,7 +742,7 @@ def get_etf_daily(symbol):
         ]
 
         with alchemyEngine.begin() as conn:
-            ignore_on_conflict(
+            update_on_conflict(
                 table_def_fund_etf_daily_em(), conn, df, ["symbol", "date"]
             )
 
@@ -1023,7 +1023,7 @@ def get_stock_daily(symbol):
     )
 
     with alchemyEngine.begin() as conn:
-        ignore_on_conflict(
+        update_on_conflict(
             stock_zh_a_hist_em, conn, stock_zh_a_hist_df, ["symbol", "date"]
         )
 
@@ -1065,7 +1065,7 @@ def get_sge_spot_daily(symbol):
     spot_hist_sge_df.insert(0, "symbol", symbol)
 
     with alchemyEngine.begin() as conn:
-        ignore_on_conflict(spot_hist_sge, conn, spot_hist_sge_df, ["symbol", "date"])
+        update_on_conflict(spot_hist_sge, conn, spot_hist_sge_df, ["symbol", "date"])
 
     return len(spot_hist_sge_df)
 
@@ -1241,7 +1241,7 @@ def cn_bond_index():
     df = pd.DataFrame(data, columns=["symbol", "symbol_cn"])
 
     with alchemyEngine.begin() as conn:
-        ignore_on_conflict(cn_bond_index_period, conn, df, ["symbol"])
+        update_on_conflict(cn_bond_index_period, conn, df, ["symbol"])
 
     # submit tasks to get bond metrics for each period
     futures = []
@@ -1426,7 +1426,7 @@ def interbank_rate():
     df = pd.DataFrame(data, columns=["symbol", "market", "symbol_type", "indicator"])
 
     with alchemyEngine.begin() as conn:
-        ignore_on_conflict(interbank_rate_list, conn, df, ["symbol"])
+        update_on_conflict(interbank_rate_list, conn, df, ["symbol"])
 
     # submit tasks to get interbank rate for each symbol
     futures = []
