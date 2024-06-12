@@ -683,6 +683,7 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
         results = client.gather(jobs, errors="skip")
         # logger.info("gathered results type %s, len: %s", type(results), len(results))
         # logger.info("gathered results: %s", results)
+        results = [(p, l) for p, l in results if p is not None and l is not None]
         params, loss = zip(*results)
         params = list(params)
         loss = list(loss)

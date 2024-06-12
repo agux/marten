@@ -1728,7 +1728,7 @@ def count_topk_hp(alchemyEngine, hps_id, base_loss):
 
 
 def fast_bayesopt(
-    client, alchemyEngine, logger, df, covar_set_id, hps_id, ranked_features, base_loss, args
+    alchemyEngine, logger, df, covar_set_id, hps_id, ranked_features, base_loss, args
 ):
     # worker = get_worker()
     # logger = worker.logger
@@ -1932,7 +1932,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     )
 
     # scale-in to preserve more memory for hps
-    worker_size = max(args.min_worker, round(args.max_worker * 0.8))
+    worker_size = max(args.min_worker, round(args.max_worker * 0.5))
     logger.info("Scaling down dask cluster to %s", worker_size)
     client.cluster.scale(worker_size)
 
@@ -1949,7 +1949,6 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     update_covar_set_id(alchemyEngine, hps_id, covar_set_id)
 
     fast_bayesopt(
-        client,
         alchemyEngine,
         logger,
         df,
