@@ -102,6 +102,7 @@ def get_results(futures):
 
 def num_undone(futures, shared_vars):
     undone = 0
+    len_before = len(futures)
     if isinstance(futures, list):
         for f in futures:
             if f.done():
@@ -120,6 +121,8 @@ def num_undone(futures, shared_vars):
                 futures.pop(k)
             else:
                 undone += 1
+    len_after = len(futures)
+    get_logger().debug("len(futures) before: %s, after: %s", len_before, len_after)
     return undone
 
 

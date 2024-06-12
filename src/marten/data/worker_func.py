@@ -421,7 +421,9 @@ def cn_index_daily(future_cn_index_list):
             )
             await_futures(futures, False)
 
+        logger.debug("cn_index_daily futures before final wait: %s", len(futures))
         await_futures(futures)
+        logger.debug("cn_index_daily futures after final wait: %s", len(futures))
 
     return len(cn_index_fulllist)
 
