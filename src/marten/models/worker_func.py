@@ -100,7 +100,8 @@ def merge_covar_df(
     if cov_symbol_df.empty:
         return None
 
-    merged_df = pd.merge(anchor_df, cov_symbol_df, on="ds", how="left")
+    merged_df = anchor_df[["ds", "y"]]
+    merged_df = pd.merge(merged_df, cov_symbol_df, on="ds", how="left")
 
     return merged_df
 
@@ -1247,7 +1248,7 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
     if covar_set_id == 0:
         new_df = merge_covar_df(
             symbol,
-            df[["ds", "y"]],
+            df,
             hps_metric["cov_table"],
             hps_metric["cov_symbol"],
             hps_metric["feature"],
