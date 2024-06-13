@@ -7,6 +7,9 @@ OUTPUT_LOG=predict.log
 >$OUTPUT_LOG
 >marten.models.predict.log
 
+# Clear old lr finder .ckpt files
+rm -f .lr_find_*.ckpt
+
 export MALLOC_TRIM_THRESHOLD_=0
 
 nohup "$CLI" "predict" "$@" > >(tee -a $OUTPUT_LOG) 2>&1 &

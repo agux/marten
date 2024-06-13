@@ -22,6 +22,9 @@ OUTPUT_LOG=workers.log
 # Clear the log file
 > $OUTPUT_LOG
 
+# Clear old lr finder .ckpt files
+rm -f .lr_find_*.ckpt
+
 # Load pyenv into the shell session.
 export PYENV_ROOT="$HOME/.pyenv"
 export PATH="$PYENV_ROOT/bin:$PATH"
