@@ -688,8 +688,9 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
         params = list(params)
         loss = list(loss)
         logger.info("successful results: len(params): %s, len(loss): %s", len(params), len(loss))
-        # restart client here to free up memory?
-        # client.restart()
+        # restart client here to free up memory
+        if args.restart_workers:
+            client.restart()
         return params, loss
     warmstart_tuples=None
     if resume:

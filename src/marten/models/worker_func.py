@@ -1391,15 +1391,13 @@ def get_prediction_group_id(alchemyEngine):
 def ensemble_topk_prediction(
     client,
     symbol,
-    timestep_limit,
     random_seed,
     future_steps,
     topk,
     hps_id,
     cutoff_date,
-    ranked_features_future,
+    ranked_features,
     df,
-    df_future,
     alchemyEngine,
     logger,
     args,
@@ -1436,8 +1434,8 @@ def ensemble_topk_prediction(
             client.submit(
                 forecast,
                 symbol,
-                df_future,
-                ranked_features_future,
+                df,
+                ranked_features,
                 row,
                 region,
                 cutoff_date,
@@ -1912,9 +1910,9 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
         df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
             anchor_df, args, alchemyEngine, logger, cutoff_date
         )
-        df_future = client.scatter(df)
-        ranked_features_future = client.scatter(ranked_features)
-        return hps_id, cutoff_date, ranked_features_future, df, df_future
+        # df_future = client.scatter(df)
+        # ranked_features_future = client.scatter(ranked_features)
+        return hps_id, cutoff_date, ranked_features, df
     else:
         logger.info(
             "Found %s HP with Loss_val less than %s in HP search history. The process will be continued.",
@@ -1983,7 +1981,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     )
     await_futures(hps.futures)
 
-    return hps_id, cutoff_date, ranked_features_future, df, df_future
+    return hps_id, cutoff_date, ranked_features, df
 
 
 def predict_adhoc(symbol, args):

@@ -168,6 +168,11 @@ def configure_parser(parser):
         help="Use early stopping during model fitting",
     )
     parser.add_argument(
+        "--restart_workers",
+        action="store_true",
+        help="Restart all workers in the dask cluster at each end of mini-iteration.",
+    )
+    parser.add_argument(
         "--log_train_args",
         action="store_true",
         help="Logs model training arguments at info level.",
