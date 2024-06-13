@@ -55,7 +55,7 @@ def merge_covar_df(
             merged_df = anchor_df[["ds", "y"]]
         else:
             # using endogenous features as covariate
-            merged_df = anchor_df[["ds", "y", feature]]
+            merged_df = anchor_df[["ds", "y", f"{feature}::{cov_table}::{cov_symbol}"]]
 
         return merged_df
 
@@ -1251,7 +1251,7 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
             df,
             hps_metric["cov_table"],
             hps_metric["cov_symbol"],
-            hps_metric["feature"],
+            {hps_metric["feature"]},
             df["ds"].min().strftime("%Y-%m-%d"),
             alchemyEngine,
         )
