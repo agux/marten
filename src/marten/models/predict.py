@@ -64,7 +64,6 @@ def main(args):
             ensemble_topk_prediction(
                 client,
                 symbol,
-                args.timestep_limit,
                 args.random_seed,
                 args.future_steps,
                 args.topk,
