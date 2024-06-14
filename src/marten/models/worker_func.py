@@ -53,11 +53,13 @@ def merge_covar_df(
         if feature == "y":
             # no covariate is needed. this is a baseline metric
             merged_df = anchor_df[["ds", "y"]]
+            return merged_df
         else:
             # using endogenous features as covariate
-            merged_df = anchor_df[["ds", "y", f"{feature}::{cov_table}::{cov_symbol}"]]
-
-        return merged_df
+            col_name = f"{feature}::{cov_table}::{cov_symbol}"
+            if col_name in anchor_df.columns:
+                merged_df = anchor_df[["ds", "y", col_name]]
+                return merged_df
 
     cov_symbol_sanitized = f"{feature}_{cov_symbol}"
     cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
@@ -1251,7 +1253,7 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
             df,
             hps_metric["cov_table"],
             hps_metric["cov_symbol"],
-            {hps_metric["feature"]},
+            hps_metric["feature"],
             df["ds"].min().strftime("%Y-%m-%d"),
             alchemyEngine,
         )

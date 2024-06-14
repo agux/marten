@@ -366,7 +366,7 @@ def _load_covars(
         params["nan_threshold"] = nan_threshold
 
     # Note: SELECT DISTINCT ON expressions must match initial ORDER BY expressions
-    query += " ORDER BY ts_date desc, loss_val asc, nan_count asc, cov_table, cov_symbol"
+    query += " ORDER BY ts_date desc, loss_val, nan_count, cov_table, cov_symbol"
     query += limit_clause
     logger.debug("loading topk covariates using sql:\n%s\nparams:%s",query,params)
     df = pd.read_sql(
