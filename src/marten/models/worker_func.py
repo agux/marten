@@ -134,12 +134,6 @@ def fit_with_covar(
         alchemyEngine,
     )
 
-    covar_col = feature if feature in merged_df.columns else f"{feature}_{cov_symbol}"
-    nan_count = int(merged_df[covar_col].isna().sum())
-    if nan_count >= len(merged_df) * 0.5:
-        logger.info("too much missing values in %s: %s, skipping", covar_col, nan_count)
-        return None
-
     if merged_df is None:
         # FIXME: sometimes merged_df is None even if there's data in table
         logger.info(
@@ -149,6 +143,12 @@ def fit_with_covar(
             feature,
             min_date,
         )
+        return None
+
+    covar_col = feature if feature in merged_df.columns else f"{feature}_{cov_symbol}"
+    nan_count = int(merged_df[covar_col].isna().sum())
+    if nan_count >= len(merged_df) * 0.5:
+        logger.info("too much missing values in %s: %s, skipping", covar_col, nan_count)
         return None
 
     start_time = time.time()
