@@ -221,7 +221,7 @@ def _pair_endogenous_covar_metrics(
             anchor_df_future,
             cov_table,
             anchor_symbol,
-            None,
+            anchor_df["ds"].min().strftime("%Y-%m-%d"),
             args.random_seed,
             feature,
             select_device(args.accelerator, 

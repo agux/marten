@@ -60,6 +60,9 @@ def merge_covar_df(
             if col_name in anchor_df.columns:
                 merged_df = anchor_df[["ds", "y", col_name]]
                 return merged_df
+            elif feature in anchor_df.columns:
+                merged_df = anchor_df[["ds", "y", feature]]
+                return merged_df
 
     cov_symbol_sanitized = f"{feature}_{cov_symbol}"
     cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
