@@ -34,10 +34,14 @@ def set_yhat_n(df):
     yhat_columns = [col for col in columns if col.startswith('yhat')]
 
     # Sort columns based on the numerical part in ascending order
-    yhat_columns_sorted = sorted(yhat_columns, key=lambda x: int(re.search(r'\d+', x).group()))
+    # yhat_columns_sorted = sorted(yhat_columns, key=lambda x: int(re.search(r'\d+', x).group()))
+    # Sort columns based on the numerical part in descending order
+    yhat_columns_sorted = sorted(yhat_columns, key=lambda x: int(re.search(r'\d+', x).group()), reverse=True)
 
     # Initialize yhat_n with the values from the smallest yhat column
-    df['yhat_n'] = df[yhat_columns_sorted[0]]
+    # df['yhat_n'] = df[yhat_columns_sorted[0]]
+    # Initialize yhat_n with the values from the largest yhat column
+    df["yhat_n"] = df[yhat_columns_sorted[0]]
 
     # Iterate over the remaining yhat columns and fill in null/NA values in yhat_n
     for col in yhat_columns_sorted[1:]:
