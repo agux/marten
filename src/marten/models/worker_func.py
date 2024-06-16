@@ -1755,7 +1755,7 @@ def fast_bayesopt(
 
     _cleanup_stale_keys()
 
-    space_str = _search_space(args.max_covars)
+    space_str = _search_space(min(args.max_covars, len(ranked_features)))
 
     # Convert args to a dictionary, excluding non-serializable items
     args_dict = {k: v for k, v in vars(args).items() if not callable(v)}
