@@ -668,6 +668,7 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
     @scheduler.custom(n_jobs=n_jobs)
     def objective(params_batch):
         jobs = []
+        t1 = time.time()
         for params in params_batch:
             if "topk_covar" in params:
                 new_df = select_topk_features(df, ranked_features, params["topk_covar"])
@@ -681,15 +682,17 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
                 params,
             ))
         results = client.gather(jobs, errors="skip")
+        elapsed = round(time.time() - t1, 3)
         # logger.info("gathered results type %s, len: %s", type(results), len(results))
         # logger.info("gathered results: %s", results)
         results = [(p, l) for p, l in results if p is not None and l is not None]
         if len(results) == 0:
+            logger.warning("Results not available at this iteration. Elapsed: %s", elapsed)
             return [], []
         params, loss = zip(*results)
         params = list(params)
         loss = list(loss)
-        logger.info("successful results: len(params): %s, len(loss): %s", len(params), len(loss))
+        logger.info("Elapsed: %s, Successful results: %s", elapsed, len(results))
         # restart client here to free up memory
         if args.restart_workers:
             client.restart()
