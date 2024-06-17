@@ -7,7 +7,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 ACTUAL_SCRIPT="run_etl.sh"
 
 # Calculate random hour and minute, 16:15 - 16:59
-HOUR=16
+HOUR=18
 MINUTE=$((RANDOM % 45 + 15))
 
 # Schedule the task using at
