@@ -1954,7 +1954,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     )
 
     # scale-in to preserve more memory for hps
-    worker_size = max(args.min_worker, round(args.max_worker * 0.6))
+    worker_size = max(args.min_worker, round(args.max_worker * 0.5))
     logger.info("Scaling down dask cluster to %s", worker_size)
     client.cluster.scale(worker_size)
 

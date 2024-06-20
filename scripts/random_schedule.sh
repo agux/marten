@@ -6,9 +6,9 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 # Your actual script you want to run at a random time
 ACTUAL_SCRIPT="run_etl.sh"
 
-# Calculate random hour and minute, 16:15 - 16:59
+# Calculate random hour and minute, 18:00 - 18:59
 HOUR=18
-MINUTE=$((RANDOM % 45 + 15))
+MINUTE=$((RANDOM % 60))
 
 # Schedule the task using at
 at $HOUR:$MINUTE <<EOF
