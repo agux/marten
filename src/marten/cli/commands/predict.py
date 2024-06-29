@@ -4,6 +4,12 @@ from marten.utils.logger import get_logger
 
 def configure_parser(parser):
     parser.add_argument(
+        "--model",
+        choices=["NeuralProphet", "SOFTS"],
+        default="SOFTS",
+        help="Model to be used for the prediction. Defaults to SOFTS.",
+    )
+    parser.add_argument(
         "--epochs",
         action="store",
         type=int,
@@ -234,6 +240,7 @@ def configure_parser(parser):
         default=0,
         help=("Port number for the scheduler. " "Defaults to 0 (a random port will be selected)"),
     )
+
     parser.add_argument(
         "symbols", type=str, nargs="+", help="Array of asset symbols to be predicted."
     )

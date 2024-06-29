@@ -61,6 +61,7 @@ def main(args):
             )
             logger.info("Starting adhoc prediction")
             t3_start = time.time()
+            
             ensemble_topk_prediction(
                 client,
                 symbol,

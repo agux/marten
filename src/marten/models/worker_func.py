@@ -11,15 +11,13 @@ import os
 OPENBLAS_NUM_THREADS = 1
 os.environ["OPENBLAS_NUM_THREADS"] = f"{OPENBLAS_NUM_THREADS}"
 
+import numpy as np
 from datetime import datetime, timedelta
-
 from sqlalchemy import text
-
 from neuralprophet import NeuralProphet, set_random_seed, set_log_level
 from neuralprophet.hdays_utils import get_country_holidays
-
 from dask.distributed import get_worker, worker_client
-
+from types import SimpleNamespace
 from tenacity import (
     stop_after_attempt,
     wait_exponential,
@@ -32,15 +30,13 @@ from marten.utils.worker import await_futures
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
 from marten.utils.pl import GlobalProgressBar
+from marten.utils.softs import SOFTSPredictor, baseline_config
 from marten.utils.neuralprophet import (
     select_topk_features,
-    layer_spec_to_list,
     select_device,
-    set_forecast_columns,
+    NPPredictor,
 )
 
-
-from types import SimpleNamespace
 
 LOSS_CAP = 99.99
 
@@ -155,56 +151,58 @@ def fit_with_covar(
         return None
 
     start_time = time.time()
-    metrics = None
-    region = None
-    if infer_holiday:
-        region = get_holiday_region(alchemyEngine, anchor_symbol)
-    try:
-        _, metrics = train(
-            df=merged_df,
-            epochs=args.epochs,
-            random_seed=random_seed,
-            early_stopping=early_stopping,
-            batch_size=None,
-            yearly_seasonality="auto",
-            weekly_seasonality=False,
-            daily_seasonality=False,
-            impute_missing=True,
-            accelerator=accelerator,
-            validate=True,
-            country=region,
-            changepoints_range=1.0,
-        )
-    except ValueError as e:
-        logger.warning(str(e))
-        return None
-    except Exception as e:
-        logger.exception(e)
-        return None
+    match args.model:
+        case "NeuralProphet":
+            region = (
+                get_holiday_region(alchemyEngine, anchor_symbol)
+                if infer_holiday
+                else None
+            )
+            params = {
+                "yearly_seasonality": "auto",
+            }
+            _, metrics = NPPredictor.train(
+                df=merged_df,
+                params=params,
+                holiday_region=region,
+                accelerator=accelerator,
+                early_stopping=early_stopping,
+                random_seed=random_seed,
+                validate=True,
+                epochs=args.epochs,
+            )
+        case "SOFTS":
+            model_id = f"baseline_{anchor_symbol}_paired_covar"
+            _, metrics = SOFTSPredictor.train(
+                merged_df, baseline_config, model_id, random_seed, True
+            )
+        case _:
+            raise NotImplementedError
+
     fit_time = time.time() - start_time
-    # extract the last row of output, add symbol column, and consolidate to another dataframe
-    last_row = metrics.iloc[[-1]]
     # get the row count in merged_df as timesteps
     timesteps = len(merged_df)
     # get merged_df's right-most column's nan count.
     ts_cutoff_date = merged_df["ds"].max().strftime("%Y-%m-%d")
     with alchemyEngine.begin() as conn:
         save_covar_metrics(
+            args.model,
             anchor_symbol,
             cov_table,
             cov_symbol,
             feature,
-            last_row,
+            metrics,
             fit_time,
             timesteps,
             nan_count,
             ts_cutoff_date,
             conn,
         )
-    return last_row
+    return metrics
 
 
 def save_covar_metrics(
+    model,
     anchor_symbol,
     cov_table,
     cov_symbol,
@@ -217,52 +215,74 @@ def save_covar_metrics(
     conn,
 ):
     # Inserting DataFrame into the database table
-    for _, row in cov_metrics.iterrows():
-        epochs = row["epoch"] + 1
-        conn.execute(
-            text(
-                """
-                    INSERT INTO neuralprophet_corel 
-                    (symbol, cov_table, cov_symbol, feature, mae_val, 
-                    rmse_val, loss_val, fit_time, timesteps, nan_count, 
-                    ts_date, epochs, mae, rmse, loss) 
-                    VALUES (:symbol, :cov_table, :cov_symbol, :feature, :mae_val, 
-                    :rmse_val, :loss_val, :fit_time, :timesteps, :nan_count, 
-                    :ts_date, :epochs, :mae, :rmse, :loss) 
-                    ON CONFLICT (symbol, cov_symbol, feature, cov_table, ts_date) 
-                    DO UPDATE SET 
-                        mae_val = EXCLUDED.mae_val, 
-                        rmse_val = EXCLUDED.rmse_val, 
-                        loss_val = EXCLUDED.loss_val,
-                        fit_time = EXCLUDED.fit_time,
-                        timesteps = EXCLUDED.timesteps,
-                        nan_count = EXCLUDED.nan_count,
-                        epochs = EXCLUDED.epochs,
-                        mae = EXCLUDED.mae, 
-                        rmse = EXCLUDED.rmse, 
-                        loss = EXCLUDED.loss
-                """
-            ),
-            {
-                "symbol": anchor_symbol,
-                "cov_table": cov_table,
-                "cov_symbol": cov_symbol,
-                "feature": feature,
-                "ts_date": ts_cutoff_date,
-                "mae_val": row["MAE_val"],
-                "rmse_val": row["RMSE_val"],
-                "loss_val": row["Loss_val"],
-                "fit_time": (
-                    (str(fit_time) + " seconds") if fit_time is not None else None
-                ),
-                "timesteps": timesteps,
-                "nan_count": nan_count,
-                "epochs": epochs,
-                "mae": row["MAE"],
-                "rmse": row["RMSE"],
-                "loss": row["Loss"],
-            },
-        )
+    epochs = cov_metrics["epoch"] + 1
+    params = {
+        "symbol": anchor_symbol,
+        "cov_table": cov_table,
+        "cov_symbol": cov_symbol,
+        "feature": feature,
+        "ts_date": ts_cutoff_date,
+        "mae_val": cov_metrics["MAE_val"],
+        "rmse_val": cov_metrics["RMSE_val"],
+        "loss_val": cov_metrics["Loss_val"],
+        "fit_time": ((str(fit_time) + " seconds") if fit_time is not None else None),
+        "timesteps": timesteps,
+        "nan_count": nan_count,
+        "epochs": epochs,
+        "mae": cov_metrics["MAE"],
+        "rmse": cov_metrics["RMSE"],
+        "loss": cov_metrics["Loss"],
+    }
+    match model:
+        case "NeuralProphet":
+            sql = """
+                INSERT INTO neuralprophet_corel 
+                (symbol, cov_table, cov_symbol, feature, mae_val, 
+                rmse_val, loss_val, fit_time, timesteps, nan_count, 
+                ts_date, epochs, mae, rmse, loss) 
+                VALUES (:symbol, :cov_table, :cov_symbol, :feature, :mae_val, 
+                :rmse_val, :loss_val, :fit_time, :timesteps, :nan_count, 
+                :ts_date, :epochs, :mae, :rmse, :loss) 
+                ON CONFLICT (symbol, cov_symbol, feature, cov_table, ts_date) 
+                DO UPDATE SET 
+                    mae_val = EXCLUDED.mae_val, 
+                    rmse_val = EXCLUDED.rmse_val, 
+                    loss_val = EXCLUDED.loss_val,
+                    fit_time = EXCLUDED.fit_time,
+                    timesteps = EXCLUDED.timesteps,
+                    nan_count = EXCLUDED.nan_count,
+                    epochs = EXCLUDED.epochs,
+                    mae = EXCLUDED.mae, 
+                    rmse = EXCLUDED.rmse, 
+                    loss = EXCLUDED.loss
+            """
+        case _:
+            sql = """
+                INSERT INTO paired_correlation 
+                (model, symbol, cov_table, cov_symbol, feature, mae_val, 
+                rmse_val, loss_val, fit_time, timesteps, nan_count, 
+                ts_date, epochs, mae, rmse, loss) 
+                VALUES (:model, :symbol, :cov_table, :cov_symbol, :feature, :mae_val, 
+                :rmse_val, :loss_val, :fit_time, :timesteps, :nan_count, 
+                :ts_date, :epochs, :mae, :rmse, :loss) 
+                ON CONFLICT (symbol, cov_symbol, feature, cov_table, ts_date, model) 
+                DO UPDATE SET 
+                    mae_val = EXCLUDED.mae_val, 
+                    rmse_val = EXCLUDED.rmse_val, 
+                    loss_val = EXCLUDED.loss_val,
+                    fit_time = EXCLUDED.fit_time,
+                    timesteps = EXCLUDED.timesteps,
+                    nan_count = EXCLUDED.nan_count,
+                    epochs = EXCLUDED.epochs,
+                    mae = EXCLUDED.mae, 
+                    rmse = EXCLUDED.rmse, 
+                    loss = EXCLUDED.loss
+            """
+            params["model"] = model
+    conn.execute(
+        text(sql),
+        params,
+    )
 
 
 def log_retry(retry_state):
@@ -363,6 +383,7 @@ def log_train_args(df, *args, **kwargs):
 
 
 def train(
+    model,
     df,
     epochs=None,
     random_seed=7,
@@ -372,87 +393,33 @@ def train(
     **kwargs,
 ):
     worker = get_worker()
-    logger, args = worker.logger, worker.args
+    args = worker.args
 
-    covars = [col for col in df.columns if col not in ("ds", "y")]
-    wait_gpu = getattr(args, "wait_gpu", False) and (
-        len(covars) >= args.wait_gpu
-        or (
-            "ar_layers" in kwargs
-            and len(kwargs["ar_layers"]) > 0
-            and kwargs["ar_layers"][0] >= 512
-        )
-        or (
-            "lagged_reg_layers" in kwargs
-            and len(kwargs["lagged_reg_layers"]) > 0
-            and kwargs["lagged_reg_layers"][0] >= 512
-        )
-    )
-
-    if getattr(args, "log_train_args", False):
-        log_train_args(
-            df, epochs, random_seed, early_stopping, country, validate, **kwargs
-        )
-
-    def _train_with_cpu():
-        logger.debug("modifying **kwargs to train with cpu: %s", kwargs)
-        if "accelerator" in kwargs and kwargs["accelerator"] in ["gpu", "auto"]:
-            del kwargs["accelerator"]
-        logger.debug("**kwargs after modification: %s", kwargs)
-        m, metrics = _try_fitting(
-            df, epochs, random_seed, early_stopping, country, validate, **kwargs
-        )
-        return m, metrics
-
-    with warnings.catch_warnings():
-        # suppress swarming warning:
-        # WARNING - (py.warnings._showwarnmsg) -
-        # ....../.pyenv/versions/3.12.2/envs/venv_3.12.2/lib/python3.12/site-packages/neuralprophet/df_utils.py:1152:
-        # FutureWarning: Series.view is deprecated and will be removed in a future version. Use ``astype`` as an alternative to change the dtype.
-        # converted_ds = pd.to_datetime(ds_col, utc=True).view(dtype=np.int64)
-        warnings.simplefilter("ignore", FutureWarning)
-        warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
-        warnings.simplefilter("ignore", RuntimeWarning)
-        try:
-            if (
-                select_device(
-                    "accelerator" in kwargs,
-                    getattr(args, "gpu_util_threshold", None),
-                    getattr(args, "gpu_ram_threshold", None),
-                )
-                is None
-                and not wait_gpu
-            ):
-                return _train_with_cpu()
-
-            for attempt in Retrying(
-                stop=stop_after_attempt(5 if wait_gpu else 1),
-                wait=wait_exponential(multiplier=1, max=10),
-                retry=retry_if_exception(should_retry),
-                before_sleep=log_retry,
-            ):
-                with attempt:
-                    m, metrics = _try_fitting(
-                        df,
-                        epochs,
-                        random_seed,
-                        early_stopping,
-                        country,
-                        validate,
-                        **kwargs,
-                    )
-                    return m, metrics
-        except RetryError as e:
-            full_traceback = traceback.format_exc()
-            if "OutOfMemoryError" in str(e) or "out of memory" in full_traceback:
-                # final attempt to train on CPU
-                # remove `accelerator` parameter from **kwargs
-                get_logger().warning("falling back to CPU due to OutOfMemoryError")
-                return _train_with_cpu()
-            else:
-                get_logger().warning(f"falling back to CPU due to RetryError: {str(e)}")
-                return _train_with_cpu()
-
+    match model:
+        case "NeuralProphet":
+            return NPPredictor.train(
+                df=df,
+                holiday_region=country,
+                accelerator=kwargs.pop("accelerator"),
+                early_stopping=early_stopping,
+                random_seed=random_seed,
+                validate=validate,
+                epochs=epochs,
+                params=kwargs,
+            )
+        case "SOFTS":
+            kwargs["pred_len"] = args.future_steps
+            kwargs["train_epochs"] = epochs
+            kwargs["use_gpu"] = kwargs["accelerator"] or kwargs["accelerator"] == "gpu"
+            return SOFTSPredictor.train(
+                df=df, 
+                config=kwargs,
+                model_id="generic_model",
+                random_seed=random_seed,
+                validate=validate,
+            )
+        case _:
+            raise NotImplementedError
 
 def reg_search_params(params):
     if "ar_reg" in params:
@@ -503,12 +470,12 @@ def log_metrics_for_hyper_params(
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
 
     # to support distributed processing, we try to insert a new record (with primary keys only)
-    # into hps_metrics first. If we hit duplicated key error, return None.
+    # into hps_metrics first. If we hit duplicated key error, return that validation loss.
     # Otherwise we could proceed further code execution.
     param_str = json.dumps(params, sort_keys=True)
     hpid = hashlib.md5(param_str.encode("utf-8")).hexdigest()
     if not new_metric_keys(
-        anchor_symbol, hpid, param_str, covar_set_id, hps_id, alchemyEngine
+        args.model, anchor_symbol, hpid, param_str, covar_set_id, hps_id, alchemyEngine
     ):
         logger.debug("Skip re-entry for %s: %s", anchor_symbol, param_str)
         with alchemyEngine.connect() as conn:
@@ -524,7 +491,7 @@ def log_metrics_for_hyper_params(
                     """
                 ),
                 {
-                    "model": "NeuralProphet",
+                    "model": args.model,
                     "anchor_symbol": anchor_symbol,
                     "hpid": hpid,
                     "hps_id": hps_id,
@@ -535,72 +502,77 @@ def log_metrics_for_hyper_params(
                 loss_val = row[0]
             return loss_val
 
-    if "ar_layers" not in params:
-        params["ar_layers"] = layer_spec_to_list(params["ar_layer_spec"])
-        params.pop("ar_layer_spec")
-    if "lagged_reg_layers" not in params:
-        params["lagged_reg_layers"] = layer_spec_to_list(
-            params["lagged_reg_layer_spec"]
-        )
-        params.pop("lagged_reg_layer_spec")
-
     topk_covar = None
     if "topk_covar" in params:
         topk_covar = params["topk_covar"]
         params.pop("topk_covar")
 
-    start_time = time.time()
-    metrics = None
-    region = None
-
-    if infer_holiday:
-        region = get_holiday_region(alchemyEngine, anchor_symbol)
-
     if topk_covar is not None:
         df = select_topk_features(df, ranked_features, topk_covar)
 
-    try:
-        _, metrics = train(
-            df,
-            epochs=epochs,
-            random_seed=random_seed,
-            early_stopping=early_stopping,
-            weekly_seasonality=False,
-            daily_seasonality=False,
-            impute_missing=True,
-            accelerator=accelerator,
-            validate=True,
-            country=region,
-            changepoints_range=1.0,
-            **params,
-        )
-    except ValueError as e:
-        logger.warning(str(e))
-        return None
-    except Exception as e:
-        logger.exception(e)
-        logger.error("params: %s", params)
-        return None
+    start_time = time.time()
+    tag = None
+
+    match args.model:
+        case "NeuralProphet":
+            region = (
+                get_holiday_region(alchemyEngine, anchor_symbol)
+                if infer_holiday
+                else None
+            )
+            _, last_metric = NPPredictor.train(
+                df,
+                params,
+                epochs=epochs,
+                random_seed=random_seed,
+                early_stopping=early_stopping,
+                accelerator=accelerator,
+                validate=True,
+                holiday_region=region,
+            )
+            if NPPredictor.isBaseline(params):
+                tag = (
+                    "baseline,univariate"
+                    if covar_set_id == 0
+                    else "baseline,multivariate"
+                )
+        case "SOFTS":
+            if SOFTSPredictor.isBaseline(params):
+                tag = (
+                    "baseline,univariate"
+                    if covar_set_id == 0
+                    else "baseline,multivariate"
+                )
+            # dataset settings
+            # 'root_path': './dataset/ETT-small/',
+            # 'data_path': 'ETTm1.csv',
+            # 'data': 'ETTm1',
+            # 'seq_len': 200,
+            params["pred_len"] = args.future_steps
+            # model settings
+            params["train_epochs"] = epochs
+            # 'd_model': 128,
+            # 'd_core': 64,
+            # 'd_ff': 128,
+            # 'e_layers': 2,
+            # 'learning_rate': 0.0003,
+            # 'lradj': 'cosine',
+            # 'patience': 3,
+            # 'batch_size': 16,
+            # 'dropout': 0.0,
+            # 'activation': 'gelu',
+            # 'use_norm': True,
+            # system settings
+            params["use_gpu"] = accelerator or accelerator == "gpu"
+            _, last_metric = SOFTSPredictor.train(df, params, hpid, random_seed, True)
+        case _:
+            raise NotImplementedError
 
     fit_time = time.time() - start_time
-    last_metric = metrics.iloc[-1]
-
-    # Suppress the SettingWithCopyWarning
-    pd.options.mode.chained_assignment = None
-
-    last_metric["Loss_val"] = sanitize_loss(last_metric["Loss_val"])
-    last_metric["MAE_val"] = sanitize_loss(last_metric["MAE_val"])
-    last_metric["RMSE_val"] = sanitize_loss(last_metric["RMSE_val"])
-    last_metric["MAE"] = sanitize_loss(last_metric["MAE"])
-    last_metric["RMSE"] = sanitize_loss(last_metric["RMSE"])
-    last_metric["Loss"] = sanitize_loss(last_metric["Loss"])
-
-    covars = [col for col in df.columns if col not in ("ds", "y")]
-    logger.debug("params:%s\n#covars:%s\n%s", params, len(covars), last_metric)
 
     update_metrics_table(
+        args.model,
         alchemyEngine,
-        params,
         anchor_symbol,
         hpid,
         last_metric["epoch"] + 1,
@@ -608,6 +580,7 @@ def log_metrics_for_hyper_params(
         fit_time,
         covar_set_id,
         topk_covar,
+        tag,
     )
 
     return last_metric["Loss_val"]
@@ -631,7 +604,7 @@ def sanitize_loss(value):
 
 def update_metrics_table(
     alchemyEngine,
-    params,
+    model,
     anchor_symbol,
     hpid,
     epochs,
@@ -639,22 +612,10 @@ def update_metrics_table(
     fit_time,
     covar_set_id,
     topk_covar,
+    tag,
 ):
     def action():
         with alchemyEngine.begin() as conn:
-            tag = None
-            if (
-                params["batch_size"] is None
-                and params["n_lags"] == 0
-                and params["yearly_seasonality"] == "auto"
-                and params["ar_layers"] == []
-                and params["lagged_reg_layers"] == []
-            ):
-                tag = (
-                    "baseline,univariate"
-                    if covar_set_id == 0
-                    else "baseline,multivariate"
-                )
             conn.execute(
                 text(
                     """
@@ -678,7 +639,7 @@ def update_metrics_table(
                 """
                 ),
                 {
-                    "model": "NeuralProphet",
+                    "model": model,
                     "anchor_symbol": anchor_symbol,
                     "hpid": hpid,
                     "covar_set_id": covar_set_id,
@@ -705,7 +666,7 @@ def update_metrics_table(
 
 
 def new_metric_keys(
-    anchor_symbol, hpid, hyper_params, covar_set_id, hps_id, alchemyEngine
+    model, anchor_symbol, hpid, hyper_params, covar_set_id, hps_id, alchemyEngine
 ):
     def action():
         try:
@@ -718,7 +679,7 @@ def new_metric_keys(
                         """
                     ),
                     {
-                        "model": "NeuralProphet",
+                        "model": model,
                         "anchor_symbol": anchor_symbol,
                         "hpid": hpid,
                         "hps_id": hps_id,
@@ -741,21 +702,42 @@ def new_metric_keys(
 
 
 def get_topk_foundation_settings(
-    alchemyEngine, symbol, hps_id, topk, ts_date, nan_limit
+    alchemyEngine, model, symbol, hps_id, topk, ts_date, nan_limit
 ):
     # worker = get_worker()
     # alchemyEngine = worker.alchemyEngine
-
-    query = """
-        WITH univ_baseline_nc as (
-            select cov_table, cov_symbol, feature, symbol
-            from neuralprophet_corel
-            where 
-                symbol = %(symbol)s
-                and cov_symbol = symbol
-                and feature = 'y'
-                and ts_date = %(ts_date)s
-        ),
+    match model:
+        case "NeuralProphet":
+            with_clause = """
+                WITH univ_baseline_nc as (
+                    select cov_table, cov_symbol, feature, symbol
+                    from neuralprophet_corel
+                    where 
+                        symbol = %(symbol)s
+                        and cov_symbol = symbol
+                        and feature = 'y'
+                        and ts_date = %(ts_date)s
+                )
+            """
+            table = "neuralprophet_corel"
+            model_cond = ""
+        case _:
+            with_clause = """
+                WITH univ_baseline_nc as (
+                    select cov_table, cov_symbol, feature, symbol
+                    from paired_correlation
+                    where 
+                        model = %(model)s
+                        and symbol = %(symbol)s
+                        and cov_symbol = symbol
+                        and feature = 'y'
+                        and ts_date = %(ts_date)s
+                )
+            """
+            table = "paired_correlation"
+            model_cond = "and nc.model = %(model)s"
+    query = f"""
+        {with_clause},
         univ_baseline as (
             select
                 hm.hyper_params, hm.mae, hm.rmse, hm.loss, hm.mae_val, 
@@ -765,21 +747,24 @@ def get_topk_foundation_settings(
             from hps_metrics hm
             inner join univ_baseline_nc nc
                 on hm.anchor_symbol = nc.symbol
-            where hm.anchor_symbol = %(symbol)s 
-            and hm.hps_id = %(hps_id)s
-            and hm.covar_set_id = 0
+            where 
+                hm.model = %(model)s
+                and hm.anchor_symbol = %(symbol)s 
+                and hm.hps_id = %(hps_id)s
+                and hm.covar_set_id = 0
         ),
         top_by_loss_val as (
             SELECT 
                 ub.hyper_params, nc.mae, nc.rmse, nc.loss, nc.mae_val,
                 nc.rmse_val, nc.loss_val, ub.hpid, nc.epochs, 1, 
                 0, nc.symbol, nc.cov_table, nc.cov_symbol, nc.feature
-            FROM neuralprophet_corel nc
+            FROM {table} nc
             INNER JOIN
                 univ_baseline ub
             ON nc.symbol = ub.symbol
-            where 
-                nc.ts_date = %(ts_date)s
+            where 1=1
+                {model_cond}
+                and nc.ts_date = %(ts_date)s
                 and nc.loss_val < ub.loss_val
                 and nc.nan_count < %(nan_limit)s
             order by nc.loss_val
@@ -790,12 +775,13 @@ def get_topk_foundation_settings(
                 ub.hyper_params, nc.mae, nc.rmse, nc.loss, nc.mae_val,
                 nc.rmse_val, nc.loss_val, ub.hpid, nc.epochs, 1, 
                 0, nc.symbol, nc.cov_table, nc.cov_symbol, nc.feature
-            FROM neuralprophet_corel nc
+            FROM {table} nc
             INNER JOIN
                 univ_baseline ub
             ON nc.symbol = ub.symbol
-            where 
-                nc.ts_date = %(ts_date)s
+            where 1=1
+                {model_cond}
+                and nc.ts_date = %(ts_date)s
                 and nc.loss_val < ub.loss_val
                 and nc.nan_count <= %(nan_limit)s
             order by nc.loss
@@ -811,6 +797,7 @@ def get_topk_foundation_settings(
         FROM top_by_loss
     """
     params = {
+        "model": model,
         "symbol": symbol,
         "hps_id": hps_id,
         "limit": topk,
@@ -824,7 +811,7 @@ def get_topk_foundation_settings(
     return df
 
 
-def get_topk_prediction_settings(alchemyEngine, symbol, hps_id, topk):
+def get_topk_prediction_settings(alchemyEngine, model, symbol, hps_id, topk):
     # worker = get_worker()
     # alchemyEngine = worker.alchemyEngine
 
@@ -832,9 +819,11 @@ def get_topk_prediction_settings(alchemyEngine, symbol, hps_id, topk):
         WITH baseline as (
             select loss_val
             from hps_metrics
-            where anchor_symbol = %(symbol)s 
-            and hps_id = %(hps_id)s 
-            and covar_set_id = 0
+            where 
+                model = %(model)s
+                and anchor_symbol = %(symbol)s 
+                and hps_id = %(hps_id)s 
+                and covar_set_id = 0
         ),
         top_by_loss_val AS (
             SELECT 
@@ -842,9 +831,11 @@ def get_topk_prediction_settings(alchemyEngine, symbol, hps_id, topk):
                 rmse_val, loss_val, hpid, epochs, sub_topk,
                 covar_set_id
             FROM hps_metrics
-            WHERE anchor_symbol = %(symbol)s
-            AND hps_id = %(hps_id)s 
-            and loss_val < (select loss_val from baseline)
+            WHERE 
+                model = %(model)s
+                AND anchor_symbol = %(symbol)s
+                AND hps_id = %(hps_id)s 
+                and loss_val < (select loss_val from baseline)
             ORDER BY loss_val
             LIMIT %(limit)s
         ),
@@ -854,9 +845,11 @@ def get_topk_prediction_settings(alchemyEngine, symbol, hps_id, topk):
                 rmse_val, loss_val, hpid, epochs, sub_topk,
                 covar_set_id
             FROM hps_metrics
-            WHERE anchor_symbol = %(symbol)s
-            AND hps_id = %(hps_id)s 
-            and loss_val < (select loss_val from baseline)
+            WHERE 
+                model = %(model)s
+                AND anchor_symbol = %(symbol)s
+                AND hps_id = %(hps_id)s 
+                and loss_val < (select loss_val from baseline)
             ORDER BY loss
             LIMIT %(limit)s
         )
@@ -867,6 +860,7 @@ def get_topk_prediction_settings(alchemyEngine, symbol, hps_id, topk):
         FROM top_by_loss
     """
     params = {
+        "model": model,
         "symbol": symbol,
         "hps_id": hps_id,
         "limit": topk,
@@ -1051,9 +1045,15 @@ def trim_forecasts_by_dates(forecast):
 
     return forecast
 
+def distance(forecast):
+    forecast_nona = forecast.dropna(subset=["yhat_n", "y"])
+    mean_diff = (np.sqrt((forecast_nona["yhat_n"] - forecast_nona["y"])**2)).mean()
+    std_diff = (np.sqrt((forecast_nona["yhat_n"] - forecast_nona["y"])**2)).std()
+    return mean_diff, std_diff
 
 def save_forecast_snapshot(
     alchemyEngine,
+    model,
     symbol,
     hyper_params,
     covar_set_id,
@@ -1071,11 +1071,9 @@ def save_forecast_snapshot(
     avg_loss,
     covar,
 ):
-    metric = metrics.iloc[-1]
-    metric_final = metrics_final.iloc[-1]
-
-    mean_diff = (forecast["yhat_n"] - forecast["y"]).mean()
-    std_diff = (forecast["yhat_n"] - forecast["y"]).std()
+    mean_diff, std_diff = distance(forecast)
+    forecast = trim_forecasts_by_dates(forecast)
+    avg_yhat = forecast[forecast["ds"] > datetime.now()]["yhat_n"].mean()
 
     with alchemyEngine.begin() as conn:
         result = conn.execute(
@@ -1087,36 +1085,36 @@ def save_forecast_snapshot(
                     (
                         model,symbol,hyper_params,covar_set_id,mae_val,rmse_val,loss_val,mae,rmse,loss,
                         predict_diff_mean,predict_diff_stddev,epochs,proc_time,mae_final,rmse_final,loss_final,
-                        region,random_seed,future_steps,n_covars,cutoff_date,group_id,hpid,avg_loss,covar
+                        region,random_seed,future_steps,n_covars,cutoff_date,group_id,hpid,avg_loss,covar,avg_yhat
                     )
                 values(
                     :model,:symbol,:hyper_params,:covar_set_id,:mae_val,:rmse_val,:loss_val,
                     :mae,:rmse,:loss,:predict_diff_mean,:predict_diff_stddev,:epochs,:proc_time,
                     :mae_final,:rmse_final,:loss_final,:region,:random_seed,:future_steps,:n_covars,
-                    :cutoff_date,:group_id,:hpid,:avg_loss,:covar
+                    :cutoff_date,:group_id,:hpid,:avg_loss,:covar,:avg_yhat
                 ) RETURNING id
                 """
             ),
             {
-                "model": "NeuralProphet",
+                "model": model,
                 "symbol": symbol,
                 "hyper_params": hyper_params,
                 "covar_set_id": covar_set_id,
-                "mae_val": metric["MAE_val"],
-                "rmse_val": metric["RMSE_val"],
-                "loss_val": metric["Loss_val"],
-                "mae": metric["MAE"],
-                "rmse": metric["RMSE"],
-                "loss": metric["Loss"],
+                "mae_val": metrics["MAE_val"],
+                "rmse_val": metrics["RMSE_val"],
+                "loss_val": metrics["Loss_val"],
+                "mae": metrics["MAE"],
+                "rmse": metrics["RMSE"],
+                "loss": metrics["Loss"],
                 "predict_diff_mean": mean_diff,
                 "predict_diff_stddev": std_diff,
-                "epochs": metric["epoch"] + 1,
+                "epochs": metrics["epoch"] + 1,
                 "proc_time": (
                     f"{str(proc_time)} seconds" if proc_time is not None else None
                 ),
-                "mae_final": metric_final["MAE"],
-                "rmse_final": metric_final["RMSE"],
-                "loss_final": metric_final["Loss"],
+                "mae_final": metrics_final["MAE"],
+                "rmse_final": metrics_final["RMSE"],
+                "loss_final": metrics_final["Loss"],
                 "region": region,
                 "random_seed": random_seed,
                 "future_steps": future_steps,
@@ -1126,20 +1124,23 @@ def save_forecast_snapshot(
                 "hpid": hpid,
                 "avg_loss": avg_loss,
                 "covar": covar,
+                "avg_yhat":avg_yhat,
             },
         )
         snapshot_id = result.fetchone()[0]
 
-        ## save to ft_yearly_params table
-        forecast = trim_forecasts_by_dates(forecast)
-
-        country_holidays = get_country_holidays(region)
-
-        forecast_params = forecast[["ds", "trend", "season_yearly", "yhat_n"]].copy()
-
+        ## save to forecast_params table
+        match model:
+            case "NeuralProphet":
+                forecast_params = forecast[["ds", "trend", "season_yearly", "yhat_n"]].copy()
+            case "SOFTS":
+                forecast_params = forecast[["ds", "yhat_n"]].copy()
+            case _:
+                raise NotImplementedError
         forecast_params.rename(columns={"ds": "date"}, inplace=True)
         forecast_params.loc[:, "symbol"] = symbol
         forecast_params.loc[:, "snapshot_id"] = snapshot_id
+        country_holidays = get_country_holidays(region)
         forecast_params.loc[:, "holiday"] = forecast_params["date"].apply(
             lambda x: check_holiday(x, country_holidays)
         )
@@ -1149,6 +1150,7 @@ def save_forecast_snapshot(
 
 
 def train_predict(
+    model,
     df,
     epochs,
     random_seed,
@@ -1158,7 +1160,6 @@ def train_predict(
     future_steps,
     **kwargs,
 ):
-
     m, metrics = train(
         df=df,
         country=country,
@@ -1170,26 +1171,14 @@ def train_predict(
         **kwargs,
     )
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", FutureWarning)
-        warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
-        # WARNING - (py.warnings._showwarnmsg) - .../python3.12/site-packages/neuralprophet/data/process.py:127:
-        # PerformanceWarning: DataFrame is highly fragmented.
-        # This is usually the result of calling `frame.insert` many times,
-        # which has poor performance.
-        # Consider joining all columns at once using pd.concat(axis=1) instead.
-        # To get a de-fragmented frame, use `newframe = frame.copy()`
-        # df_forecast[name] = yhat
+    match model:
+        case "NeuralProphet":
+            forecast = NPPredictor.predict(m, df, random_seed, future_steps)
+        case "SOFTS":
+            forecast = SOFTSPredictor.predict(m, df, country)
+        case _:
+            raise NotImplementedError
 
-        set_log_level("ERROR")
-        set_random_seed(random_seed)
-
-        future = m.make_future_dataframe(
-            df, n_historic_predictions=True, periods=future_steps
-        )
-        forecast = m.predict(future)
-
-    set_forecast_columns(forecast)
     return forecast, metrics
 
 
@@ -1222,7 +1211,7 @@ def measure_needed_mem(df, hp):
     return dim * al_dim * lrl_dim / 10.5
 
 
-def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group_id):
+def forecast(model, symbol, df, ranked_features, hps_metric, region, cutoff_date, group_id):
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
 
@@ -1232,6 +1221,7 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
     logger.info(
         (
             "%s - forecasting with setting:\n"
+            "model: %s\n"
             "hpid: %s\n"
             "loss: %s\n"
             "loss_val: %s\n"
@@ -1240,6 +1230,7 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
             "cutoff_date: %s\n"
             "hyper-params: %s"
         ),
+        model,
         symbol,
         hps_metric["hpid"],
         hps_metric["loss"],
@@ -1261,13 +1252,6 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
             alchemyEngine,
         )
     else:
-        # new_df, _, ranked_features = augment_anchor_df_with_covars(
-        #     df,
-        #     SimpleNamespace(covar_set_id=covar_set_id, symbol=symbol),
-        #     alchemyEngine,
-        #     logger,
-        #     cutoff_date,
-        # )
         if hps_metric["sub_topk"] is None:
             new_df = df
         else:
@@ -1279,26 +1263,19 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
         "dataframe augmented with covar_set_id %s: %s", covar_set_id, new_df.shape
     )
 
-    if "ar_layers" not in hyperparams:
-        hyperparams["ar_layers"] = layer_spec_to_list(hyperparams["ar_layer_spec"])
-        hyperparams.pop("ar_layer_spec")
-    if "lagged_reg_layers" not in hyperparams:
-        hyperparams["lagged_reg_layers"] = layer_spec_to_list(
-            hyperparams["lagged_reg_layer_spec"]
-        )
-        hyperparams.pop("lagged_reg_layer_spec")
     if "topk_covar" in hyperparams:
         hyperparams.pop("topk_covar")
 
     start_time = time.time()
     with worker_client() as client:
-        df_future = client.scatter(new_df)
         futures = []
         # train with validation
         futures.append(
             client.submit(
                 train,
-                df=df_future,
+                model=model,
+                symbol=symbol,
+                df=new_df,
                 epochs=args.epochs,
                 random_seed=args.random_seed,
                 early_stopping=args.early_stopping,
@@ -1317,7 +1294,8 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
         futures.append(
             client.submit(
                 train_predict,
-                df=df_future,
+                model=model,
+                df=new_df,
                 country=region,
                 epochs=args.epochs,
                 random_seed=args.random_seed,
@@ -1339,27 +1317,16 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
     metrics = results[0][1]
     forecast, metrics_final = results[1][0], results[1][1]
 
-    logger.debug("forecast columns: %s", forecast.columns)
-    # NOTE get forecasted y values directly from `forecast` output
-    # calc_final_forecast(forecast,
-    # hyperparams["seasonality_mode"] if "seasonality_mode" in hyperparams else None)
-
-    # metrics.loc[metrics.index[-1]] is used to get a view of the last row,
-    # and modifications to this view will be reflected in the original DataFrame.
-    sanitize_all_loss(metrics)
-    sanitize_all_loss(metrics_final)
-
-    # metrics.iloc[-1]["Loss_val"] = sanitize_loss(metrics.iloc[-1]["Loss_val"])
-    # metrics_final.iloc[-1]["Loss"] = sanitize_loss(metrics_final.iloc[-1]["Loss"])
     avg_loss = round(
-        (metrics.iloc[-1]["Loss_val"] + metrics_final.iloc[-1]["Loss"]) / 2.0, 5
+        (metrics["Loss_val"] + metrics_final["Loss"]) / 2.0, 5
     )
 
     covar_columns = [col for col in new_df.columns if col not in ("ds", "y")]
     n_covars = len(covar_columns)
 
-    snapshot_id, n_yearly_seasonality = save_forecast_snapshot(
+    snapshot_id, horizons = save_forecast_snapshot(
         alchemyEngine,
+        model,
         symbol,
         hp_str,
         covar_set_id,
@@ -1379,9 +1346,9 @@ def forecast(symbol, df, ranked_features, hps_metric, region, cutoff_date, group
     )
 
     logger.info(
-        "%s - estimated %s yearly-seasonality coefficients. snapshot_id: %s, averaged loss: %s",
+        "%s - estimated %s horizons. snapshot_id: %s, averaged loss: %s",
         symbol,
-        n_yearly_seasonality,
+        horizons,
         snapshot_id,
         avg_loss,
     )
@@ -1418,12 +1385,11 @@ def ensemble_topk_prediction(
 
     region = get_holiday_region(alchemyEngine, symbol)
     logger.info("%s - inferred holiday region: %s", symbol, region)
-
-    s1 = get_topk_prediction_settings(alchemyEngine, symbol, hps_id, topk)
+    s1 = get_topk_prediction_settings(alchemyEngine, args.model, symbol, hps_id, topk)
     # get univariate and 2*topk 2-pair covariate settings
     nan_threshold = round(len(df) * args.nan_limit, 0)
     s2 = get_topk_foundation_settings(
-        alchemyEngine, symbol, hps_id, topk, cutoff_date, nan_threshold
+        alchemyEngine, args.model, symbol, hps_id, topk, cutoff_date, nan_threshold
     )
     settings = pd.concat([s1, s2], axis=0, ignore_index=True)
 
@@ -1439,6 +1405,7 @@ def ensemble_topk_prediction(
         futures.append(
             client.submit(
                 forecast,
+                args.model,
                 symbol,
                 df,
                 ranked_features,
@@ -1463,6 +1430,7 @@ def ensemble_topk_prediction(
 
     save_ensemble_snapshot(
         alchemyEngine,
+        args.model,
         symbol,
         forecasts,
         avg_loss,
@@ -1507,7 +1475,6 @@ def predict_best(
     results = None
     with worker_client() as client:
         for i in range(1, topk + 1):
-            # TODO improve performance by multi-processing the `get_best_prediction_setting()`
             merged_df, params, covar_set_id = get_best_prediction_setting(
                 alchemyEngine, logger, symbol, df, topk, i
             )
@@ -1626,6 +1593,7 @@ def predict_best(
 
 def save_ensemble_snapshot(
     alchemyEngine,
+    model,
     symbol,
     top_forecasts,
     avg_loss,
@@ -1686,7 +1654,7 @@ def save_ensemble_snapshot(
                 """
             ),
             {
-                "model": "NeuralProphet_Ensemble",
+                "model": f"{model}_Ensemble",
                 "symbol": symbol,
                 "hyper_params": hyper_params,
                 "region": region,
@@ -1719,7 +1687,7 @@ def init_hps(hps, symbol, args, client, alchemyEngine, logger):
     return args
 
 
-def count_topk_hp(alchemyEngine, hps_id, base_loss):
+def count_topk_hp(alchemyEngine, model, hps_id, base_loss):
     with alchemyEngine.connect() as conn:
         result = conn.execute(
             text(
@@ -1727,16 +1695,58 @@ def count_topk_hp(alchemyEngine, hps_id, base_loss):
                     select count(*)
                     from hps_metrics
                     where 
-                        hps_id = :hps_id
+                        model = :model
+                        and hps_id = :hps_id
                         and loss_val <= :base_loss
                 """
             ),
             {
+                "model": model,
                 "hps_id": hps_id,
                 "base_loss": base_loss,
             },
         )
         return result.fetchone()[0]
+
+
+def _search_space(model, max_covars):
+    match model:
+        case "NeuralProphet":
+            ss = f"""dict(
+                growth=["linear", "discontinuous"],
+                batch_size=[None, 100, 200, 300, 400, 500],
+                n_lags=range(0, 60+1),
+                yearly_seasonality=["auto"] + list(range(1, 60+1)),
+                ar_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
+                ar_reg=uniform(0, 100),
+                lagged_reg_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
+                topk_covar=range(0, {max_covars}+1),
+                optimizer=["AdamW", "SGD"],
+                trend_reg=uniform(0, 100),
+                trend_reg_threshold=[True, False],
+                seasonality_reg=uniform(0, 100),
+                seasonality_mode=["additive", "multiplicative"],
+                normalize=["off", "standardize", "soft", "soft1"],
+            )"""
+        case "SOFTS":
+            ss = f"""dict(
+                seq_len=range(5, 300+1),
+                d_model=[2**w for w in range(5, 10+1)],
+                d_core=[2**w for w in range(4, 10+1)],
+                d_ff=[2**w for w in range(5, 10+1)],
+                e_layers=range(2, 32+1),
+                learning_rate=loguniform(-4, 2),
+                lradj=["type1", "type2", "constant", "cosine"],
+                patience=range(3, 7+1),
+                batch_size=[2**w for w in range(4, 9+1)],
+                dropout=uniform(0, 0.5),
+                activation=["relu","gelu","relu6","elu","selu","celu","leaky_relu","prelu","rrelu","glu"],
+                use_norm=[True, False],
+                topk_covar=list(range(0, {max_covars}+1)),
+            )"""
+        case _:
+            raise NotImplementedError    
+    return ss
 
 
 def fast_bayesopt(
@@ -1745,17 +1755,16 @@ def fast_bayesopt(
     # worker = get_worker()
     # logger = worker.logger
 
-    from scipy.stats import uniform
+    from scipy.stats import uniform, loguniform
     from marten.models.hp_search import (
         _cleanup_stale_keys,
-        _search_space,
         _bayesopt_run,
         update_hps_sessions,
     )
 
     _cleanup_stale_keys()
 
-    space_str = _search_space(min(args.max_covars, len(ranked_features)))
+    space_str = _search_space(args.model, min(args.max_covars, len(ranked_features)))
 
     # Convert args to a dictionary, excluding non-serializable items
     args_dict = {k: v for k, v in vars(args).items() if not callable(v)}
@@ -1782,7 +1791,7 @@ def fast_bayesopt(
             covar_set_id,
             hps_id,
             ranked_features,
-            eval(space_str, {"uniform": uniform}),
+            eval(space_str, {"uniform": uniform, "loguniform": loguniform}),
             args,
             args.mini_itr,
             domain_size,
@@ -1791,8 +1800,7 @@ def fast_bayesopt(
 
         if min_loss is None or min_loss > base_loss:
             continue
-
-        topk_count = count_topk_hp(alchemyEngine, hps_id, base_loss)
+        topk_count = count_topk_hp(alchemyEngine, args.model, hps_id, base_loss)
 
         if topk_count >= args.topk:
             logger.info(
@@ -1822,7 +1830,15 @@ def update_covar_set_id(alchemyEngine, hps_id, covar_set_id):
 
 
 def _univariate_default_hp(client, anchor_df, args, hps_id):
-    from marten.models.hp_search import default_params
+    match args.model:
+        case "NeuralProphet":
+            from marten.models.hp_search import default_params
+
+            # default_params = default_params
+        case "SOFTS":
+            default_params = baseline_config
+        case _:
+            raise NotImplementedError
 
     df = anchor_df[["ds", "y"]]
     return client.submit(
@@ -1845,22 +1861,42 @@ def _univariate_default_hp(client, anchor_df, args, hps_id):
     ).result()
 
 
-def min_covar_loss_val(alchemyEngine, symbol, ts_date):
+def min_covar_loss_val(alchemyEngine, model, symbol, ts_date):
     with alchemyEngine.connect() as conn:
-        result = conn.execute(
-            text(
-                """
-                    select min(loss_val)
-                    from neuralprophet_corel
-                    where symbol = :symbol 
-                        and ts_date = :ts_date
-                """
-            ),
-            {
-                "symbol": symbol,
-                "ts_date": ts_date,
-            },
-        )
+        match model:
+            case "NeuralProphet":
+                result = conn.execute(
+                    text(
+                        """
+                            select min(loss_val)
+                            from neuralprophet_corel
+                            where symbol = :symbol 
+                                and ts_date = :ts_date
+                        """
+                    ),
+                    {
+                        "symbol": symbol,
+                        "ts_date": ts_date,
+                    },
+                )
+            case _:
+                result = conn.execute(
+                    text(
+                        """
+                            select min(loss_val)
+                            from paired_correlation
+                            where 
+                                model = :model
+                                and symbol = :symbol 
+                                and ts_date = :ts_date
+                        """
+                    ),
+                    {
+                        "model": model,
+                        "symbol": symbol,
+                        "ts_date": ts_date,
+                    },
+                )
         return result.fetchone()[0]
 
 
@@ -1887,12 +1923,13 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
 
     hps_id, covar_set_id = get_hps_session(
-        args.symbol, cutoff_date, args.resume, len(anchor_df)
+        args.symbol, args.model, cutoff_date, args.resume, len(anchor_df)
     )
     args.covar_set_id = covar_set_id
     logger.info(
-        "HPS session ID: %s, Cutoff date: %s, CovarSet ID: %s, Anchor Table: %s",
+        "HPS session ID: %s, Model: %s, Cutoff date: %s, CovarSet ID: %s, Anchor Table: %s",
         hps_id,
+        args.model,
         cutoff_date,
         covar_set_id,
         anchor_table,
@@ -1900,13 +1937,13 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
 
     univ_loss = _univariate_default_hp(client, anchor_df, args, hps_id)
 
-    min_covar_loss = min_covar_loss_val(alchemyEngine, symbol, cutoff_date)
+    min_covar_loss = min_covar_loss_val(alchemyEngine, args.model, symbol, cutoff_date)
     min_covar_loss = min_covar_loss if min_covar_loss is not None else LOSS_CAP
 
     base_loss = min(float(univ_loss) * args.loss_quantile, min_covar_loss)
 
     # if in resume mode, check if the topk HP is present, and further check if prediction is already conducted.
-    topk_count = count_topk_hp(alchemyEngine, hps_id, base_loss)
+    topk_count = count_topk_hp(alchemyEngine, args.model, hps_id, base_loss)
     if args.resume and topk_count >= args.topk:
         logger.info(
             "Found %s HP with Loss_val less than %s in HP search history already. Skipping covariate and HP search.",
@@ -1970,6 +2007,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
 
     update_covar_set_id(alchemyEngine, hps_id, covar_set_id)
 
+    # TODO support SOFTS
     fast_bayesopt(
         alchemyEngine,
         logger,
@@ -1988,34 +2026,3 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     await_futures(hps.futures)
 
     return hps_id, cutoff_date, ranked_features, df
-
-
-def predict_adhoc(symbol, args):
-    worker = get_worker()
-    logger = worker.logger
-
-    with worker_client() as client:
-        hps_id, cutoff_date, ranked_features_future, df, df_future = covars_and_search(
-            client, symbol
-        )
-
-    # predict
-    logger.info("Starting adhoc prediction")
-    t3_start = time.time()
-    ensemble_topk_prediction(
-        symbol,
-        args.timestep_limit,
-        args.random_seed,
-        args.future_steps,
-        args.topk,
-        hps_id,
-        cutoff_date,
-        ranked_features_future,
-        df,
-        df_future,
-    )
-    logger.info(
-        "%s prediction completed. Time taken: %s seconds",
-        symbol,
-        round(time.time() - t3_start, 3),
-    )

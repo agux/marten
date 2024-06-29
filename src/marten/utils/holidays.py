@@ -1,3 +1,4 @@
+import exchange_calendars as xcals
 from sqlalchemy import text
 
 def get_holiday_region(alchemyEngine, symbol):
@@ -28,3 +29,23 @@ def get_holiday_region(alchemyEngine, symbol):
             # case _:
     
     return "CN"
+
+def get_next_trade_dates(start_date, region, window):
+    match region:
+        case "HK":
+            cal = xcals.get_calendar("XHKG")
+        case "US":
+            cal = xcals.get_calendar("XNYS")  # New York Stock Exchange
+        case "JP":
+            cal = xcals.get_calendar("XTKS")
+        case "FR":
+            cal = xcals.get_calendar("XPAR")
+        case "DE":
+            cal = xcals.get_calendar("XFRA")
+        case _: 
+            cal = xcals.get_calendar("XSHG")  # Default to China market
+
+    return cal.sessions_window(
+        start_date if isinstance(start_date, str) else start_date.strftime("%Y-%m-%d"),
+        window+1,
+    )[1:]

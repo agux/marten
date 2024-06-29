@@ -185,6 +185,9 @@ def update_hk_indices(symbol):
             )
 
         return len(shide)
+    except KeyError as e:
+        logger.warning("ak.stock_hk_index_daily_em(symbol=%s) could be empty: %s", symbol, str(e))
+        return 0
     except Exception as e:
         logger.error(f"failed to update hk_index_daily_em for {symbol}", exc_info=True)
         raise e

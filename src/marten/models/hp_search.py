@@ -144,13 +144,48 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None):
         parse_dates=["ds"],
     )
     # TODO: does the date sequence in the df affect NeuralProphet?
-    # re-order rows by ds (which is a date column) descending (most recent date in the top row)
-    df.sort_values(by="ds", ascending=False, inplace=True)
+    # re-order rows by ds (which is a date column) ascending (most recent date in the last row)
+    df.sort_values(by="ds", ascending=True, inplace=True)
     return df, anchor_table
 
 
-def _covar_symbols_from_table(anchor_symbol, dates, table, feature, ts_date, min_count):
+def _covar_symbols_from_table(model, anchor_symbol, dates, table, feature, ts_date, min_count):
     global alchemyEngine, logger, random_seed
+    params = {
+        "table": table,
+        "anchor_symbol": anchor_symbol,
+        "feature": feature,
+        "ts_date": ts_date,
+        "dates": dates,
+        "min_count": min_count,
+    }
+    match model:
+        case "NeuralProphet":
+            sub_query = """
+                select
+                    cov_symbol
+                from
+                    neuralprophet_corel nc
+                where
+                    symbol = %(anchor_symbol)s
+                    and cov_table = %(table)s
+                    and feature = %(feature)s
+                    and ts_date = %(ts_date)s
+            """
+        case _:
+            sub_query = """
+                select
+                    cov_symbol
+                from
+                    paired_correlation pc
+                where
+                    model = %(model)s
+                    and symbol = %(anchor_symbol)s
+                    and cov_table = %(table)s
+                    and feature = %(feature)s
+                    and ts_date = %(ts_date)s
+            """
+            params["model"] = model
     # get a list of symbols from the given table, of which metrics are not recorded yet
     query = f"""
         select
@@ -162,27 +197,11 @@ def _covar_symbols_from_table(anchor_symbol, dates, table, feature, ts_date, min
             and {feature} is not null
             and t.symbol <> %(anchor_symbol)s
             and t.symbol not in (
-                select
-                    cov_symbol
-                from
-                    neuralprophet_corel nc
-                where
-                    symbol = %(anchor_symbol)s
-                    and cov_table = %(table)s
-                    and feature = %(feature)s
-                    and ts_date = %(ts_date)s
+                {sub_query}
             )
         group by t.symbol
         having count(*) >= %(min_count)s
     """
-    params = {
-        "table": table,
-        "anchor_symbol": anchor_symbol,
-        "feature": feature,
-        "ts_date": ts_date,
-        "dates": dates,
-        "min_count": min_count,
-    }
     
     cov_symbols = pd.read_sql(query, alchemyEngine, params=params)
     cov_symbols = cov_symbols[["symbol"]]
@@ -199,13 +218,11 @@ def _pair_endogenous_covar_metrics(
 
     # remove feature elements already exists in the neuralprophet_corel table.
     features = _remove_measured_features(
-        anchor_symbol, cov_table, features, cutoff_date
+        args.model, anchor_symbol, cov_table, features, cutoff_date
     )
 
     if not features:
         return
-
-    anchor_df_future = client.scatter(anchor_df)
 
     for feature in features:
         logger.debug(
@@ -218,7 +235,7 @@ def _pair_endogenous_covar_metrics(
         future = client.submit(
             fit_with_covar,
             anchor_symbol,
-            anchor_df_future,
+            anchor_df,
             cov_table,
             anchor_symbol,
             anchor_df["ds"].min().strftime("%Y-%m-%d"),
@@ -267,8 +284,34 @@ def _pair_covar_metrics(
         await_futures(futures, False)
 
 
-def _load_covar_set(covar_set_id, alchemyEngine):
-    query = """
+def _load_covar_set(covar_set_id, model, alchemyEngine):
+    params = {
+        "covar_set_id": covar_set_id,
+    }
+    match model:
+        case "NeuralProphet":
+            join_clause = """
+                JOIN
+                    neuralprophet_corel t2
+                ON
+                    t1.symbol = t2.symbol
+                    AND t1.cov_table = t2.cov_table
+                    AND t1.cov_symbol = t2.cov_symbol
+                    AND t1.cov_feature = t2.feature
+            """
+        case _:
+            join_clause = """
+                JOIN
+                    paired_correlation t2
+                ON
+                    t1.symbol = t2.symbol
+                    AND t1.cov_table = t2.cov_table
+                    AND t1.cov_symbol = t2.cov_symbol
+                    AND t1.cov_feature = t2.feature
+                    AND t2.model = %(model)s
+            """
+            params["model"] = model
+    query = f"""
         WITH ranked_data AS (
             SELECT
                 t1.cov_symbol,
@@ -283,13 +326,7 @@ def _load_covar_set(covar_set_id, alchemyEngine):
                 ) AS rnk
             FROM
                 covar_set t1
-            JOIN
-                neuralprophet_corel t2
-            ON
-                t1.symbol = t2.symbol
-                AND t1.cov_table = t2.cov_table
-                AND t1.cov_symbol = t2.cov_symbol
-                AND t1.cov_feature = t2.feature
+            {join_clause}
             WHERE
                 t1.id = %(covar_set_id)s
         )
@@ -304,9 +341,6 @@ def _load_covar_set(covar_set_id, alchemyEngine):
         ORDER BY
             loss_val ASC, nan_count ASC, cov_table, cov_symbol
     """
-    params = {
-        "covar_set_id": covar_set_id,
-    }
     df = pd.read_sql(
         query,
         alchemyEngine,
@@ -323,35 +357,64 @@ def _load_covars(
     cov_table=None,
     feature=None,
     cutoff_date=None,
+    model=None,
 ):
     global logger
-    sub_query = """
-		select
-			loss_val
-		from
-			neuralprophet_corel
-		where
-			symbol = %(anchor_symbol)s
-			and cov_symbol = %(anchor_symbol)s
-			and feature = 'y'
-            and ts_date <= %(ts_date)s
-			order by ts_date desc
-			limit 1
-    """
-    query = f"""
-        select DISTINCT ON (ts_date, loss_val, nan_count, cov_table, cov_symbol)
-            cov_symbol, cov_table, feature
-        from
-            neuralprophet_corel
-        where
-            symbol = %(anchor_symbol)s
-            and loss_val < ({sub_query})
-    """
-    limit_clause = ""
     params = {
         "anchor_symbol": anchor_symbol,
         "ts_date": cutoff_date,
     }
+    match model:
+        case "NeuralProphet":
+            sub_query = """
+                select
+                    loss_val
+                from
+                    neuralprophet_corel
+                where
+                    symbol = %(anchor_symbol)s
+                    and cov_symbol = %(anchor_symbol)s
+                    and feature = 'y'
+                    and ts_date <= %(ts_date)s
+                    order by ts_date desc
+                    limit 1
+            """
+            query = f"""
+                select DISTINCT ON (ts_date, loss_val, nan_count, cov_table, cov_symbol)
+                    cov_symbol, cov_table, feature
+                from
+                    neuralprophet_corel
+                where
+                    symbol = %(anchor_symbol)s
+                    and loss_val < ({sub_query})
+            """
+        case _:
+            sub_query = """
+                select
+                    loss_val
+                from
+                    paired_correlation
+                where
+                    model = %(model)s
+                    and symbol = %(anchor_symbol)s
+                    and cov_symbol = %(anchor_symbol)s
+                    and feature = 'y'
+                    and ts_date <= %(ts_date)s
+                    order by ts_date desc
+                    limit 1
+            """
+            query = f"""
+                select DISTINCT ON (ts_date, loss_val, nan_count, cov_table, cov_symbol)
+                    cov_symbol, cov_table, feature
+                from
+                    paired_correlation
+                where
+                    model = %(model)s
+                    and symbol = %(anchor_symbol)s
+                    and loss_val < ({sub_query})
+            """
+            params["model"] = model
+    limit_clause = ""
     if max_covars > 0:
         params["limit"] = max_covars
         limit_clause = " limit %(limit)s"
@@ -453,16 +516,17 @@ def _load_covar_feature(alchemyEngine, cov_table, feature, symbols):
     return table_feature_df
 
 def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
+    # date_col = "ds" if args.model == "NeuralProphet" else "date"
     merged_df = df[["ds", "y"]]
     if args.covar_set_id is not None:
         covar_set_id = args.covar_set_id
-        covars_df = _load_covar_set(covar_set_id, alchemyEngine)
+        covars_df = _load_covar_set(covar_set_id, args.model, alchemyEngine)
     else:
         nan_threshold = round(len(df) * args.nan_limit, 0)
         logger.info("covar_set_id is not provided, selecting top %s covars with NaN threshold %s, cutoff date %s", 
                     args.max_covars, nan_threshold, cutoff_date)
         covars_df, covar_set_id = _load_covars(
-            alchemyEngine, args.max_covars, args.symbol, nan_threshold, cutoff_date=cutoff_date
+            alchemyEngine, args.max_covars, args.symbol, nan_threshold, cutoff_date=cutoff_date, model=args.model
         )
 
     if covars_df.empty:
@@ -640,24 +704,25 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
         for row in results:
             # param_dict = json.loads(row[0], object_hook=hp_deserializer)
             param_dict = row[0]
-            # Fill in default values if not exists in historical HP
-            # To match the size of tensors in bayesopt
-            if "optimizer" not in param_dict:
-                param_dict["optimizer"] = "AdamW"
-            if "growth" not in param_dict:
-                param_dict["growth"] = "linear"
-            if "ar_reg" not in param_dict:
-                param_dict["ar_reg"] = 0
-            if "trend_reg" not in param_dict:
-                param_dict["trend_reg"] = 0
-            if "trend_reg_threshold" not in param_dict:
-                param_dict["trend_reg_threshold"] = False
-            if "seasonality_reg" not in param_dict:
-                param_dict["seasonality_reg"] = 0
-            if "seasonality_mode" not in param_dict:
-                param_dict["seasonality_mode"] = "additive"
-            if "normalize" not in param_dict:
-                param_dict["normalize"] = "soft"
+            if model == "NeuralProphet":
+                # Fill in default values if not exists in historical HP
+                # To match the size of tensors in bayesopt
+                if "optimizer" not in param_dict:
+                    param_dict["optimizer"] = "AdamW"
+                if "growth" not in param_dict:
+                    param_dict["growth"] = "linear"
+                if "ar_reg" not in param_dict:
+                    param_dict["ar_reg"] = 0
+                if "trend_reg" not in param_dict:
+                    param_dict["trend_reg"] = 0
+                if "trend_reg_threshold" not in param_dict:
+                    param_dict["trend_reg_threshold"] = False
+                if "seasonality_reg" not in param_dict:
+                    param_dict["seasonality_reg"] = 0
+                if "seasonality_mode" not in param_dict:
+                    param_dict["seasonality_mode"] = "additive"
+                if "normalize" not in param_dict:
+                    param_dict["normalize"] = "soft"
 
             tuples.append((param_dict, row[1]))
 
@@ -697,10 +762,11 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
         if args.restart_workers:
             client.restart()
         return params, loss
+    
     warmstart_tuples=None
     if resume:
         warmstart_tuples = preload_warmstart_tuples(
-            "NeuralProphet",
+            args.model,
             args.symbol,
             covar_set_id,
             hps_id,
@@ -822,19 +888,32 @@ def update_hps_sessions(id, method, search_params, search_space, covar_set_id):
         conn.execute(text(update), params)
 
 
-def _remove_measured_features(anchor_symbol, cov_table, features, ts_date=None):
-    query = """
-        select feature
-        from neuralprophet_corel
-        where symbol = %(symbol)s
-        and cov_table = %(cov_table)s
-        and feature in %(features)s
-    """
+def _remove_measured_features(model, anchor_symbol, cov_table, features, ts_date=None):
     params = {
         "symbol": anchor_symbol,
         "cov_table": cov_table,
         "features": tuple(features),
     }
+    match model:
+        case "NeuralProphet":
+            query = """
+                select feature
+                from neuralprophet_corel
+                where symbol = %(symbol)s
+                and cov_table = %(cov_table)s
+                and feature in %(features)s
+            """
+        case _:
+            query = """
+                select feature
+                from paired_correlation
+                where 
+                    model = %(model)s
+                    and symbol = %(symbol)s
+                    and cov_table = %(cov_table)s
+                    and feature in %(features)s
+            """
+            params["model"] = model
     if ts_date is not None:
         query += " and ts_date = %(ts_date)s"
         params["ts_date"] = ts_date
@@ -849,14 +928,14 @@ def _remove_measured_features(anchor_symbol, cov_table, features, ts_date=None):
 
 
 def _covar_metric(
-    anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
+    anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
 ):
-    
+    # TODO support SOFTS
     min_date = min(dates).strftime("%Y-%m-%d")
     cutoff_date = max(dates).strftime("%Y-%m-%d")
 
     features = _remove_measured_features(
-        anchor_symbol, cov_table, features, cutoff_date
+        args.model, anchor_symbol, cov_table, features, cutoff_date
     )
 
     if len(features) == 0:
@@ -864,7 +943,6 @@ def _covar_metric(
         return None
     
     for feature in features:
-
         match cov_table:
             case "bond_metrics_em" | "bond_metrics_em_view":
                 # construct a dummy cov_symbols dataframe with `symbol` column and the value 'bond'.
@@ -873,7 +951,7 @@ def _covar_metric(
                 cov_symbols = pd.DataFrame({"symbol": ["currency_exchange"]})
             case _:
                 cov_symbols = _covar_symbols_from_table(
-                    anchor_symbol, dates, cov_table, feature, cutoff_date, min_count
+                    args.model, anchor_symbol, dates, cov_table, feature, cutoff_date, min_count
                 )
                 # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
                 cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
@@ -881,7 +959,7 @@ def _covar_metric(
         if not cov_symbols.empty:
             _pair_covar_metrics(
                 anchor_symbol,
-                anchor_df_future,
+                anchor_df,
                 cov_table,
                 cov_symbols,
                 feature,
@@ -909,8 +987,6 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     # for the rest of exogenous covariates, keep only the core features of anchor_df
     anchor_df = anchor_df[["ds", "y"]]
 
-    anchor_df_future = client.scatter(anchor_df)
-
     # prep CN index covariates
     features = [
         "change_rate",
@@ -922,7 +998,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "index_daily_em_view"
     _covar_metric(
-        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
+        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
     )
 
     # prep ETF covariates fund_etf_daily_em_view
@@ -938,7 +1014,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "fund_etf_daily_em_view"
     _covar_metric(
-        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
+        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
     )
 
     # prep bond covariates bond_metrics_em, cn_bond_indices_view
@@ -966,7 +1042,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "bond_metrics_em_view"
     _covar_metric(
-        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
+        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
     )
 
     features = [
@@ -987,7 +1063,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "cn_bond_indices_view"
     _covar_metric(
-        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
+        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
     )
 
     # prep US index covariates us_index_daily_sina
@@ -1001,7 +1077,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "us_index_daily_sina_view"
     _covar_metric(
-        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
+        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
     )
 
     # prep HK index covariates hk_index_daily_sina
@@ -1013,7 +1089,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "hk_index_daily_em_view"
     _covar_metric(
-        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
+        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
     )
 
     # prep CN bond: bond_zh_hs_daily_view
@@ -1026,7 +1102,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "bond_zh_hs_daily_view"
     _covar_metric(
-        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
+        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
     )
 
     # prep CN stock features. Sync table & view column names
@@ -1042,7 +1118,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "stock_zh_a_hist_em_view"
     _covar_metric(
-        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
+        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
     )
 
     # RMB exchange rate
@@ -1075,7 +1151,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "currency_boc_safe_view"
     _covar_metric(
-        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
+        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
     )
 
     # SGE spot
@@ -1087,14 +1163,14 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     ]
     cov_table = "spot_hist_sge_view"
     _covar_metric(
-        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
+        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
     )
 
     # Interbank interest rates
     features = ["change_rate"]
     cov_table = "interbank_rate_hist"
     _covar_metric(
-        anchor_symbol, anchor_df_future, cov_table, features, dates, min_count, args
+        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
     )
 
     # TODO prep options
@@ -1131,11 +1207,17 @@ def univariate_baseline(anchor_df, hps_id, args):
 
 
 def _covar_cutoff_date(symbol):
-    global alchemyEngine
+    global alchemyEngine, args
     with alchemyEngine.connect() as conn:
-        query = "SELECT max(ts_date) FROM neuralprophet_corel where symbol=:symbol"
-        result = conn.execute(text(query), {"symbol": symbol})
-        return result.fetchone()[0]
+        match args.model:
+            case "NeuralProphet":
+                query = "SELECT max(ts_date) FROM neuralprophet_corel where symbol=:symbol"
+                result = conn.execute(text(query), {"symbol": symbol})
+                return result.fetchone()[0]
+            case _:
+                query = "SELECT max(ts_date) FROM paired_correlation where symbol=:symbol and model=:model"
+                result = conn.execute(text(query), {"symbol": symbol, "model": args.model})
+                return result.fetchone()[0]
 
 
 def _hps_cutoff_date(symbol, model, method):
@@ -1176,7 +1258,7 @@ def _get_cutoff_date(args):
         if cutoff_date is not None:
             covar_cutoff = cutoff_date
     if not args.covar_only:
-        cutoff_date = _hps_cutoff_date(args.symbol, "NeuralProphet", args.method)
+        cutoff_date = _hps_cutoff_date(args.symbol, args.model, args.method)
         if cutoff_date is not None:
             hps_cutoff = cutoff_date
 
@@ -1184,7 +1266,7 @@ def _get_cutoff_date(args):
     return min(covar_cutoff, hps_cutoff)
 
 
-def get_hps_session(symbol, cutoff_date, resume, timesteps):
+def get_hps_session(symbol, model, cutoff_date, resume, timesteps):
     global alchemyEngine
 
     if resume:
@@ -1193,11 +1275,13 @@ def get_hps_session(symbol, cutoff_date, resume, timesteps):
                 select max(id) id
                 from hps_sessions
                 where symbol = :symbol
+                    and model = :model
                     and ts_date = :ts_date
                 union all
                 select max(id) id
                 from hps_sessions
                 where symbol = :symbol
+                    and model = :model
                     and search_space is null
             )
         """
@@ -1207,6 +1291,7 @@ def get_hps_session(symbol, cutoff_date, resume, timesteps):
                 {
                     "symbol": symbol,
                     "ts_date": cutoff_date,
+                    "model": model,
                 },
             )
             max_id = result.fetchone()[0]
@@ -1236,7 +1321,7 @@ def get_hps_session(symbol, cutoff_date, resume, timesteps):
             ),
             {
                 "symbol": symbol,
-                "model": "NeuralProphet",
+                "model": model,
                 "ts_date": cutoff_date,
                 "timesteps": timesteps
             },
@@ -1258,7 +1343,7 @@ def main(_args):
         cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
 
         #TODO: make use of the returned covar_set_id to resume?
-        hps_id, _ = get_hps_session(args.symbol, cutoff_date, args.resume)
+        hps_id, _ = get_hps_session(args.symbol, args.model, cutoff_date, args.resume)
         logger.info("HPS session ID: %s, Cutoff date: %s, CovarSet ID: %s", hps_id, cutoff_date, covar_set_id)
 
         futures.append(univariate_baseline(anchor_df, hps_id, args))

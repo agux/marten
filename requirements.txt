@@ -14,3 +14,4 @@ dask[distributed]>=2024.4.1
 bokeh>=3.4.0
 holidays>=0.47
 arm-mango>=1.4.3
+statsmodels>=0.14.2
