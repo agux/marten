@@ -468,11 +468,11 @@ def log_metrics_for_hyper_params(
 ):
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
-
+    params = params.copy()
     # to support distributed processing, we try to insert a new record (with primary keys only)
     # into hps_metrics first. If we hit duplicated key error, return that validation loss.
     # Otherwise we could proceed further code execution.
-    param_str = json.dumps(params.copy(), sort_keys=True)
+    param_str = json.dumps(params, sort_keys=True)
     hpid = hashlib.md5(param_str.encode("utf-8")).hexdigest()
     if not new_metric_keys(
         args.model, anchor_symbol, hpid, param_str, covar_set_id, hps_id, alchemyEngine
