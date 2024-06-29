@@ -472,7 +472,7 @@ def log_metrics_for_hyper_params(
     # to support distributed processing, we try to insert a new record (with primary keys only)
     # into hps_metrics first. If we hit duplicated key error, return that validation loss.
     # Otherwise we could proceed further code execution.
-    param_str = json.dumps(params, sort_keys=True)
+    param_str = json.dumps(params.copy(), sort_keys=True)
     hpid = hashlib.md5(param_str.encode("utf-8")).hexdigest()
     if not new_metric_keys(
         args.model, anchor_symbol, hpid, param_str, covar_set_id, hps_id, alchemyEngine
@@ -1479,7 +1479,7 @@ def predict_best(
                 alchemyEngine, logger, symbol, df, topk, i
             )
             dfs.append(merged_df)
-            params_json = json.dumps(params, sort_keys=True)
+            params_json = json.dumps(params.copy(), sort_keys=True)
             params_list.append(params_json)
             covarset_id_list.append(covar_set_id)
             logger.info(
