@@ -9,7 +9,7 @@ from types import SimpleNamespace, MappingProxyType
 import numpy as np
 import pandas as pd
 import torch
-from dask.distributed import get_worker
+from dask.distributed import get_worker, get_client
 from sklearn.preprocessing import StandardScaler
 from statsmodels.tsa.statespace.varmax import VARMAX
 from statsmodels.tsa.arima.model import ARIMA
@@ -20,6 +20,7 @@ from tenacity import (
     retry_if_exception,
     RetryError,
 )
+
 from softs.exp.exp_custom import Exp_Custom
 
 from marten.utils.logger import get_logger
@@ -170,12 +171,17 @@ class SOFTSPredictor:
 
     @staticmethod
     def train(df, config, model_id, random_seed, validate, save_model_file=False):
+        worker = get_worker()
+        args = worker.args
+
         set_random_seed(random_seed)
         model_config = default_config.copy()
         model_config.update(config)
 
-        num_cores = psutil.cpu_count(logical=False)
-        torch.set_num_threads(num_cores)
+        # num_cores = psutil.cpu_count(logical=False)
+        num_cores = psutil.cpu_count()
+        n = len(get_client().scheduler_info()["workers"])
+        torch.set_num_threads(max(1, int(float(num_cores)/float(n))))
 
         train, val, _ = SOFTSPredictor._prep_df(df, validate, model_config["seq_len"])
         setting = os.path.join(model_id, str(uuid.uuid4()))
@@ -192,9 +198,6 @@ class SOFTSPredictor:
             if not save_model_file:
                 shutil.rmtree(os.path.join(config["checkpoints"], setting))
             return Exp
-
-        worker = get_worker()
-        args = worker.args
 
         try:
             if not use_gpu(
