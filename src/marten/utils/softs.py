@@ -9,6 +9,7 @@ from types import SimpleNamespace, MappingProxyType
 import numpy as np
 import pandas as pd
 import torch
+from dask.distributed import get_worker
 from sklearn.preprocessing import StandardScaler
 from statsmodels.tsa.statespace.varmax import VARMAX
 from statsmodels.tsa.arima.model import ARIMA
@@ -59,6 +60,16 @@ def set_random_seed(seed):
     random.seed(seed)
     torch.manual_seed(seed)
     np.random.seed(seed)
+
+
+def use_gpu(use_gpu, util_threshold=80, vram_threshold=80):
+    return (
+        True
+        if use_gpu
+        and torch.cuda.utilization() < util_threshold
+        and torch.cuda.memory_usage() < vram_threshold
+        else False
+    )
 
 
 class SOFTSPredictor:
@@ -170,7 +181,22 @@ class SOFTSPredictor:
                 shutil.rmtree(os.path.join(config["checkpoints"], setting))
             return Exp
 
+        worker = get_worker()
+        args = worker.args
+
         try:
+            if (
+                not use_gpu(
+                    model_config["use_gpu"],
+                    getattr(args, "gpu_util_threshold", None),
+                    getattr(args, "gpu_ram_threshold", None),
+                )
+            ):
+                new_config = model_config.copy()
+                new_config["use_gpu"] = False
+                m = _train(new_config)
+                return m, m.metrics
+            
             for attempt in Retrying(
                 stop=stop_after_attempt(2),
                 wait=wait_exponential(multiplier=1, max=10),

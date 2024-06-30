@@ -366,8 +366,12 @@ def _try_fitting(
 
 
 def should_retry(exception):
-    return isinstance(exception, torch.cuda.OutOfMemoryError) or (
-        "out of memory" in str(exception)
+    exmsg = str(exception)
+    return (
+        isinstance(exception, torch.cuda.OutOfMemoryError)
+        or ("out of memory" in exmsg)
+        or "CUDA error" in exmsg
+        or "cuDNN error" in exmsg
     )
 
 
@@ -1841,40 +1845,21 @@ def update_covar_set_id(alchemyEngine, hps_id, covar_set_id):
 
 def _univariate_default_hp(client, anchor_df, args, hps_id):
     df = anchor_df[["ds", "y"]]
+    params = FileNotFoundError
     match args.model:
         case "NeuralProphet":
             from marten.models.hp_search import default_params
-
+            params = default_params
             # default_params = default_params
         case "SOFTS":
-            default_params = baseline_config
-            # get baseline loss_val from NeuralProphet, too
-            from marten.models.hp_search import default_params as np_default_params
-            client.submit(
-                log_metrics_for_hyper_params,
-                args.symbol,
-                df,
-                np_default_params,
-                args.epochs,
-                args.random_seed,
-                select_device(
-                    args.accelerator,
-                    getattr(args, "gpu_util_threshold", None),
-                    getattr(args, "gpu_ram_threshold", None),
-                ),
-                0,
-                hps_id,
-                args.early_stopping,
-                args.infer_holiday,
-                None,
-            )
+            params = baseline_config
         case _:
             raise NotImplementedError
     return client.submit(
         log_metrics_for_hyper_params,
         args.symbol,
         df,
-        default_params,
+        params,
         args.epochs,
         args.random_seed,
         select_device(

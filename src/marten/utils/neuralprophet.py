@@ -14,7 +14,6 @@ from tenacity import (
 )
 from dask.distributed import get_worker
 from neuralprophet import NeuralProphet, set_random_seed, set_log_level
-from neuralprophet.hdays_utils import get_country_holidays
 
 from marten.utils.logger import get_logger
 from marten.utils.trainer import should_retry, log_retry
