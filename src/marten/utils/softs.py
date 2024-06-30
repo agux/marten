@@ -27,33 +27,37 @@ from marten.utils.trainer import should_retry, log_retry
 from marten.utils.holidays import get_next_trade_dates
 
 # Immutable / constant
-default_config = MappingProxyType({
-    "features": "MS",
-    "freq": "B",
-    "model": "SOFTS",
-    "checkpoints": "./softs_checkpoints/",
-    "loss_func": "huber",
-    "gpu": "0",  # TODO support smart GPU selection if multiple GPU is available
-    "save_model": True,
-    "num_workers": 0,
-    "predict_all": True,
-})
+default_config = MappingProxyType(
+    {
+        "features": "MS",
+        "freq": "B",
+        "model": "SOFTS",
+        "checkpoints": "./softs_checkpoints/",
+        "loss_func": "huber",
+        "gpu": "0",  # TODO support smart GPU selection if multiple GPU is available
+        "save_model": True,
+        "num_workers": 0,
+        "predict_all": True,
+    }
+)
 
 # Immutable / constant
-baseline_config = MappingProxyType({
-    "seq_len": 5,
-    "d_model": 32,
-    "d_core": 16,
-    "d_ff": 32,
-    "e_layers": 2,
-    "learning_rate": 1e-4,  # 0.0001
-    "lradj": "cosine",
-    "patience": 3,
-    "batch_size": 16,
-    "dropout": 0.0,
-    "activation": "gelu",
-    "use_norm": False,
-})
+baseline_config = MappingProxyType(
+    {
+        "seq_len": 5,
+        "d_model": 32,
+        "d_core": 16,
+        "d_ff": 32,
+        "e_layers": 2,
+        "learning_rate": 1e-4,  # 0.0001
+        "lradj": "cosine",
+        "patience": 3,
+        "batch_size": 16,
+        "dropout": 0.0,
+        "activation": "gelu",
+        "use_norm": False,
+    }
+)
 
 
 def set_random_seed(seed):
@@ -81,12 +85,12 @@ class SOFTSPredictor:
     @staticmethod
     def _impute(df, model_fit):
         data_filled = df.copy()
-        if df.shape[1] > 2: # Multivariate time series
+        if df.shape[1] > 2:  # Multivariate time series
             forecast = model_fit.get_forecast(steps=len(df))
             for col in df.columns[1:]:
                 if df[col].isna().any():
                     data_filled[col].fillna(forecast.predicted_mean[col], inplace=True)
-        else: # Univariate time series
+        else:  # Univariate time series
             for col in df.columns[1:]:
                 if df[col].isna().any():
                     forecast = model_fit.predict(
@@ -136,12 +140,16 @@ class SOFTSPredictor:
             val_data.iloc[:, 1:] = scaler.transform(val_data_filled.iloc[:, 1:])
 
         if len(df.isna()) > 0:  # dataset contains missing data
-            # TODO need to standardize train_data_nona first before feeding to VARMAX?
-            impute_model_input = scaler.transform(train_data_nona.iloc[:, 1:])
+            # need to standardize train_data_nona first before feeding to imputation model
+            impute_model_input = pd.DataFrame(
+                scaler.transform(train_data_nona.iloc[:, 1:]),
+                columns=train_data_nona.columns[1:],
+                index=train_data_nona.index,
+            )
             if impute_model_input.shape[1] >= 2:  # Multivariate time series
                 model = VARMAX(impute_model_input, order=(1, 1))
                 model_fit = model.fit(disp=False)
-            else: # Univariate time series
+            else:  # Univariate time series
                 model = ARIMA(
                     impute_model_input, order=(5, 1, 0)
                 )  # Adjust the order as needed
@@ -185,18 +193,16 @@ class SOFTSPredictor:
         args = worker.args
 
         try:
-            if (
-                not use_gpu(
-                    model_config["use_gpu"],
-                    getattr(args, "gpu_util_threshold", None),
-                    getattr(args, "gpu_ram_threshold", None),
-                )
+            if not use_gpu(
+                model_config["use_gpu"],
+                getattr(args, "gpu_util_threshold", None),
+                getattr(args, "gpu_ram_threshold", None),
             ):
                 new_config = model_config.copy()
                 new_config["use_gpu"] = False
                 m = _train(new_config)
                 return m, m.metrics
-            
+
             for attempt in Retrying(
                 stop=stop_after_attempt(2),
                 wait=wait_exponential(multiplier=1, max=10),
@@ -210,13 +216,11 @@ class SOFTSPredictor:
             new_config = model_config.copy()
             new_config["use_gpu"] = False
             full_traceback = traceback.format_exc()
-
             if "OutOfMemoryError" in str(e) or "out of memory" in full_traceback:
                 # final attempt to train on CPU
                 get_logger().warning("falling back to CPU due to OutOfMemoryError")
             else:
                 get_logger().warning(f"falling back to CPU due to RetryError: {str(e)}")
-
             m = _train(new_config)
             return m, m.metrics
 
@@ -237,11 +241,13 @@ class SOFTSPredictor:
         # re-construct df with date and other columns
         last_date = df["ds"].max()
         future_horizons = get_next_trade_dates(last_date, region, pred_len)
-        new_dict = {col: [None] * len(future_horizons) for col in df.columns if col != "ds"}
+        new_dict = {
+            col: [None] * len(future_horizons) for col in df.columns if col != "ds"
+        }
         new_dict["ds"] = future_horizons
         new_df = pd.DataFrame(new_dict)
         future_df = pd.concat([df, new_df], ignore_index=True)
-        future_df = future_df.iloc[len(future_df)-len(yhat):]
+        future_df = future_df.iloc[len(future_df) - len(yhat) :]
         future_df["yhat_n"] = yhat
 
         return future_df

@@ -211,6 +211,7 @@ def fit_with_covar(
         return _func()
     except Exception as e:
         logger.error(traceback.format_exc())
+        raise e
 
 
 def save_covar_metrics(
