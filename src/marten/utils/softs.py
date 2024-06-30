@@ -113,7 +113,7 @@ class SOFTSPredictor:
             val_data.iloc[:, 1:] = scaler.transform(val_data_filled.iloc[:, 1:])
 
         if len(df.isna()) > 0:  # dataset contains missing data
-            model = VARMAX(train_data_nona[:, 1:], order=(1, 1))
+            model = VARMAX(train_data_nona.iloc[:, 1:], order=(1, 1))
             model_fit = model.fit(disp=False)
 
             if len(train_na_positions) > 0:
@@ -195,7 +195,7 @@ class SOFTSPredictor:
         new_dict["ds"] = future_horizons
         new_df = pd.DataFrame(new_dict)
         future_df = pd.concat([df, new_df], ignore_index=True)
-        future_df = future_df[len(future_df)-len(yhat):]
+        future_df = future_df.iloc[len(future_df)-len(yhat):]
         future_df["yhat_n"] = yhat
 
         return future_df
