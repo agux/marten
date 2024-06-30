@@ -173,8 +173,14 @@ def fit_with_covar(
             )
         case "SOFTS":
             model_id = f"baseline_{anchor_symbol}_paired_covar"
+            config = baseline_config.copy()
+            config["pred_len"] = args.future_steps
+            config["train_epochs"] = args.epochs
+            config["use_gpu"] = (
+                accelerator == True or accelerator == "gpu"
+            )
             _, metrics = SOFTSPredictor.train(
-                merged_df, baseline_config, model_id, random_seed, True
+                merged_df, config, model_id, random_seed, True
             )
         case _:
             raise NotImplementedError
@@ -410,7 +416,7 @@ def train(
         case "SOFTS":
             kwargs["pred_len"] = args.future_steps
             kwargs["train_epochs"] = epochs
-            kwargs["use_gpu"] = kwargs["accelerator"] or kwargs["accelerator"] == "gpu"
+            kwargs["use_gpu"] = kwargs["accelerator"] == True or kwargs["accelerator"] == "gpu"
             return SOFTSPredictor.train(
                 df=df, 
                 config=kwargs,
@@ -563,7 +569,7 @@ def log_metrics_for_hyper_params(
             # 'activation': 'gelu',
             # 'use_norm': True,
             # system settings
-            params["use_gpu"] = accelerator or accelerator == "gpu"
+            params["use_gpu"] = accelerator == True or accelerator == "gpu"
             _, last_metric = SOFTSPredictor.train(df, params, hpid, random_seed, True)
         case _:
             raise NotImplementedError
