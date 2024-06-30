@@ -4,9 +4,10 @@ import random
 import multiprocessing
 import dask
 import dask.config
-from dask.distributed import WorkerPlugin, get_worker, LocalCluster, Client
+from dask.distributed import WorkerPlugin, LocalCluster, Client, get_client
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
+from marten.utils.net import get_machine_ips
 from dotenv import load_dotenv
 
 from datetime import datetime, timedelta
@@ -35,7 +36,6 @@ class LocalWorkerPlugin(WorkerPlugin):
 
 
 def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
-    #TODO: consider re-enabling the following configs after await_futures() issue is fixed
     dask.config.set(
         {
             "distributed.scheduler.worker-ttl": "30 minutes",
@@ -212,3 +212,17 @@ def await_futures(
 
         if task_timeout is not None and shared_vars is not None:
             handle_task_timeout(futures, task_timeout, shared_vars)
+
+def num_workers(local=True):
+    workers = get_client().scheduler_info()["workers"]
+    if local:
+        count = 0
+        machine_ips = get_machine_ips()
+        # Iterate over the workers dictionary
+        for worker_key, worker_info in workers["workers"].items():
+            # Check if the worker's key or name matches any of the machine IPs
+            if any(ip in worker_key or ip in worker_info["name"] for ip in machine_ips):
+                count += 1
+        return count
+    else:
+        return len(workers)

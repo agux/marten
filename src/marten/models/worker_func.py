@@ -2001,7 +2001,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
         round(time.time() - t1_start, 3),
     )
 
-    min_covar_loss = min_covar_loss_val(alchemyEngine, symbol, cutoff_date)
+    min_covar_loss = min_covar_loss_val(alchemyEngine, args.model, symbol, cutoff_date)
     min_covar_loss = min_covar_loss if min_covar_loss is not None else LOSS_CAP
     base_loss = min(base_loss, min_covar_loss)
 

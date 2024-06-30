@@ -26,6 +26,7 @@ from softs.exp.exp_custom import Exp_Custom
 from marten.utils.logger import get_logger
 from marten.utils.trainer import should_retry, log_retry
 from marten.utils.holidays import get_next_trade_dates
+from marten.utils.worker import num_workers
 
 # Immutable / constant
 default_config = MappingProxyType(
@@ -84,25 +85,30 @@ class SOFTSPredictor:
         return params == baseline_config
 
     @staticmethod
-    def _impute(df, model_fit):
+    def _impute(df, model_fit, in_sample):
         data_filled = df.copy()
-        if df.shape[1] > 2:  # Multivariate time series
+        # if df.shape[1] > 2:  # Multivariate time series
+        if in_sample:
+            forecast = model_fit.get_prediction(
+                start=data_filled.index[0], end=data_filled.index[-1],
+            )
+        else:
             forecast = model_fit.get_forecast(steps=len(df))
-            predicted_mean = forecast.predicted_mean
-            predicted_mean.index = data_filled.index
-            for col in df.columns[1:]:
-                if df[col].isna().any():
-                    data_filled[col].fillna(predicted_mean[col], inplace=True)
-        else:  # Univariate time series
-            for col in df.columns[1:]:
-                if df[col].isna().any():
-                    forecast = model_fit.predict(
-                        start=len(df[col].dropna()), end=len(df) - 1, dynamic=False
-                    )
-                    data_filled[col].fillna(
-                        pd.Series(forecast, index=df.index[df[col].isna()]),
-                        inplace=True,
-                    )
+        predicted_mean = forecast.predicted_mean
+        predicted_mean.index = data_filled.index
+        for col in df.columns[1:]:
+            if df[col].isna().any():
+                data_filled[col].fillna(predicted_mean[col], inplace=True)
+        # else:  # Univariate time series
+        #     for col in df.columns[1:]:
+        #         if df[col].isna().any():
+        #             forecast = model_fit.predict(
+        #                 start=len(df[col].dropna()), end=len(df) - 1, dynamic=False
+        #             )
+        #             data_filled[col].fillna(
+        #                 pd.Series(forecast, index=df.index[df[col].isna()]),
+        #                 inplace=True,
+        #             )
         return data_filled
 
     @staticmethod
@@ -160,12 +166,12 @@ class SOFTSPredictor:
 
             if train_na_positions.any().any(): #train data has missing values
                 train_data[train_na_positions] = np.nan
-                train_data = SOFTSPredictor._impute(train_data, model_fit)
+                train_data = SOFTSPredictor._impute(train_data, model_fit, True)
             if (
                 val_na_positions is not None and val_na_positions.any().any()
             ):  # validation data has missing values
                 val_data[val_na_positions] = np.nan
-                val_data = SOFTSPredictor._impute(val_data, model_fit)
+                val_data = SOFTSPredictor._impute(val_data, model_fit, False)
 
         return train_data, val_data, scaler
 
@@ -178,10 +184,10 @@ class SOFTSPredictor:
         model_config = default_config.copy()
         model_config.update(config)
 
-        # num_cores = psutil.cpu_count(logical=False)
-        num_cores = psutil.cpu_count()
-        n = len(get_client().scheduler_info()["workers"])
-        torch.set_num_threads(max(1, int(float(num_cores)/float(n))))
+        # n_cores = float(psutil.cpu_count())
+        n_cores = psutil.cpu_count(logical=False)
+        n_workers = float(num_workers())
+        torch.set_num_threads(max(1, int(n_cores / n_workers)))
 
         train, val, _ = SOFTSPredictor._prep_df(df, validate, model_config["seq_len"])
         setting = os.path.join(model_id, str(uuid.uuid4()))
