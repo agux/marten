@@ -133,7 +133,7 @@ class SOFTSPredictor:
         num_cores = psutil.cpu_count(logical=False)
         torch.set_num_threads(num_cores)
 
-        train, val, _ = SOFTSPredictor._prep_df(df, validate, config.seq_len)
+        train, val, _ = SOFTSPredictor._prep_df(df, validate, model_config["seq_len"])
         setting = os.path.join(model_id, str(uuid.uuid4()))
 
         def _train(config):
@@ -196,5 +196,5 @@ class SOFTSPredictor:
         future_df = pd.concat([df, new_df], ignore_index=True)
         future_df = future_df[len(future_df)-len(yhat):]
         future_df["yhat_n"] = yhat
-        
+
         return future_df
