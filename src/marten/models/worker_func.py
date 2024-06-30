@@ -587,6 +587,7 @@ def log_metrics_for_hyper_params(
         covar_set_id,
         topk_covar,
         tag,
+        hps_id,
     )
 
     return last_metric["Loss_val"]
@@ -619,6 +620,7 @@ def update_metrics_table(
     covar_set_id,
     topk_covar,
     tag,
+    hps_id,
 ):
     def action():
         with alchemyEngine.begin() as conn:
@@ -642,6 +644,7 @@ def update_metrics_table(
                         AND anchor_symbol = :anchor_symbol
                         AND hpid = :hpid
                         AND covar_set_id = :covar_set_id
+                        AND hps_id = :hps_id
                 """
                 ),
                 {
@@ -661,6 +664,7 @@ def update_metrics_table(
                     ),
                     "epochs": epochs,
                     "sub_topk": topk_covar,
+                    "hps_id": hps_id,
                 },
             )
 
@@ -1836,6 +1840,7 @@ def update_covar_set_id(alchemyEngine, hps_id, covar_set_id):
 
 
 def _univariate_default_hp(client, anchor_df, args, hps_id):
+    df = anchor_df[["ds", "y"]]
     match args.model:
         case "NeuralProphet":
             from marten.models.hp_search import default_params
@@ -1843,10 +1848,28 @@ def _univariate_default_hp(client, anchor_df, args, hps_id):
             # default_params = default_params
         case "SOFTS":
             default_params = baseline_config
+            # get baseline loss_val from NeuralProphet, too
+            from marten.models.hp_search import default_params as np_default_params
+            client.submit(
+                log_metrics_for_hyper_params,
+                args.symbol,
+                df,
+                np_default_params,
+                args.epochs,
+                args.random_seed,
+                select_device(
+                    args.accelerator,
+                    getattr(args, "gpu_util_threshold", None),
+                    getattr(args, "gpu_ram_threshold", None),
+                ),
+                0,
+                hps_id,
+                args.early_stopping,
+                args.infer_holiday,
+                None,
+            )
         case _:
             raise NotImplementedError
-
-    df = anchor_df[["ds", "y"]]
     return client.submit(
         log_metrics_for_hyper_params,
         args.symbol,
