@@ -87,9 +87,11 @@ class SOFTSPredictor:
         data_filled = df.copy()
         if df.shape[1] > 2:  # Multivariate time series
             forecast = model_fit.get_forecast(steps=len(df))
+            predicted_mean = forecast.predicted_mean
+            predicted_mean.index = data_filled.index
             for col in df.columns[1:]:
                 if df[col].isna().any():
-                    data_filled[col].fillna(forecast.predicted_mean[col], inplace=True)
+                    data_filled[col].fillna(predicted_mean[col], inplace=True)
         else:  # Univariate time series
             for col in df.columns[1:]:
                 if df[col].isna().any():
@@ -126,7 +128,7 @@ class SOFTSPredictor:
         else:
             train_data = df
             val_data = None
-            val_na_positions = []
+            val_na_positions = None
 
         train_data_nona = train_data.dropna()
         train_na_positions = train_data.isna()
@@ -139,7 +141,7 @@ class SOFTSPredictor:
             val_data_filled = val_data.ffill().bfill()
             val_data.iloc[:, 1:] = scaler.transform(val_data_filled.iloc[:, 1:])
 
-        if len(df.isna()) > 0:  # dataset contains missing data
+        if _df.isna().any().any():  # original dataset contains missing data
             # need to standardize train_data_nona first before feeding to imputation model
             impute_model_input = pd.DataFrame(
                 scaler.transform(train_data_nona.iloc[:, 1:]),
@@ -155,10 +157,12 @@ class SOFTSPredictor:
                 )  # Adjust the order as needed
                 model_fit = model.fit()
 
-            if len(train_na_positions) > 0:
+            if train_na_positions.any().any(): #train data has missing values
                 train_data[train_na_positions] = np.nan
                 train_data = SOFTSPredictor._impute(train_data, model_fit)
-            if len(val_na_positions) > 0:
+            if (
+                val_na_positions is not None and val_na_positions.any().any()
+            ):  # validation data has missing values
                 val_data[val_na_positions] = np.nan
                 val_data = SOFTSPredictor._impute(val_data, model_fit)
 
