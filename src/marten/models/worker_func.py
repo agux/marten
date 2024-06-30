@@ -571,8 +571,8 @@ def log_metrics_for_hyper_params(
     fit_time = time.time() - start_time
 
     update_metrics_table(
-        args.model,
         alchemyEngine,
+        args.model,
         anchor_symbol,
         hpid,
         last_metric["epoch"] + 1,
