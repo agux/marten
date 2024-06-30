@@ -11,6 +11,7 @@ import pandas as pd
 import torch
 from sklearn.preprocessing import StandardScaler
 from statsmodels.tsa.statespace.varmax import VARMAX
+from statsmodels.tsa.arima.model import ARIMA
 from tenacity import (
     stop_after_attempt,
     wait_exponential,
@@ -69,10 +70,21 @@ class SOFTSPredictor:
     @staticmethod
     def _impute(df, model_fit):
         data_filled = df.copy()
-        forecast = model_fit.get_forecast(steps=len(df))
-        for col in df.columns[1:]:
-            if df[col].isna().any():
-                data_filled[col].fillna(forecast.predicted_mean[col], inplace=True)
+        if df.shape[1] > 2: # Multivariate time series
+            forecast = model_fit.get_forecast(steps=len(df))
+            for col in df.columns[1:]:
+                if df[col].isna().any():
+                    data_filled[col].fillna(forecast.predicted_mean[col], inplace=True)
+        else: # Univariate time series
+            for col in df.columns[1:]:
+                if df[col].isna().any():
+                    forecast = model_fit.predict(
+                        start=len(df[col].dropna()), end=len(df) - 1, dynamic=False
+                    )
+                    data_filled[col].fillna(
+                        pd.Series(forecast, index=df.index[df[col].isna()]),
+                        inplace=True,
+                    )
         return data_filled
 
     @staticmethod
@@ -113,8 +125,16 @@ class SOFTSPredictor:
             val_data.iloc[:, 1:] = scaler.transform(val_data_filled.iloc[:, 1:])
 
         if len(df.isna()) > 0:  # dataset contains missing data
-            model = VARMAX(train_data_nona.iloc[:, 1:], order=(1, 1))
-            model_fit = model.fit(disp=False)
+            # TODO need to standardize train_data_nona first before feeding to VARMAX?
+            impute_model_input = scaler.transform(train_data_nona.iloc[:, 1:])
+            if impute_model_input.shape[1] >= 2:  # Multivariate time series
+                model = VARMAX(impute_model_input, order=(1, 1))
+                model_fit = model.fit(disp=False)
+            else: # Univariate time series
+                model = ARIMA(
+                    impute_model_input, order=(5, 1, 0)
+                )  # Adjust the order as needed
+                model_fit = model.fit()
 
             if len(train_na_positions) > 0:
                 train_data[train_na_positions] = np.nan
