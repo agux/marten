@@ -2,7 +2,6 @@ import time
 import pandas as pd
 import json
 import hashlib
-import warnings
 import traceback
 import math
 import torch
@@ -22,8 +21,6 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
     Retrying,
-    retry_if_exception,
-    RetryError,
 )
 
 from marten.utils.worker import await_futures
@@ -1756,7 +1753,7 @@ def _search_space(model, max_covars):
                 d_core=[2**w for w in range(4, 10+1)],
                 d_ff=[2**w for w in range(5, 10+1)],
                 e_layers=range(2, 32+1),
-                learning_rate=loguniform(-5, 2),
+                learning_rate=loguniform(0.0001, 0.002),
                 lradj=["type1", "type2", "constant", "cosine"],
                 patience=range(3, 7+1),
                 batch_size=[2**w for w in range(4, 9+1)],
