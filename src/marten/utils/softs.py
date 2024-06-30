@@ -46,7 +46,7 @@ baseline_config = MappingProxyType({
     "d_core": 16,
     "d_ff": 32,
     "e_layers": 2,
-    "learning_rate": 3e-4,  # 0.0003
+    "learning_rate": 1e-4,  # 0.0001
     "lradj": "cosine",
     "patience": 3,
     "batch_size": 16,

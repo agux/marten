@@ -123,88 +123,94 @@ def fit_with_covar(
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
 
-    merged_df = merge_covar_df(
-        anchor_symbol,
-        anchor_df,
-        cov_table,
-        cov_symbol,
-        feature,
-        min_date,
-        alchemyEngine,
-    )
-
-    if merged_df is None:
-        # FIXME: sometimes merged_df is None even if there's data in table
-        logger.info(
-            "skipping covariate: %s, %s, %s, %s",
+    def _func():
+        merged_df = merge_covar_df(
+            anchor_symbol,
+            anchor_df,
             cov_table,
             cov_symbol,
             feature,
             min_date,
+            alchemyEngine,
         )
-        return None
 
-    covar_col = feature if feature in merged_df.columns else f"{feature}_{cov_symbol}"
-    nan_count = int(merged_df[covar_col].isna().sum())
-    if nan_count >= len(merged_df) * 0.5:
-        logger.info("too much missing values in %s: %s, skipping", covar_col, nan_count)
-        return None
+        if merged_df is None:
+            # FIXME: sometimes merged_df is None even if there's data in table
+            logger.info(
+                "skipping covariate: %s, %s, %s, %s",
+                cov_table,
+                cov_symbol,
+                feature,
+                min_date,
+            )
+            return None
 
-    start_time = time.time()
-    match args.model:
-        case "NeuralProphet":
-            region = (
-                get_holiday_region(alchemyEngine, anchor_symbol)
-                if infer_holiday
-                else None
-            )
-            params = {
-                "yearly_seasonality": "auto",
-            }
-            _, metrics = NPPredictor.train(
-                df=merged_df,
-                params=params,
-                holiday_region=region,
-                accelerator=accelerator,
-                early_stopping=early_stopping,
-                random_seed=random_seed,
-                validate=True,
-                epochs=args.epochs,
-            )
-        case "SOFTS":
-            model_id = f"baseline_{anchor_symbol}_paired_covar"
-            config = baseline_config.copy()
-            config["pred_len"] = args.future_steps
-            config["train_epochs"] = args.epochs
-            config["use_gpu"] = (
-                accelerator == True or accelerator == "gpu"
-            )
-            _, metrics = SOFTSPredictor.train(
-                merged_df, config, model_id, random_seed, True
-            )
-        case _:
-            raise NotImplementedError
+        covar_col = feature if feature in merged_df.columns else f"{feature}_{cov_symbol}"
+        nan_count = int(merged_df[covar_col].isna().sum())
+        if nan_count >= len(merged_df) * 0.5:
+            logger.info("too much missing values in %s: %s, skipping", covar_col, nan_count)
+            return None
 
-    fit_time = time.time() - start_time
-    # get the row count in merged_df as timesteps
-    timesteps = len(merged_df)
-    # get merged_df's right-most column's nan count.
-    ts_cutoff_date = merged_df["ds"].max().strftime("%Y-%m-%d")
-    with alchemyEngine.begin() as conn:
-        save_covar_metrics(
-            args.model,
-            anchor_symbol,
-            cov_table,
-            cov_symbol,
-            feature,
-            metrics,
-            fit_time,
-            timesteps,
-            nan_count,
-            ts_cutoff_date,
-            conn,
-        )
-    return metrics
+        start_time = time.time()
+        match args.model:
+            case "NeuralProphet":
+                region = (
+                    get_holiday_region(alchemyEngine, anchor_symbol)
+                    if infer_holiday
+                    else None
+                )
+                params = {
+                    "yearly_seasonality": "auto",
+                }
+                _, metrics = NPPredictor.train(
+                    df=merged_df,
+                    params=params,
+                    holiday_region=region,
+                    accelerator=accelerator,
+                    early_stopping=early_stopping,
+                    random_seed=random_seed,
+                    validate=True,
+                    epochs=args.epochs,
+                )
+            case "SOFTS":
+                model_id = f"baseline_{anchor_symbol}_paired_covar"
+                config = baseline_config.copy()
+                config["pred_len"] = args.future_steps
+                config["train_epochs"] = args.epochs
+                config["use_gpu"] = (
+                    accelerator == True or accelerator == "gpu"
+                )
+                _, metrics = SOFTSPredictor.train(
+                    merged_df, config, model_id, random_seed, True
+                )
+            case _:
+                raise NotImplementedError
+
+        fit_time = time.time() - start_time
+        # get the row count in merged_df as timesteps
+        timesteps = len(merged_df)
+        # get merged_df's right-most column's nan count.
+        ts_cutoff_date = merged_df["ds"].max().strftime("%Y-%m-%d")
+        with alchemyEngine.begin() as conn:
+            save_covar_metrics(
+                args.model,
+                anchor_symbol,
+                cov_table,
+                cov_symbol,
+                feature,
+                metrics,
+                fit_time,
+                timesteps,
+                nan_count,
+                ts_cutoff_date,
+                conn,
+            )
+        return metrics
+
+    try:
+        return _func()
+    except Exception as e:
+        logger.error(traceback.format_exc())
 
 
 def save_covar_metrics(
@@ -1749,7 +1755,7 @@ def _search_space(model, max_covars):
                 d_core=[2**w for w in range(4, 10+1)],
                 d_ff=[2**w for w in range(5, 10+1)],
                 e_layers=range(2, 32+1),
-                learning_rate=loguniform(-4, 2),
+                learning_rate=loguniform(-5, 2),
                 lradj=["type1", "type2", "constant", "cosine"],
                 patience=range(3, 7+1),
                 batch_size=[2**w for w in range(4, 9+1)],
