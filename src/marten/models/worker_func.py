@@ -1852,7 +1852,7 @@ def update_covar_set_id(alchemyEngine, hps_id, covar_set_id):
 
 def _univariate_default_hp(client, anchor_df, args, hps_id):
     df = anchor_df[["ds", "y"]]
-    params = FileNotFoundError
+    params = None
     match args.model:
         case "NeuralProphet":
             from marten.models.hp_search import default_params
