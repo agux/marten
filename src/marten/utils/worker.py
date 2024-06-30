@@ -219,7 +219,7 @@ def num_workers(local=True):
         count = 0
         machine_ips = get_machine_ips()
         # Iterate over the workers dictionary
-        for worker_key, worker_info in workers["workers"].items():
+        for worker_key, worker_info in workers.items():
             # Check if the worker's key or name matches any of the machine IPs
             if any(ip in worker_key or ip in worker_info["name"] for ip in machine_ips):
                 count += 1
