@@ -104,7 +104,9 @@ def num_undone(futures, shared_vars):
     undone = 0
     len_before = len(futures)
     if isinstance(futures, list):
-        for f in futures[:]:  # Iterate over a copy of the list to avoid mutation-within-loop issue
+        for f in futures[
+            :
+        ]:  # Iterate over a copy of the list to avoid mutation-within-loop issue
             if f.done():
                 get_result(f)
                 futures.remove(f)
@@ -127,7 +129,9 @@ def num_undone(futures, shared_vars):
             futures.pop(k)
 
     else:
-        get_logger().warning("unsupported futures collection type: %s, %s", type(futures), futures)
+        get_logger().warning(
+            "unsupported futures collection type: %s, %s", type(futures), futures
+        )
 
     len_after = len(futures)
     get_logger().debug("len(futures) before: %s, after: %s", len_before, len_after)
@@ -213,6 +217,7 @@ def await_futures(
         if task_timeout is not None and shared_vars is not None:
             handle_task_timeout(futures, task_timeout, shared_vars)
 
+
 def num_workers(local=True):
     workers = get_client().scheduler_info()["workers"]
     if local:
@@ -221,7 +226,11 @@ def num_workers(local=True):
         # Iterate over the workers dictionary
         for worker_key, worker_info in workers.items():
             # Check if the worker's key or name matches any of the machine IPs
-            if any(ip in worker_key or ip in worker_info["name"] for ip in machine_ips):
+            if any(
+                ip in worker_key
+                or (isinstance(worker_info["name"], str) and ip in worker_info["name"])
+                for ip in machine_ips
+            ):
                 count += 1
         return count
     else:
