@@ -79,7 +79,7 @@ class SOFTSPredictor:
     def _prep_df(_df, validate, seq_len):
         df = _df.copy()
 
-        if df.columns[0] == "ds":
+        if "ds" in df.columns:
             df.rename(columns={"ds": "date"}, inplace=True)
 
         if "y" in df.columns:
@@ -128,7 +128,8 @@ class SOFTSPredictor:
     @staticmethod
     def train(df, config, model_id, random_seed, validate, save_model_file=False):
         set_random_seed(random_seed)
-        model_config = default_config.copy().update(config)
+        model_config = default_config.copy()
+        model_config.update(config)
 
         num_cores = psutil.cpu_count(logical=False)
         torch.set_num_threads(num_cores)
