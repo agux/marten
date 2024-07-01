@@ -99,7 +99,7 @@ def _fit_multivariate_impute_model(input, params):
     raise ex
 
 
-def _prep_df(_df, validate, seq_len):
+def _prep_df(_df, validate, seq_len, pred_len):
     df = _df.copy()
 
     if "ds" in df.columns:
@@ -146,7 +146,7 @@ def _prep_df(_df, validate, seq_len):
         try:
             if impute_model_input.shape[1] >= 2:  # Multivariate time series
                 model_fit = _fit_multivariate_impute_model(
-                    impute_model_input, {"p": seq_len, "q": seq_len}
+                    impute_model_input, {"p": pred_len, "q": pred_len}
                 )
             else:  # Univariate time series
                 model = ARIMA(
@@ -222,7 +222,7 @@ class SOFTSPredictor:
         n_workers = float(num_workers())
         torch.set_num_threads(max(1, int(n_cores / n_workers)))
 
-        train, val, _ = _prep_df(df, validate, model_config["seq_len"])
+        train, val, _ = _prep_df(df, validate, model_config["seq_len"], model_config["pred_len"])
         setting = os.path.join(model_id, str(uuid.uuid4()))
 
         def _train(config):
@@ -274,7 +274,7 @@ class SOFTSPredictor:
     def predict(model, df, region):
         seq_len = model.args.seq_len
         pred_len = model.args.pred_len
-        input, _, scaler = _prep_df(df, False, seq_len)
+        input, _, scaler = _prep_df(df, False, seq_len, pred_len)
         forecast = model.predict(setting=model.setting, pred_data=input)
         yhat = None
         for fc in reversed(forecast):
