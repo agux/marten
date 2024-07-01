@@ -77,6 +77,28 @@ def use_gpu(use_gpu, util_threshold=80, vram_threshold=80):
         else False
     )
 
+def _fit_multivariate_impute_model(input):
+
+    def _fit(order, error_cov_type, cov_type):
+        model = VARMAX(input, order=order, error_cov_type=error_cov_type)
+        return model.fit(disp=False, cov_type=cov_type)
+    
+    ect_list = ["unstructured", "diagonal"]
+    ct_list = ["robust", "robust_approx"]
+
+    for ect in ect_list:
+        for ct in ct_list:
+            try:
+                model_fit = _fit(order=(1,1), error_cov_type=ect, cov_type=ct)
+                return model_fit
+            except np.linalg.LinAlgError as e:
+                if 'Matrix is not positive definite' in str(e):
+                    continue
+                else:
+                    raise e
+            except Exception as e:
+                raise e
+
 
 def _prep_df(_df, validate, seq_len):
     df = _df.copy()
@@ -124,8 +146,7 @@ def _prep_df(_df, validate, seq_len):
 
         try:
             if impute_model_input.shape[1] >= 2:  # Multivariate time series
-                model = VARMAX(impute_model_input, order=(1, 1))
-                model_fit = model.fit(disp=False)
+                model_fit = _fit_multivariate_impute_model(impute_model_input)
             else:  # Univariate time series
                 model = ARIMA(
                     impute_model_input, order=(5, 1, 0)
