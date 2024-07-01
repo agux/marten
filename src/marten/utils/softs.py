@@ -78,83 +78,51 @@ def use_gpu(use_gpu, util_threshold=80, vram_threshold=80):
     )
 
 
-class SOFTSPredictor:
+def _prep_df(_df, validate, seq_len):
+    df = _df.copy()
 
-    @staticmethod
-    def isBaseline(params):
-        return params == baseline_config
+    if "ds" in df.columns:
+        df.rename(columns={"ds": "date"}, inplace=True)
 
-    @staticmethod
-    def _impute(df, model_fit, in_sample):
-        data_filled = df.copy()
-        # if df.shape[1] > 2:  # Multivariate time series
-        if in_sample:
-            forecast = model_fit.get_prediction(
-                start=data_filled.index[0], end=data_filled.index[-1],
-            )
-        else:
-            forecast = model_fit.get_forecast(steps=len(df))
-        predicted_mean = forecast.predicted_mean
-        predicted_mean.index = data_filled.index
-        for col in df.columns[1:]:
-            if df[col].isna().any():
-                data_filled[col].fillna(predicted_mean[col], inplace=True)
-        # else:  # Univariate time series
-        #     for col in df.columns[1:]:
-        #         if df[col].isna().any():
-        #             forecast = model_fit.predict(
-        #                 start=len(df[col].dropna()), end=len(df) - 1, dynamic=False
-        #             )
-        #             data_filled[col].fillna(
-        #                 pd.Series(forecast, index=df.index[df[col].isna()]),
-        #                 inplace=True,
-        #             )
-        return data_filled
+    if "y" in df.columns:
+        y_position = df.columns.get_loc("y")
+        if y_position != len(df.columns) - 1:
+            # Move "y" column to the last position
+            cols = list(df.columns)
+            cols.append(cols.pop(y_position))
+            df = df[cols]
 
-    @staticmethod
-    def _prep_df(_df, validate, seq_len):
-        df = _df.copy()
+    if validate:
+        n = len(df)
+        end = int(n * 0.9)
+        train_data = df.iloc[:end]
+        val_data = df.iloc[end - seq_len :]
+        val_na_positions = val_data.isna()
+    else:
+        train_data = df
+        val_data = None
+        val_na_positions = None
 
-        if "ds" in df.columns:
-            df.rename(columns={"ds": "date"}, inplace=True)
+    train_data_nona = train_data.dropna()
+    train_na_positions = train_data.isna()
 
-        if "y" in df.columns:
-            y_position = df.columns.get_loc("y")
-            if y_position != len(df.columns) - 1:
-                # Move "y" column to the last position
-                cols = list(df.columns)
-                cols.append(cols.pop(y_position))
-                df = df[cols]
+    scaler = StandardScaler()
+    scaler.fit(train_data_nona.iloc[:, 1:])  # skip first "date" column
+    train_data_filled = train_data.ffill().bfill()
+    train_data.iloc[:, 1:] = scaler.transform(train_data_filled.iloc[:, 1:])
+    if validate:
+        val_data_filled = val_data.ffill().bfill()
+        val_data.iloc[:, 1:] = scaler.transform(val_data_filled.iloc[:, 1:])
 
-        if validate:
-            n = len(df)
-            end = int(n * 0.9)
-            train_data = df.iloc[:end]
-            val_data = df.iloc[end - seq_len :]
-            val_na_positions = val_data.isna()
-        else:
-            train_data = df
-            val_data = None
-            val_na_positions = None
+    if _df.isna().any().any():  # original dataset contains missing data
+        # need to standardize train_data_nona first before feeding to imputation model
+        impute_model_input = pd.DataFrame(
+            scaler.transform(train_data_nona.iloc[:, 1:]),
+            columns=train_data_nona.columns[1:],
+            index=train_data_nona.index,
+        )
 
-        train_data_nona = train_data.dropna()
-        train_na_positions = train_data.isna()
-
-        scaler = StandardScaler()
-        scaler.fit(train_data_nona.iloc[:, 1:])  # skip first "date" column
-        train_data_filled = train_data.ffill().bfill()
-        train_data.iloc[:, 1:] = scaler.transform(train_data_filled.iloc[:, 1:])
-        if validate:
-            val_data_filled = val_data.ffill().bfill()
-            val_data.iloc[:, 1:] = scaler.transform(val_data_filled.iloc[:, 1:])
-
-        if _df.isna().any().any():  # original dataset contains missing data
-            # need to standardize train_data_nona first before feeding to imputation model
-            impute_model_input = pd.DataFrame(
-                scaler.transform(train_data_nona.iloc[:, 1:]),
-                columns=train_data_nona.columns[1:],
-                index=train_data_nona.index,
-            )
+        try:
             if impute_model_input.shape[1] >= 2:  # Multivariate time series
                 model = VARMAX(impute_model_input, order=(1, 1))
                 model_fit = model.fit(disp=False)
@@ -163,17 +131,60 @@ class SOFTSPredictor:
                     impute_model_input, order=(5, 1, 0)
                 )  # Adjust the order as needed
                 model_fit = model.fit()
+        except Exception as e:
+            get_logger().error(
+                "failed to fit imputation model: %s\nInput:\n%s\nTraceback:\n%s",
+                str(e),
+                impute_model_input,
+                traceback.format_exc(),
+            )
+            raise e
 
-            if train_na_positions.any().any(): #train data has missing values
-                train_data[train_na_positions] = np.nan
-                train_data = SOFTSPredictor._impute(train_data, model_fit, True)
-            if (
-                val_na_positions is not None and val_na_positions.any().any()
-            ):  # validation data has missing values
-                val_data[val_na_positions] = np.nan
-                val_data = SOFTSPredictor._impute(val_data, model_fit, False)
+        if train_na_positions.any().any():  # train data has missing values
+            train_data[train_na_positions] = np.nan
+            train_data = _impute(train_data, model_fit, True)
+        if (
+            val_na_positions is not None and val_na_positions.any().any()
+        ):  # validation data has missing values
+            val_data[val_na_positions] = np.nan
+            val_data = _impute(val_data, model_fit, False)
 
-        return train_data, val_data, scaler
+    return train_data, val_data, scaler
+
+
+def _impute(df, model_fit, in_sample):
+    data_filled = df.copy()
+    # if df.shape[1] > 2:  # Multivariate time series
+    if in_sample:
+        forecast = model_fit.get_prediction(
+            start=data_filled.index[0],
+            end=data_filled.index[-1],
+        )
+    else:
+        forecast = model_fit.get_forecast(steps=len(df))
+    predicted_mean = forecast.predicted_mean
+    predicted_mean.index = data_filled.index
+    for col in df.columns[1:]:
+        if df[col].isna().any():
+            data_filled[col].fillna(predicted_mean[col], inplace=True)
+    # else:  # Univariate time series
+    #     for col in df.columns[1:]:
+    #         if df[col].isna().any():
+    #             forecast = model_fit.predict(
+    #                 start=len(df[col].dropna()), end=len(df) - 1, dynamic=False
+    #             )
+    #             data_filled[col].fillna(
+    #                 pd.Series(forecast, index=df.index[df[col].isna()]),
+    #                 inplace=True,
+    #             )
+    return data_filled
+
+
+class SOFTSPredictor:
+
+    @staticmethod
+    def isBaseline(params):
+        return params == baseline_config
 
     @staticmethod
     def train(df, config, model_id, random_seed, validate, save_model_file=False):
@@ -189,7 +200,7 @@ class SOFTSPredictor:
         n_workers = float(num_workers())
         torch.set_num_threads(max(1, int(n_cores / n_workers)))
 
-        train, val, _ = SOFTSPredictor._prep_df(df, validate, model_config["seq_len"])
+        train, val, _ = _prep_df(df, validate, model_config["seq_len"])
         setting = os.path.join(model_id, str(uuid.uuid4()))
 
         def _train(config):
@@ -241,7 +252,7 @@ class SOFTSPredictor:
     def predict(model, df, region):
         seq_len = model.args.seq_len
         pred_len = model.args.pred_len
-        input, _, scaler = SOFTSPredictor._prep_df(df, False, seq_len)
+        input, _, scaler = _prep_df(df, False, seq_len)
         forecast = model.predict(setting=model.setting, pred_data=input)
         yhat = None
         for fc in reversed(forecast):

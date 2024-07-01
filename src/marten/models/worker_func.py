@@ -2030,7 +2030,6 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
 
     update_covar_set_id(alchemyEngine, hps_id, covar_set_id)
 
-    # TODO support SOFTS
     fast_bayesopt(
         alchemyEngine,
         logger,

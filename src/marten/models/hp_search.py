@@ -929,7 +929,6 @@ def _remove_measured_features(model, anchor_symbol, cov_table, features, ts_date
 def _covar_metric(
     anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
 ):
-    # TODO support SOFTS
     min_date = min(dates).strftime("%Y-%m-%d")
     cutoff_date = max(dates).strftime("%Y-%m-%d")
 
