@@ -78,27 +78,21 @@ def use_gpu(use_gpu, util_threshold=80, vram_threshold=80):
     )
 
 def _fit_multivariate_impute_model(input):
-
     def _fit(order, error_cov_type, cov_type):
         model = VARMAX(input, order=order, error_cov_type=error_cov_type)
         return model.fit(disp=False, cov_type=cov_type)
-    
     ect_list = ["unstructured", "diagonal"]
     ct_list = ["robust", "robust_approx"]
-
+    ex = None
     for ect in ect_list:
         for ct in ct_list:
             try:
                 model_fit = _fit(order=(1,1), error_cov_type=ect, cov_type=ct)
                 return model_fit
-            except np.linalg.LinAlgError as e:
-                if 'Matrix is not positive definite' in str(e):
-                    continue
-                else:
-                    raise e
             except Exception as e:
-                raise e
-
+                ex = e
+                continue
+    raise ex
 
 def _prep_df(_df, validate, seq_len):
     df = _df.copy()
