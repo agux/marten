@@ -4,12 +4,13 @@ import psutil
 import shutil
 import random
 import traceback
+import warnings
 from types import SimpleNamespace, MappingProxyType
 
 import numpy as np
 import pandas as pd
 import torch
-from dask.distributed import get_worker, get_client
+from dask.distributed import get_worker, worker_client
 from sklearn.preprocessing import StandardScaler
 from statsmodels.tsa.statespace.varmax import VARMAX
 from statsmodels.tsa.arima.model import ARIMA
@@ -20,7 +21,11 @@ from tenacity import (
     retry_if_exception,
     RetryError,
 )
-
+from neuralprophet import (
+    set_random_seed as np_random_seed,
+    set_log_level,
+    NeuralProphet,
+)
 from softs.exp.exp_custom import Exp_Custom
 
 from marten.utils.logger import get_logger
@@ -99,8 +104,8 @@ def _fit_multivariate_impute_model(input, params):
     raise ex
 
 
-def _prep_df(_df, validate, seq_len, pred_len):
-    df = _df.copy()
+def _prep_df(_df, validate, seq_len, pred_len, random_seed):
+    df = _impute(df, random_seed)
 
     if "ds" in df.columns:
         df.rename(columns={"ds": "date"}, inplace=True)
@@ -118,63 +123,65 @@ def _prep_df(_df, validate, seq_len, pred_len):
         end = int(n * 0.9)
         train_data = df.iloc[:end]
         val_data = df.iloc[end - seq_len :]
-        val_na_positions = val_data.isna()
+        # val_na_positions = val_data.isna()
     else:
         train_data = df
         val_data = None
-        val_na_positions = None
+        # val_na_positions = None
 
-    train_data_nona = train_data.dropna()
-    train_na_positions = train_data.isna()
+    # train_data_nona = train_data.dropna()
+    # train_na_positions = train_data.isna()
 
     scaler = StandardScaler()
-    scaler.fit(train_data_nona.iloc[:, 1:])  # skip first "date" column
-    train_data_filled = train_data.ffill().bfill()
-    train_data.iloc[:, 1:] = scaler.transform(train_data_filled.iloc[:, 1:])
+    # scaler.fit(train_data_nona.iloc[:, 1:])  # skip first "date" column
+    # train_data_filled = train_data.ffill().bfill()
+    # train_data.iloc[:, 1:] = scaler.transform(train_data_filled.iloc[:, 1:])
+    train_data.iloc[:, 1:] = scaler.fit_transform(train_data.iloc[:, 1:])
     if validate:
-        val_data_filled = val_data.ffill().bfill()
-        val_data.iloc[:, 1:] = scaler.transform(val_data_filled.iloc[:, 1:])
+        # val_data_filled = val_data.ffill().bfill()
+        # val_data.iloc[:, 1:] = scaler.transform(val_data_filled.iloc[:, 1:])
+        val_data.iloc[:, 1:] = scaler.transform(val_data.iloc[:, 1:])
 
-    if _df.isna().any().any():  # original dataset contains missing data
-        # need to standardize train_data_nona first before feeding to imputation model
-        impute_model_input = pd.DataFrame(
-            scaler.transform(train_data_nona.iloc[:, 1:]),
-            columns=train_data_nona.columns[1:],
-            index=train_data_nona.index,
-        )
+    # if _df.isna().any().any():  # original dataset contains missing data
+    #     # need to standardize train_data_nona first before feeding to imputation model
+    #     impute_model_input = pd.DataFrame(
+    #         scaler.transform(train_data_nona.iloc[:, 1:]),
+    #         columns=train_data_nona.columns[1:],
+    #         index=train_data_nona.index,
+    #     )
 
-        try:
-            if impute_model_input.shape[1] >= 2:  # Multivariate time series
-                model_fit = _fit_multivariate_impute_model(
-                    impute_model_input, {"p": pred_len, "q": pred_len}
-                )
-            else:  # Univariate time series
-                model = ARIMA(
-                    impute_model_input, order=(5, 1, 0)
-                )  # Adjust the order as needed
-                model_fit = model.fit()
-        except Exception as e:
-            get_logger().error(
-                "failed to fit imputation model: %s\nInput:\n%s\nTraceback:\n%s",
-                str(e),
-                impute_model_input,
-                traceback.format_exc(),
-            )
-            raise e
+    #     try:
+    #         if impute_model_input.shape[1] >= 2:  # Multivariate time series
+    #             model_fit = _fit_multivariate_impute_model(
+    #                 impute_model_input, {"p": pred_len * 2, "q": pred_len * 2}
+    #             )
+    #         else:  # Univariate time series
+    #             model = ARIMA(
+    #                 impute_model_input, order=(5, 1, 0)
+    #             )  # Adjust the order as needed
+    #             model_fit = model.fit()
+    #     except Exception as e:
+    #         get_logger().error(
+    #             "failed to fit imputation model: %s\nInput:\n%s\nTraceback:\n%s",
+    #             str(e),
+    #             impute_model_input,
+    #             traceback.format_exc(),
+    #         )
+    #         raise e
 
-        if train_na_positions.any().any():  # train data has missing values
-            train_data[train_na_positions] = np.nan
-            train_data = _impute(train_data, model_fit, True)
-        if (
-            val_na_positions is not None and val_na_positions.any().any()
-        ):  # validation data has missing values
-            val_data[val_na_positions] = np.nan
-            val_data = _impute(val_data, model_fit, False)
+    #     if train_na_positions.any().any():  # train data has missing values
+    #         train_data[train_na_positions] = np.nan
+    #         train_data = _impute(train_data, model_fit, True)
+    #     if (
+    #         val_na_positions is not None and val_na_positions.any().any()
+    #     ):  # validation data has missing values
+    #         val_data[val_na_positions] = np.nan
+    #         val_data = _impute(val_data, model_fit, False)
 
     return train_data, val_data, scaler
 
 
-def _impute(df, model_fit, in_sample):
+def _statsmodels_impute(df, model_fit, in_sample):
     data_filled = df.copy()
     # if df.shape[1] > 2:  # Multivariate time series
     if in_sample:
@@ -202,6 +209,57 @@ def _impute(df, model_fit, in_sample):
     return data_filled
 
 
+def _np_impute(df, random_seed):
+    na_col = df.columns[1]
+    df.rename(columns={na_col: "y"}, inplace=True)
+
+    np_random_seed(random_seed)
+    set_log_level("ERROR")
+
+    try:
+        m = NeuralProphet(
+            accelerator="gpu",
+            changepoints_range=1.0,
+        )
+        m.fit(df, progress=None, early_stopping=True, checkpointing=False)
+    except Exception as e:
+        m = NeuralProphet(
+            changepoints_range=1.0,
+        )
+        m.fit(df, progress=None, early_stopping=True, checkpointing=False)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", FutureWarning)
+        warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
+        forecast = m.predict(df)
+    
+    forecast.rename(columns={"yhat1": na_col}, inplace=True)
+
+    return forecast[["ds", na_col]]
+
+def _impute(df, random_seed):
+    df_na = df.iloc[:, 1:].isna()
+    na_counts = df_na.sum()
+    na_cols = na_counts[na_counts > 0].index.tolist()
+    if len(na_cols) == 0:
+        return df
+
+    df = df.copy()
+    with worker_client() as client:
+        futures = []
+        for na_col in na_cols:
+            df_na = df[["ds", na_col]]
+            futures.append(client.submit(_np_impute, df_na, random_seed))
+        results = client.gather(futures)
+    imputed_df = results[0]
+    for result in results[1:]:
+        imputed_df = imputed_df.merge(result, on="ds", how="left")
+
+    for na_col in na_cols:
+        df[na_col].fillna(imputed_df[na_col], inplace=True)
+
+    return df
+
 class SOFTSPredictor:
 
     @staticmethod
@@ -216,13 +274,16 @@ class SOFTSPredictor:
         set_random_seed(random_seed)
         model_config = default_config.copy()
         model_config.update(config)
+        model_config["random_seed"] = random_seed
 
         # n_cores = float(psutil.cpu_count())
         n_cores = psutil.cpu_count(logical=False)
         n_workers = float(num_workers())
         torch.set_num_threads(max(1, int(n_cores / n_workers)))
 
-        train, val, _ = _prep_df(df, validate, model_config["seq_len"], model_config["pred_len"])
+        train, val, _ = _prep_df(
+            df, validate, model_config["seq_len"], model_config["pred_len"], random_seed
+        )
         setting = os.path.join(model_id, str(uuid.uuid4()))
 
         def _train(config):
@@ -274,7 +335,7 @@ class SOFTSPredictor:
     def predict(model, df, region):
         seq_len = model.args.seq_len
         pred_len = model.args.pred_len
-        input, _, scaler = _prep_df(df, False, seq_len, pred_len)
+        input, _, scaler = _prep_df(df, False, seq_len, pred_len, model.args.random_seed)
         forecast = model.predict(setting=model.setting, pred_data=input)
         yhat = None
         for fc in reversed(forecast):
