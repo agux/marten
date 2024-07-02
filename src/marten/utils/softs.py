@@ -219,23 +219,34 @@ def _np_impute(df, random_seed):
     try:
         m = NeuralProphet(
             accelerator="gpu",
-            changepoints_range=1.0,
+            # changepoints_range=1.0,
         )
-        m.fit(df, progress=None, early_stopping=True, checkpointing=False)
+        m.fit(
+            df,
+            progress=None,
+            #   early_stopping=True,
+            checkpointing=False,
+        )
     except Exception as e:
         m = NeuralProphet(
-            changepoints_range=1.0,
+            # changepoints_range=1.0,
         )
-        m.fit(df, progress=None, early_stopping=True, checkpointing=False)
+        m.fit(
+            df,
+            progress=None,
+            #   early_stopping=True,
+            checkpointing=False,
+        )
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", FutureWarning)
         warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
         forecast = m.predict(df)
-    
+
     forecast.rename(columns={"yhat1": na_col}, inplace=True)
 
     return forecast[["ds", na_col]]
+
 
 def _impute(df, random_seed):
     df_na = df.iloc[:, 1:].isna()
@@ -258,6 +269,7 @@ def _impute(df, random_seed):
         df[na_col].fillna(imputed_df[na_col], inplace=True)
 
     return df
+
 
 class SOFTSPredictor:
 
@@ -335,7 +347,9 @@ class SOFTSPredictor:
     def predict(model, df, region):
         seq_len = model.args.seq_len
         pred_len = model.args.pred_len
-        input, _, scaler = _prep_df(df, False, seq_len, pred_len, model.args.random_seed)
+        input, _, scaler = _prep_df(
+            df, False, seq_len, pred_len, model.args.random_seed
+        )
         forecast = model.predict(setting=model.setting, pred_data=input)
         yhat = None
         for fc in reversed(forecast):
