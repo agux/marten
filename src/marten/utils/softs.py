@@ -237,14 +237,13 @@ def _np_impute(df, random_seed):
 
     return forecast[["ds", na_col]]
 
-def _impute(_df, random_seed):
-    df_na = _df.iloc[:, 1:].isna()
+def _impute(df, random_seed):
+    df_na = df.iloc[:, 1:].isna()
     na_counts = df_na.sum()
     na_cols = na_counts[na_counts > 0].index.tolist()
     if len(na_cols) == 0:
-        return _df
+        return df
 
-    df = _df.copy()
     with worker_client() as client:
         futures = []
         for na_col in na_cols:
@@ -267,7 +266,8 @@ class SOFTSPredictor:
         return params == baseline_config
 
     @staticmethod
-    def train(df, config, model_id, random_seed, validate, save_model_file=False):
+    def train(_df, config, model_id, random_seed, validate, save_model_file=False):
+        df = _df.copy()
         worker = get_worker()
         args = worker.args
 
