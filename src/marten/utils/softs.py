@@ -105,7 +105,7 @@ def _fit_multivariate_impute_model(input, params):
 
 
 def _prep_df(_df, validate, seq_len, pred_len, random_seed):
-    df = _impute(df, random_seed)
+    df = _impute(_df, random_seed)
 
     if "ds" in df.columns:
         df.rename(columns={"ds": "date"}, inplace=True)
