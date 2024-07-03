@@ -248,19 +248,25 @@ def _np_impute(df, random_seed):
     return forecast[["ds", na_col]]
 
 
-def impute(df, random_seed):
+def impute(df, random_seed, client=None):
     df_na = df.iloc[:, 1:].isna()
     na_counts = df_na.sum()
     na_cols = na_counts[na_counts > 0].index.tolist()
     if len(na_cols) == 0:
         return df
 
-    with worker_client() as client:
+    def _func(client):
         futures = []
         for na_col in na_cols:
             df_na = df[["ds", na_col]]
             futures.append(client.submit(_np_impute, df_na, random_seed))
-        results = client.gather(futures)
+        return client.gather(futures)
+
+    if client is not None:
+        results = _func(client)
+    else:
+        with worker_client() as client:
+            results = _func(client)
     imputed_df = results[0]
     for result in results[1:]:
         imputed_df = imputed_df.merge(result, on="ds", how="left")

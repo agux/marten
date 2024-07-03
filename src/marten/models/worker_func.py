@@ -1773,7 +1773,7 @@ def _search_space(model, max_covars):
 
 
 def fast_bayesopt(
-    alchemyEngine, logger, df, covar_set_id, hps_id, ranked_features, base_loss, args
+    client, alchemyEngine, logger, df, covar_set_id, hps_id, ranked_features, base_loss, args
 ):
     # worker = get_worker()
     # logger = worker.logger
@@ -1807,7 +1807,7 @@ def fast_bayesopt(
 
     if args.model == "SOFTS":
         from marten.utils.softs import impute
-        df = impute(df, args.random_seed)
+        df = impute(df, args.random_seed, client)
 
     # split large iterations into smaller runs to avoid OOM / memory leak
     for i in range(args.max_itr):
@@ -2035,6 +2035,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     update_covar_set_id(alchemyEngine, hps_id, covar_set_id)
 
     fast_bayesopt(
+        client,
         alchemyEngine,
         logger,
         df,
