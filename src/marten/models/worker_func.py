@@ -1423,6 +1423,8 @@ def ensemble_topk_prediction(
     logger.info("Scaling dask cluster to %s", args.min_worker)
     client.cluster.scale(args.min_worker)
 
+    SOFTSPredictor.optimize_torch_threads()
+
     futures = []
     for _, row in settings.iterrows():
         futures.append(
@@ -1754,10 +1756,10 @@ def _search_space(model, max_covars):
         case "SOFTS":
             ss = f"""dict(
                 seq_len=range(5, 300+1),
-                d_model=[2**w for w in range(5, 10+1)],
-                d_core=[2**w for w in range(4, 10+1)],
-                d_ff=[2**w for w in range(5, 10+1)],
-                e_layers=range(2, 32+1),
+                d_model=[2**w for w in range(5, 9+1)],
+                d_core=[2**w for w in range(4, 8+1)],
+                d_ff=[2**w for w in range(5, 9+1)],
+                e_layers=range(2, 8+1),
                 learning_rate=loguniform(0.0001, 0.002),
                 lradj=["type1", "type2", "constant", "cosine"],
                 patience=range(3, 7+1),
@@ -1962,6 +1964,8 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
         anchor_table,
     )
 
+    SOFTSPredictor.optimize_torch_threads()
+
     univ_loss = _univariate_default_hp(client, anchor_df, args, hps_id)
 
     min_covar_loss = min_covar_loss_val(alchemyEngine, args.model, symbol, cutoff_date)
@@ -1997,6 +2001,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     # run covariate loss calculation in batch
     logger.info("Starting covariate loss calculation")
     t1_start = time.time()
+    SOFTSPredictor.optimize_torch_threads()
     prep_covar_baseline_metrics(anchor_df, anchor_table, args)
     logger.debug("waiting dask futures: %s", len(hps.futures))
     await_futures(hps.futures, hard_wait=True)
@@ -2033,6 +2038,8 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     t2_start = time.time()
 
     update_covar_set_id(alchemyEngine, hps_id, covar_set_id)
+
+    SOFTSPredictor.optimize_torch_threads()
 
     fast_bayesopt(
         client,

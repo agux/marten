@@ -284,6 +284,13 @@ class SOFTSPredictor:
         return params == baseline_config
 
     @staticmethod
+    def optimize_torch_threads():
+        # n_cores = float(psutil.cpu_count())
+        n_cores = psutil.cpu_count(logical=False)
+        n_workers = float(num_workers())
+        torch.set_num_threads(max(1, int(n_cores / n_workers)))
+
+    @staticmethod
     def train(_df, config, model_id, random_seed, validate, save_model_file=False):
         df = _df.copy()
         worker = get_worker()
@@ -295,9 +302,9 @@ class SOFTSPredictor:
         model_config["random_seed"] = random_seed
 
         # n_cores = float(psutil.cpu_count())
-        n_cores = psutil.cpu_count(logical=False)
-        n_workers = float(num_workers())
-        torch.set_num_threads(max(1, int(n_cores / n_workers)))
+        # n_cores = psutil.cpu_count(logical=False)
+        # n_workers = float(num_workers())
+        # torch.set_num_threads(max(1, int(n_cores / n_workers)))
 
         train, val, _ = _prep_df(
             df, validate, model_config["seq_len"], model_config["pred_len"], random_seed
