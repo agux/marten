@@ -286,7 +286,7 @@ class SOFTSPredictor:
     @staticmethod
     def optimize_torch_threads():
         # n_cores = float(psutil.cpu_count())
-        n_cores = psutil.cpu_count(logical=False)
+        n_cores = float(psutil.cpu_count(logical=False))
         n_workers = float(num_workers())
         torch.set_num_threads(max(1, int(n_cores / n_workers)))
 
