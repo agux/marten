@@ -301,10 +301,7 @@ class SOFTSPredictor:
         model_config.update(config)
         model_config["random_seed"] = random_seed
 
-        # n_cores = float(psutil.cpu_count())
-        # n_cores = psutil.cpu_count(logical=False)
-        # n_workers = float(num_workers())
-        # torch.set_num_threads(max(1, int(n_cores / n_workers)))
+        SOFTSPredictor.optimize_torch_threads()
 
         train, val, _ = _prep_df(
             df, validate, model_config["seq_len"], model_config["pred_len"], random_seed
