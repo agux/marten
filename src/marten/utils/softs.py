@@ -105,7 +105,7 @@ def _fit_multivariate_impute_model(input, params):
 
 
 def _prep_df(_df, validate, seq_len, pred_len, random_seed):
-    df = _impute(_df, random_seed)
+    df = impute(_df, random_seed)
 
     if "ds" in df.columns:
         df.rename(columns={"ds": "date"}, inplace=True)
@@ -248,7 +248,7 @@ def _np_impute(df, random_seed):
     return forecast[["ds", na_col]]
 
 
-def _impute(df, random_seed):
+def impute(df, random_seed):
     df_na = df.iloc[:, 1:].isna()
     na_counts = df_na.sum()
     na_cols = na_counts[na_counts > 0].index.tolist()

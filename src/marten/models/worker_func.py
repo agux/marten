@@ -1805,6 +1805,10 @@ def fast_bayesopt(
     elif domain_size < base_ds:
         domain_size = base_ds
 
+    if args.model == "SOFTS":
+        from marten.utils.softs import impute
+        df = impute(df, args.random_seed)
+
     # split large iterations into smaller runs to avoid OOM / memory leak
     for i in range(args.max_itr):
         logger.info("running bayesopt mini-iteration %s/%s", i + 1, args.max_itr)
