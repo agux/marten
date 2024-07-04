@@ -1,9 +1,14 @@
 import torch
 from marten.utils.logger import get_logger
 
+
 def should_retry(exception):
-    return isinstance(exception, torch.cuda.OutOfMemoryError) or (
-        "out of memory" in str(exception)
+    exmsg = str(exception)
+    return (
+        isinstance(exception, torch.cuda.OutOfMemoryError)
+        or ("out of memory" in exmsg)
+        or "CUDA error" in exmsg
+        or "cuDNN error" in exmsg
     )
 
 
