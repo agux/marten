@@ -220,7 +220,7 @@ def configure_parser(parser):
         help=(
             "Limit the ratio of NaN (missing data) in covariates. "
             "Only those with NaN rate lower than the limit ratio can be selected during multivariate HP searching. "
-            "Defaults to 0.5%."
+            "Defaults to 0.005."
         ),
     )
     parser.add_argument(
