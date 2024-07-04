@@ -215,6 +215,7 @@ def _np_impute(df, random_seed):
 
     np_random_seed(random_seed)
     set_log_level("ERROR")
+    _optimize_torch_threads()
 
     try:
         m = NeuralProphet(
@@ -264,9 +265,11 @@ def impute(df, random_seed, client=None):
 
     if client is not None:
         results = _func(client)
-    else:
+    elif len(na_cols) > 1:
         with worker_client() as client:
             results = _func(client)
+    else:
+        results = [_np_impute(df[["ds", na_cols[0]]].copy(), random_seed)]
     imputed_df = results[0]
     for result in results[1:]:
         imputed_df = imputed_df.merge(result, on="ds", how="left")
@@ -276,19 +279,17 @@ def impute(df, random_seed, client=None):
 
     return df
 
+def _optimize_torch_threads():
+    n_cores = float(psutil.cpu_count()) * 0.8
+    # n_cores = float(psutil.cpu_count(logical=False))
+    n_workers = float(num_workers())
+    torch.set_num_threads(max(1, int(n_cores / n_workers)))
 
 class SOFTSPredictor:
 
     @staticmethod
     def isBaseline(params):
         return params == baseline_config
-
-    @staticmethod
-    def optimize_torch_threads():
-        # n_cores = float(psutil.cpu_count())
-        n_cores = float(psutil.cpu_count(logical=False))
-        n_workers = float(num_workers())
-        torch.set_num_threads(max(1, int(n_cores / n_workers)))
 
     @staticmethod
     def train(_df, config, model_id, random_seed, validate, save_model_file=False):
@@ -301,7 +302,12 @@ class SOFTSPredictor:
         model_config.update(config)
         model_config["random_seed"] = random_seed
 
-        SOFTSPredictor.optimize_torch_threads()
+        if "d_model_d_ff" in model_config:
+            model_config["d_model"] = model_config["d_model_d_ff"]
+            model_config["d_ff"] = model_config["d_model_d_ff"]
+            model_config.pop("d_model_d_ff")
+
+        _optimize_torch_threads()
 
         train, val, _ = _prep_df(
             df, validate, model_config["seq_len"], model_config["pred_len"], random_seed
