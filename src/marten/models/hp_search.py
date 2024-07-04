@@ -136,6 +136,12 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None):
     if limit > 0:
         query += " limit %(limit)s"
         params["limit"] = limit
+    
+    # re-order the date in ascending order
+    query = f"""
+        with cte as ({query})
+        select * from cte order by ds
+    """
 
     df = pd.read_sql(
         query,
@@ -143,9 +149,7 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None):
         params=params,
         parse_dates=["ds"],
     )
-    # TODO: does the date sequence in the df affect NeuralProphet?
-    # re-order rows by ds (which is a date column) ascending (most recent date in the last row)
-    df.sort_values(by="ds", ascending=True, inplace=True)
+    
     return df, anchor_table
 
 

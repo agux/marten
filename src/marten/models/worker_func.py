@@ -1656,9 +1656,9 @@ def _search_space(model, max_covars):
             # d_model_d_ff=[2**w for w in range(5, 8+1)],
             ss = f"""dict(
                 seq_len=range(5, 200+1),
-                d_model=[2**w for w in range(5, 8+1)],
-                d_core=[2**w for w in range(4, 7+1)],
-                d_ff=[2**w for w in range(5, 8+1)],
+                d_model=[2**w for w in range(4, 8+1)],
+                d_core=[2**w for w in range(3, 7+1)],
+                d_ff=[2**w for w in range(4, 8+1)],
                 e_layers=range(2, 5+1),
                 learning_rate=loguniform(0.0001, 0.002),
                 lradj=["type1", "type2", "constant", "cosine"],

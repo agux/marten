@@ -16,7 +16,7 @@ from dask.distributed import get_worker
 from neuralprophet import NeuralProphet, set_random_seed, set_log_level
 
 from marten.utils.logger import get_logger
-from marten.utils.trainer import should_retry, log_retry
+from marten.utils.trainer import should_retry, log_retry, log_train_args
 
 
 LOSS_CAP = 99.99
@@ -165,23 +165,6 @@ class NPPredictor:
                 raise e
 
     @staticmethod
-    def _log_train_args(df, *args, **kwargs):
-        worker = get_worker()
-        logger = worker.logger
-        logger.info(
-            (
-                "Model training arguments:\n"
-                "Dataframe %s:\n%s\n"
-                "Positional arguments:%s\n"
-                "Keyword arguments:%s"
-            ),
-            df.shape,
-            df.describe().to_string(),
-            args,
-            kwargs,
-        )
-
-    @staticmethod
     def _train(
         df,
         epochs=None,
@@ -210,7 +193,7 @@ class NPPredictor:
         )
 
         if getattr(args, "log_train_args", False):
-            NPPredictor._log_train_args(
+            log_train_args(
                 df, epochs, random_seed, early_stopping, country, validate, **kwargs
             )
 

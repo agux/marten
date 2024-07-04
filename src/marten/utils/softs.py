@@ -29,7 +29,7 @@ from neuralprophet import (
 from softs.exp.exp_custom import Exp_Custom
 
 from marten.utils.logger import get_logger
-from marten.utils.trainer import should_retry, log_retry
+from marten.utils.trainer import should_retry, log_retry, log_train_args
 from marten.utils.holidays import get_next_trade_dates
 from marten.utils.worker import num_workers
 
@@ -280,7 +280,7 @@ def impute(df, random_seed, client=None):
     return df
 
 def _optimize_torch_threads():
-    n_cores = float(psutil.cpu_count()) * 0.8
+    n_cores = float(psutil.cpu_count()) * 0.9
     # n_cores = float(psutil.cpu_count(logical=False))
     n_workers = float(num_workers())
     torch.set_num_threads(max(1, int(n_cores / n_workers)))
@@ -312,6 +312,12 @@ class SOFTSPredictor:
         train, val, _ = _prep_df(
             df, validate, model_config["seq_len"], model_config["pred_len"], random_seed
         )
+
+        if getattr(args, "log_train_args", False):
+            log_train_args(
+                df, train, val, model_config, random_seed, validate, save_model_file
+            )
+
         setting = os.path.join(model_id, str(uuid.uuid4()))
 
         def _train(config):

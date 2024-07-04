@@ -1,4 +1,5 @@
 import torch
+from dask.distributed import get_worker
 from marten.utils.logger import get_logger
 
 
@@ -18,3 +19,20 @@ def log_retry(retry_state):
         get_logger().warning(
             f"Retrying, attempt {retry_state.attempt_number} after exception: {exception}"
         )
+
+
+def log_train_args(df, *args, **kwargs):
+    worker = get_worker()
+    logger = worker.logger
+    logger.info(
+        (
+            "Model training arguments:\n"
+            "Dataframe %s:\n%s\n"
+            "Positional arguments:%s\n"
+            "Keyword arguments:%s"
+        ),
+        df.shape,
+        df.describe().to_string(),
+        args,
+        kwargs,
+    )
