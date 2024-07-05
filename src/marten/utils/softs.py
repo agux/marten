@@ -254,7 +254,7 @@ def impute(df, random_seed, client=None):
     df_na = df.iloc[:, 1:].isna()
 
     if not df_na.any().any():
-        return df
+        return df, None
 
     na_counts = df_na.sum()
     na_cols = na_counts[na_counts > 0].index.tolist()
