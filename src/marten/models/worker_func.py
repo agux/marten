@@ -227,11 +227,12 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn):
     """
     impute_df.insert(0, "symbol", cov_symbol)
     impute_df.rename(
-        columns={"ds": "date", f"{feature}::{cov_table}::{cov_symbol}": f"{feature}"},
+        columns={"ds": "date", impute_df.columns[1]: f"{feature}"},
         inplace=True,
     )
     print(impute_df)
     print(impute_df.describe())
+    print(impute_df.dtypes)
     # Convert numpy.datetime64 to datetime.datetime
     impute_df["date"] = impute_df["date"].apply(
         lambda x: x if isinstance(x, pd.Timestamp) else pd.Timestamp(x).to_pydatetime()

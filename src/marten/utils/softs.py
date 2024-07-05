@@ -259,7 +259,7 @@ def impute(df, random_seed, client=None):
 
     na_counts = df_na.sum()
     na_cols = na_counts[na_counts > 0].index.tolist()
-    na_row_indices = df[df.iloc[:, 1:].any(axis=1)].index
+    na_row_indices = df[df.iloc[:, 1:].isna().any(axis=1)].index
 
     def _func(client):
         futures = []
