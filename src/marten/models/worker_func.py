@@ -227,7 +227,7 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn):
     """
     impute_df.insert(0, "symbol", cov_symbol)
     impute_df.rename(
-        columns={"ds": "date", impute_df.columns[1]: f"{feature}"},
+        columns={"ds": "date", impute_df.columns[-1]: f"{feature}"},
         inplace=True,
     )
     print(impute_df)
