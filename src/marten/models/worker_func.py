@@ -230,9 +230,10 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn):
         columns={"ds": "date", impute_df.columns[-1]: f"{feature}"},
         inplace=True,
     )
-    print(impute_df)
-    print(impute_df.describe())
-    print(impute_df.dtypes)
+    logger = get_logger()
+    logger.info(impute_df)
+    logger.info(impute_df.describe())
+    logger.info(impute_df.dtypes)
     # Convert numpy.datetime64 to datetime.datetime
     impute_df["date"] = impute_df["date"].apply(
         lambda x: x if isinstance(x, pd.Timestamp) else pd.Timestamp(x).to_pydatetime()
