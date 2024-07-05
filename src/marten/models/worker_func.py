@@ -231,6 +231,7 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn):
         inplace=True,
     )
     print(impute_df)
+    print(impute_df.describe())
     # Convert numpy.datetime64 to datetime.datetime
     impute_df["date"] = impute_df["date"].apply(
         lambda x: x if isinstance(x, pd.Timestamp) else pd.Timestamp(x).to_pydatetime()
