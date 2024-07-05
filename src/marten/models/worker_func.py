@@ -218,6 +218,7 @@ def fit_with_covar(
 
 
 def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn):
+    cov_table = cov_table[:-5] if cov_table.endswith("_view") else cov_table
     sql = f"""
         INSERT INTO {cov_table}_impute (symbol, date, {feature}) 
         VALUES %s 
