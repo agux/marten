@@ -1170,7 +1170,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
 
     # Interbank interest rates
     features = ["change_rate"]
-    cov_table = "interbank_rate_hist"
+    cov_table = "interbank_rate_hist_view"
     _covar_metric(
         anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
     )

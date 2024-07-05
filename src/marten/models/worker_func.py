@@ -13,6 +13,7 @@ os.environ["OPENBLAS_NUM_THREADS"] = f"{OPENBLAS_NUM_THREADS}"
 import numpy as np
 from datetime import datetime, timedelta
 from sqlalchemy import text
+from psycopg2.extras import execute_values
 from neuralprophet import NeuralProphet, set_random_seed, set_log_level
 from neuralprophet.hdays_utils import get_country_holidays
 from dask.distributed import get_worker, worker_client
@@ -27,7 +28,7 @@ from marten.utils.worker import await_futures
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
 from marten.utils.pl import GlobalProgressBar
-from marten.utils.softs import SOFTSPredictor, baseline_config
+from marten.utils.softs import SOFTSPredictor, baseline_config, impute
 from marten.utils.neuralprophet import (
     select_topk_features,
     select_device,
@@ -142,13 +143,18 @@ def fit_with_covar(
             )
             return None
 
-        covar_col = feature if feature in merged_df.columns else f"{feature}_{cov_symbol}"
+        covar_col = (
+            feature if feature in merged_df.columns else f"{feature}_{cov_symbol}"
+        )
         nan_count = int(merged_df[covar_col].isna().sum())
         if nan_count >= len(merged_df) * 0.5:
-            logger.info("too much missing values in %s: %s, skipping", covar_col, nan_count)
+            logger.info(
+                "too much missing values in %s: %s, skipping", covar_col, nan_count
+            )
             return None
 
         start_time = time.time()
+        impute_df = None
         match args.model:
             case "NeuralProphet":
                 region = (
@@ -174,12 +180,12 @@ def fit_with_covar(
                 config = baseline_config.copy()
                 config["pred_len"] = args.future_steps
                 config["train_epochs"] = args.epochs
-                config["use_gpu"] = (
-                    accelerator == True or accelerator == "gpu"
-                )
-                _, metrics = SOFTSPredictor.train(
+                config["use_gpu"] = accelerator == True or accelerator == "gpu"
+                merged_df, impute_df = impute(merged_df, random_seed)
+                m, metrics = SOFTSPredictor.train(
                     merged_df, config, model_id, random_seed, True
                 )
+                m.cleanup()
             case _:
                 raise NotImplementedError
 
@@ -202,6 +208,8 @@ def fit_with_covar(
                 ts_cutoff_date,
                 conn,
             )
+            if impute_df is not None:
+                save_impute_data(impute_df, cov_table, cov_symbol, feature, conn)
         return metrics
 
     try:
@@ -209,6 +217,22 @@ def fit_with_covar(
     except Exception as e:
         logger.error(traceback.format_exc())
         raise e
+
+
+def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn):
+    sql = f"""
+        INSERT INTO {cov_table}_impute (symbol, date, {feature}) 
+        VALUES %s 
+        ON CONFLICT (symbol, date) 
+        DO UPDATE SET 
+            {feature} = EXCLUDED.{feature}
+    """
+    impute_df.insert(0, "symbol", cov_symbol)
+    impute_df.rename(
+        columns={"ds": "date", f"{feature}::{cov_table}::{cov_symbol}": f"{feature}"},
+        inplace=True,
+    )
+    execute_values(conn, sql, list(impute_df.to_records(index=False)))
 
 
 def save_covar_metrics(
@@ -323,9 +347,11 @@ def train(
         case "SOFTS":
             kwargs["pred_len"] = args.future_steps
             kwargs["train_epochs"] = epochs
-            kwargs["use_gpu"] = kwargs["accelerator"] == True or kwargs["accelerator"] == "gpu"
+            kwargs["use_gpu"] = (
+                kwargs["accelerator"] == True or kwargs["accelerator"] == "gpu"
+            )
             return SOFTSPredictor.train(
-                df=df, 
+                df=df,
                 config=kwargs,
                 model_id="generic_model",
                 random_seed=random_seed,
@@ -333,6 +359,7 @@ def train(
             )
         case _:
             raise NotImplementedError
+
 
 def reg_search_params(params):
     if "ar_reg" in params:
@@ -482,7 +509,8 @@ def log_metrics_for_hyper_params(
             # 'use_norm': True,
             # system settings
             params["use_gpu"] = accelerator == True or accelerator == "gpu"
-            _, last_metric = SOFTSPredictor.train(df, params, hpid, random_seed, True)
+            m, last_metric = SOFTSPredictor.train(df, params, hpid, random_seed, True)
+            m.cleanup()
         case _:
             raise NotImplementedError
 
@@ -967,11 +995,13 @@ def trim_forecasts_by_dates(forecast):
 
     return forecast
 
+
 def distance(forecast):
     forecast_nona = forecast.dropna(subset=["yhat_n", "y"])
-    mean_diff = (np.sqrt((forecast_nona["yhat_n"] - forecast_nona["y"])**2)).mean()
-    std_diff = (np.sqrt((forecast_nona["yhat_n"] - forecast_nona["y"])**2)).std()
+    mean_diff = (np.sqrt((forecast_nona["yhat_n"] - forecast_nona["y"]) ** 2)).mean()
+    std_diff = (np.sqrt((forecast_nona["yhat_n"] - forecast_nona["y"]) ** 2)).std()
     return mean_diff, std_diff
+
 
 def save_forecast_snapshot(
     alchemyEngine,
@@ -995,7 +1025,11 @@ def save_forecast_snapshot(
 ):
     mean_diff, std_diff = distance(forecast)
     forecast = trim_forecasts_by_dates(forecast)
-    avg_yhat = forecast[forecast["ds"] > datetime.now()]["yhat_n"].mean()
+    future_df = forecast[forecast["ds"] > datetime.now()][["ds", "yhat_n"]].copy()
+    avg_yhat = future_df["yhat_n"].mean()
+    future_df["plus_one"] = future_df["yhat_n"] + 1.0
+    future_df["accumulated_returns"] = future_df["plus_one"].cumprod()
+    cum_returns = future_df["accumulated_returns"].iloc[-1] - 1.0
 
     with alchemyEngine.begin() as conn:
         result = conn.execute(
@@ -1007,13 +1041,14 @@ def save_forecast_snapshot(
                     (
                         model,symbol,hyper_params,covar_set_id,mae_val,rmse_val,loss_val,mae,rmse,loss,
                         predict_diff_mean,predict_diff_stddev,epochs,proc_time,mae_final,rmse_final,loss_final,
-                        region,random_seed,future_steps,n_covars,cutoff_date,group_id,hpid,avg_loss,covar,avg_yhat
+                        region,random_seed,future_steps,n_covars,cutoff_date,group_id,hpid,avg_loss,covar,
+                        avg_yhat,cum_returns
                     )
                 values(
                     :model,:symbol,:hyper_params,:covar_set_id,:mae_val,:rmse_val,:loss_val,
                     :mae,:rmse,:loss,:predict_diff_mean,:predict_diff_stddev,:epochs,:proc_time,
                     :mae_final,:rmse_final,:loss_final,:region,:random_seed,:future_steps,:n_covars,
-                    :cutoff_date,:group_id,:hpid,:avg_loss,:covar,:avg_yhat
+                    :cutoff_date,:group_id,:hpid,:avg_loss,:covar,:avg_yhat,:cum_returns
                 ) RETURNING id
                 """
             ),
@@ -1046,7 +1081,8 @@ def save_forecast_snapshot(
                 "hpid": hpid,
                 "avg_loss": avg_loss,
                 "covar": covar,
-                "avg_yhat":avg_yhat,
+                "avg_yhat": avg_yhat,
+                "cum_returns": cum_returns,
             },
         )
         snapshot_id = result.fetchone()[0]
@@ -1054,7 +1090,9 @@ def save_forecast_snapshot(
         ## save to forecast_params table
         match model:
             case "NeuralProphet":
-                forecast_params = forecast[["ds", "trend", "season_yearly", "yhat_n"]].copy()
+                forecast_params = forecast[
+                    ["ds", "trend", "season_yearly", "yhat_n"]
+                ].copy()
             case "SOFTS":
                 forecast_params = forecast[["ds", "yhat_n"]].copy()
             case _:
@@ -1098,6 +1136,7 @@ def train_predict(
             forecast = NPPredictor.predict(m, df, random_seed, future_steps)
         case "SOFTS":
             forecast = SOFTSPredictor.predict(m, df, country)
+            m.cleanup()
         case _:
             raise NotImplementedError
 
@@ -1133,7 +1172,9 @@ def measure_needed_mem(df, hp):
     return dim * al_dim * lrl_dim / 10.5
 
 
-def forecast(model, symbol, df, ranked_features, hps_metric, region, cutoff_date, group_id):
+def forecast(
+    model, symbol, df, ranked_features, hps_metric, region, cutoff_date, group_id
+):
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
 
@@ -1239,9 +1280,7 @@ def forecast(model, symbol, df, ranked_features, hps_metric, region, cutoff_date
     metrics = results[0][1]
     forecast, metrics_final = results[1][0], results[1][1]
 
-    avg_loss = round(
-        (metrics["Loss_val"] + metrics_final["Loss"]) / 2.0, 5
-    )
+    avg_loss = round((metrics["Loss_val"] + metrics_final["Loss"]) / 2.0, 5)
 
     covar_columns = [col for col in new_df.columns if col not in ("ds", "y")]
     n_covars = len(covar_columns)
@@ -1670,12 +1709,20 @@ def _search_space(model, max_covars):
                 topk_covar=list(range(0, {max_covars}+1)),
             )"""
         case _:
-            raise NotImplementedError    
+            raise NotImplementedError
     return ss
 
 
 def fast_bayesopt(
-    client, alchemyEngine, logger, df, covar_set_id, hps_id, ranked_features, base_loss, args
+    client,
+    alchemyEngine,
+    logger,
+    df,
+    covar_set_id,
+    hps_id,
+    ranked_features,
+    base_loss,
+    args,
 ):
     # worker = get_worker()
     # logger = worker.logger
@@ -1709,7 +1756,8 @@ def fast_bayesopt(
 
     if args.model == "SOFTS":
         from marten.utils.softs import impute
-        df = impute(df, args.random_seed, client)
+
+        df, _ = impute(df, args.random_seed, client)
 
     # split large iterations into smaller runs to avoid OOM / memory leak
     for i in range(args.max_itr):
@@ -1764,6 +1812,7 @@ def _univariate_default_hp(client, anchor_df, args, hps_id):
     match args.model:
         case "NeuralProphet":
             from marten.models.hp_search import default_params
+
             params = default_params
             # default_params = default_params
         case "SOFTS":
@@ -1920,7 +1969,11 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     )
 
     # scale-in to preserve more memory for hps
-    worker_size = args.min_worker if args.model=="SOFTS" else max(args.min_worker, round(args.max_worker * 0.5))
+    worker_size = (
+        args.min_worker
+        if args.model == "SOFTS"
+        else max(args.min_worker, round(args.max_worker * 0.5))
+    )
     logger.info("Scaling down dask cluster to %s", worker_size)
     client.cluster.scale(worker_size)
 

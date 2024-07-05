@@ -105,7 +105,7 @@ def _fit_multivariate_impute_model(input, params):
 
 
 def _prep_df(_df, validate, seq_len, pred_len, random_seed):
-    df = impute(_df, random_seed)
+    df, _ = impute(_df, random_seed)
 
     if "ds" in df.columns:
         df.rename(columns={"ds": "date"}, inplace=True)
@@ -244,17 +244,21 @@ def _np_impute(df, random_seed):
         warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
         forecast = m.predict(df)
 
+    forecast = forecast[["ds", "yhat1"]]
     forecast.rename(columns={"yhat1": na_col}, inplace=True)
 
-    return forecast[["ds", na_col]]
+    return forecast
 
 
 def impute(df, random_seed, client=None):
     df_na = df.iloc[:, 1:].isna()
+
+    if not df_na.any().any():
+        return df
+
     na_counts = df_na.sum()
     na_cols = na_counts[na_counts > 0].index.tolist()
-    if len(na_cols) == 0:
-        return df
+    na_row_indices = df[df.iloc[:, 1:].any(axis=1)].index
 
     def _func(client):
         futures = []
@@ -277,7 +281,10 @@ def impute(df, random_seed, client=None):
     for na_col in na_cols:
         df[na_col].fillna(imputed_df[na_col], inplace=True)
 
-    return df
+    # Select imputed rows only
+    imputed_df = imputed_df.loc[na_row_indices].copy()
+
+    return df, imputed_df
 
 def _optimize_torch_threads():
     n_cores = float(psutil.cpu_count()) * 0.9
@@ -290,7 +297,7 @@ class SOFTSPredictor:
     @staticmethod
     def isBaseline(params):
         return params == baseline_config
-
+    
     @staticmethod
     def train(_df, config, model_id, random_seed, validate, save_model_file=False):
         df = _df.copy()
@@ -315,7 +322,7 @@ class SOFTSPredictor:
 
         if getattr(args, "log_train_args", False):
             log_train_args(
-                df, train, val, model_config, random_seed, validate, save_model_file
+                _df, train, val, model_config, random_seed, validate, save_model_file
             )
 
         setting = os.path.join(model_id, str(uuid.uuid4()))

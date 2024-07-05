@@ -10,3 +10,4 @@ notebooks/*.csv
 lightning_logs/
 .lr_find_*.ckpt
 *.egg-info/
+*.pth

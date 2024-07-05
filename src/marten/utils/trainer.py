@@ -27,12 +27,13 @@ def log_train_args(df, *args, **kwargs):
     logger.info(
         (
             "Model training arguments:\n"
-            "Dataframe %s:\n%s\n"
+            "Dataframe %s:\n%s\n%s\n"
             "Positional arguments:%s\n"
             "Keyword arguments:%s"
         ),
         df.shape,
         df.describe().to_string(),
+        df,
         args,
         kwargs,
     )
