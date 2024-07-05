@@ -225,7 +225,7 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn):
         DO UPDATE SET 
             {feature} = EXCLUDED.{feature}
     """
-    impute_df = impute_df["ds", impute_df.columns[-1]]
+    impute_df = impute_df[["ds", impute_df.columns[-1]]]
     impute_df.insert(0, "symbol", cov_symbol)
     impute_df.rename(
         columns={"ds": "date", impute_df.columns[-1]: f"{feature}"},
