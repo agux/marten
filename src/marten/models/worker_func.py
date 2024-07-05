@@ -230,6 +230,10 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn):
         columns={"ds": "date", f"{feature}::{cov_table}::{cov_symbol}": f"{feature}"},
         inplace=True,
     )
+    # Convert numpy.datetime64 to datetime.datetime
+    # impute_df["date"] = impute_df["date"].apply(
+    #     lambda x: x if isinstance(x, pd.Timestamp) else pd.Timestamp(x).to_pydatetime()
+    # )
     cursor = conn.connection.cursor()  # Create a cursor from the connection
     execute_values(cursor, sql, list(impute_df.to_records(index=False)))
     # conn.commit()  # Commit the transaction
