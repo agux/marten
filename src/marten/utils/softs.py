@@ -246,7 +246,7 @@ def _np_impute(df, random_seed):
 
     forecast = forecast[["ds", "yhat1"]]
     forecast["ds"] = forecast["ds"].dt.date
-    # forecast["ds"] = pd.to_datetime(forecast["ds"])
+    forecast["yhat1"] = forecast["yhat1"].astype(float)
     forecast.rename(columns={"yhat1": na_col}, inplace=True)
 
     return forecast

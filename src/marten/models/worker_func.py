@@ -231,12 +231,6 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn):
         columns={"ds": "date", impute_df.columns[-1]: f"{feature}"},
         inplace=True,
     )
-    logger = get_logger()
-    logger.error(impute_df)
-    logger.error(impute_df.describe())
-    logger.error(impute_df.dtypes)
-    # Convert numpy.datetime64 to datetime.datetime
-    # impute_df["date"] = impute_df["date"].dt.date
     cursor = conn.connection.cursor()  # Create a cursor from the connection
     execute_values(cursor, sql, list(impute_df.to_records(index=False)))
     # conn.commit()  # Commit the transaction
