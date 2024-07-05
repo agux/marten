@@ -14,7 +14,6 @@ import numpy as np
 from datetime import datetime, timedelta
 from sqlalchemy import text
 from psycopg2.extras import execute_values
-from neuralprophet import NeuralProphet, set_random_seed, set_log_level
 from neuralprophet.hdays_utils import get_country_holidays
 from dask.distributed import get_worker, worker_client
 from types import SimpleNamespace
@@ -27,7 +26,6 @@ from tenacity import (
 from marten.utils.worker import await_futures
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
-from marten.utils.pl import GlobalProgressBar
 from marten.utils.softs import SOFTSPredictor, baseline_config, impute
 from marten.utils.neuralprophet import (
     select_topk_features,
@@ -232,7 +230,10 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn):
         columns={"ds": "date", f"{feature}::{cov_table}::{cov_symbol}": f"{feature}"},
         inplace=True,
     )
-    execute_values(conn, sql, list(impute_df.to_records(index=False)))
+    cursor = conn.cursor()  # Create a cursor from the connection
+    execute_values(cursor, sql, list(impute_df.to_records(index=False)))
+    conn.commit()  # Commit the transaction
+    cursor.close()  # Close the cursor
 
 
 def save_covar_metrics(
