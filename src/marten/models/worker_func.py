@@ -206,8 +206,9 @@ def fit_with_covar(
                 ts_cutoff_date,
                 conn,
             )
-            if impute_df is not None:
-                save_impute_data(impute_df, cov_table, cov_symbol, feature, conn)
+        if impute_df is not None:
+            with alchemyEngine.begin() as conn:
+                save_impute_data(impute_df, cov_table, cov_symbol, feature, conn, logger)
         return metrics
 
     try:
@@ -217,8 +218,9 @@ def fit_with_covar(
         raise e
 
 
-def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn):
+def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn, logger):
     cov_table = cov_table[:-5] if cov_table.endswith("_view") else cov_table
+    last_col = impute_df.columns[-1]
     sql = f"""
         INSERT INTO {cov_table}_impute (symbol, date, {feature}) 
         VALUES %s 
@@ -226,14 +228,17 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn):
         DO UPDATE SET 
             {feature} = EXCLUDED.{feature}
     """
-    impute_df = impute_df[["ds", impute_df.columns[-1]]]
+    impute_df = impute_df[["ds", last_col]]
     impute_df.insert(0, "symbol", cov_symbol)
     impute_df.rename(
-        columns={"ds": "date", impute_df.columns[-1]: f"{feature}"},
+        columns={"ds": "date", last_col: f"{feature}"},
         inplace=True,
     )
     cursor = conn.connection.cursor()  # Create a cursor from the connection
-    execute_values(cursor, sql, list(impute_df.to_records(index=False)))
+    try:
+        execute_values(cursor, sql, list(impute_df.to_records(index=False)))
+    except Exception as e:
+        logger.warn("%s imputation not persisted:%s\n%s", last_col, str(e), impute_df)
     # conn.commit()  # Commit the transaction
     # cursor.close()  # Close the cursor
 

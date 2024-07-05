@@ -140,7 +140,9 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None):
     # re-order the date in ascending order
     query = f"""
         with cte as ({query})
-        select * from cte order by ds
+        select * from cte 
+        where y is not null
+        order by ds
     """
 
     df = pd.read_sql(
