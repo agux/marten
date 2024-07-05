@@ -230,10 +230,10 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn):
         columns={"ds": "date", f"{feature}::{cov_table}::{cov_symbol}": f"{feature}"},
         inplace=True,
     )
-    cursor = conn.cursor()  # Create a cursor from the connection
+    cursor = conn.connection.cursor()  # Create a cursor from the connection
     execute_values(cursor, sql, list(impute_df.to_records(index=False)))
-    conn.commit()  # Commit the transaction
-    cursor.close()  # Close the cursor
+    # conn.commit()  # Commit the transaction
+    # cursor.close()  # Close the cursor
 
 
 def save_covar_metrics(
