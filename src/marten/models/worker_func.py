@@ -225,19 +225,18 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn):
         DO UPDATE SET 
             {feature} = EXCLUDED.{feature}
     """
+    impute_df = impute_df["ds", impute_df.columns[-1]]
     impute_df.insert(0, "symbol", cov_symbol)
     impute_df.rename(
         columns={"ds": "date", impute_df.columns[-1]: f"{feature}"},
         inplace=True,
     )
     logger = get_logger()
-    logger.info(impute_df)
-    logger.info(impute_df.describe())
-    logger.info(impute_df.dtypes)
+    logger.error(impute_df)
+    logger.error(impute_df.describe())
+    logger.error(impute_df.dtypes)
     # Convert numpy.datetime64 to datetime.datetime
-    impute_df["date"] = impute_df["date"].apply(
-        lambda x: x if isinstance(x, pd.Timestamp) else pd.Timestamp(x).to_pydatetime()
-    )
+    # impute_df["date"] = impute_df["date"].dt.date
     cursor = conn.connection.cursor()  # Create a cursor from the connection
     execute_values(cursor, sql, list(impute_df.to_records(index=False)))
     # conn.commit()  # Commit the transaction
