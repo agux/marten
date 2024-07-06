@@ -45,6 +45,7 @@ default_config = MappingProxyType(
         "save_model": True,
         "num_workers": 0,
         "predict_all": True,
+        "mixed_precision": True,
     }
 )
 
@@ -215,7 +216,7 @@ def _np_impute(df, random_seed):
 
     np_random_seed(random_seed)
     set_log_level("ERROR")
-    _optimize_torch_threads()
+    _optimize_torch()
 
     try:
         m = NeuralProphet(
@@ -288,12 +289,15 @@ def impute(df, random_seed, client=None):
 
     return df, imputed_df
 
-def _optimize_torch_threads():
+def _optimize_torch():
     n_cores = float(psutil.cpu_count())
     # n_cores = float(psutil.cpu_count()) * 0.9
     # n_cores = float(psutil.cpu_count(logical=False))
     n_workers = max(float(num_workers()), 1.)
     torch.set_num_threads(max(1, int(n_cores / n_workers)))
+
+    # Enable cuDNN auto-tuner
+    torch.backends.cudnn.benchmark = True
 
 class SOFTSPredictor:
 
@@ -317,7 +321,7 @@ class SOFTSPredictor:
             model_config["d_ff"] = model_config["d_model_d_ff"]
             model_config.pop("d_model_d_ff")
 
-        _optimize_torch_threads()
+        _optimize_torch()
 
         train, val, _ = _prep_df(
             df, validate, model_config["seq_len"], model_config["pred_len"], random_seed
