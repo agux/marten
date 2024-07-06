@@ -64,6 +64,7 @@ baseline_config = MappingProxyType(
         "dropout": 0.0,
         "activation": "gelu",
         "use_norm": False,
+        "optimizer": "Adam",
     }
 )
 
