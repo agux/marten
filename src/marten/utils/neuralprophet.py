@@ -16,7 +16,7 @@ from dask.distributed import get_worker
 from neuralprophet import NeuralProphet, set_random_seed, set_log_level
 
 from marten.utils.logger import get_logger
-from marten.utils.trainer import should_retry, log_retry, log_train_args
+from marten.utils.trainer import should_retry, log_retry, log_train_args, select_device
 
 
 LOSS_CAP = 99.99
@@ -36,15 +36,6 @@ def select_topk_features(df, ranked_features, k):
     top_k_features = ranked_features[:int(k)]
     columns_to_keep = ['ds', 'y'] + top_k_features
     return df[columns_to_keep]
-
-def select_device(accelerator, util_threshold=80, vram_threshold=80):
-    return (
-        "gpu"
-        if accelerator
-        and torch.cuda.utilization() < util_threshold
-        and torch.cuda.memory_usage() < vram_threshold
-        else None
-    )
 
 def set_yhat_n(df):
     # Extract column names

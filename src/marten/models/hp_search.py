@@ -15,7 +15,8 @@ from dotenv import load_dotenv
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
 from marten.utils.worker import await_futures, init_client
-from marten.utils.neuralprophet import select_device, select_topk_features
+from marten.utils.neuralprophet import select_topk_features
+from marten.utils.trainer import select_device
 from marten.models.worker_func import fit_with_covar, log_metrics_for_hyper_params, validate_hyperparams
 
 from sqlalchemy import text

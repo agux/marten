@@ -37,3 +37,13 @@ def log_train_args(df, *args, **kwargs):
         args,
         kwargs,
     )
+
+
+def select_device(accelerator, util_threshold=80, vram_threshold=80):
+    return (
+        "gpu"
+        if accelerator
+        and torch.cuda.utilization() < util_threshold
+        and torch.cuda.memory_usage() < vram_threshold
+        else None
+    )

@@ -26,10 +26,10 @@ from tenacity import (
 from marten.utils.worker import await_futures
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
+from marten.utils.trainer import select_device
 from marten.utils.softs import SOFTSPredictor, baseline_config, impute
 from marten.utils.neuralprophet import (
     select_topk_features,
-    select_device,
     NPPredictor,
 )
 
@@ -238,7 +238,7 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn, logger):
     try:
         execute_values(cursor, sql, list(impute_df.to_records(index=False)))
     except Exception as e:
-        logger.warn("%s imputation not persisted:%s\n%s", last_col, str(e), impute_df)
+        logger.warning("%s imputation not persisted:%s\n%s", last_col, str(e), impute_df)
     # conn.commit()  # Commit the transaction
     # cursor.close()  # Close the cursor
 
