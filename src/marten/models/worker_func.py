@@ -208,7 +208,9 @@ def fit_with_covar(
             )
         if impute_df is not None:
             with alchemyEngine.begin() as conn:
-                save_impute_data(impute_df, cov_table, cov_symbol, feature, conn, logger)
+                save_impute_data(
+                    impute_df, cov_table, cov_symbol, feature, conn, logger
+                )
         return metrics
 
     try:
@@ -238,7 +240,9 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn, logger):
     try:
         execute_values(cursor, sql, list(impute_df.to_records(index=False)))
     except Exception as e:
-        logger.warning("%s imputation not persisted:%s\n%s", last_col, str(e), impute_df)
+        logger.warning(
+            "%s imputation not persisted:%s\n%s", last_col, str(e), impute_df
+        )
     # conn.commit()  # Commit the transaction
     # cursor.close()  # Close the cursor
 
@@ -1769,7 +1773,13 @@ def fast_bayesopt(
 
     # split large iterations into smaller runs to avoid OOM / memory leak
     for i in range(args.max_itr):
-        logger.info("running bayesopt mini-iteration %s/%s", i + 1, args.max_itr)
+        logger.info(
+            "running bayesopt mini-iteration %s/%s batch size: %s runs: %s",
+            i + 1,
+            args.max_itr,
+            n_jobs,
+            args.mini_itr,
+        )
         min_loss = _bayesopt_run(
             df,
             n_jobs,

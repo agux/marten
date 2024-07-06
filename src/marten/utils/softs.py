@@ -289,7 +289,8 @@ def impute(df, random_seed, client=None):
     return df, imputed_df
 
 def _optimize_torch_threads():
-    n_cores = float(psutil.cpu_count()) * 0.9
+    n_cores = float(psutil.cpu_count())
+    # n_cores = float(psutil.cpu_count()) * 0.9
     # n_cores = float(psutil.cpu_count(logical=False))
     n_workers = max(float(num_workers()), 1.)
     torch.set_num_threads(max(1, int(n_cores / n_workers)))
