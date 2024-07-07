@@ -579,6 +579,7 @@ def update_metrics_table(
         device_info["machine"] = last_metric["machine"]
     if "device" in last_metric:
         device_info["device"] = last_metric["device"]
+    device_info = json.dumps(device_info, sort_keys=True)
 
     def action():
         with alchemyEngine.begin() as conn:

@@ -4,6 +4,7 @@ import os
 # os.environ["OPENBLAS_NUM_THREADS"] = f"{OPENBLAS_NUM_THREADS}"
 
 import time
+import random
 import datetime
 import argparse
 import json
@@ -14,7 +15,7 @@ from dotenv import load_dotenv
 
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
-from marten.utils.worker import await_futures, init_client
+from marten.utils.worker import await_futures, init_client, num_workers
 from marten.utils.neuralprophet import select_topk_features
 from marten.utils.trainer import select_device
 from marten.models.worker_func import fit_with_covar, log_metrics_for_hyper_params, validate_hyperparams
@@ -741,7 +742,8 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
     def objective(params_batch):
         jobs = []
         t1 = time.time()
-        for params in params_batch:
+        nworker = num_workers(False)
+        for i, params in enumerate(params_batch):
             new_df = select_topk_features(df, ranked_features, params["topk_covar"]) if "topk_covar" in params else df
             jobs.append(client.submit(
                 validate_hyperparams,
@@ -752,6 +754,9 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
                 hps_id,
                 params,
             ))
+            if i < nworker:
+                interval = random.randint(1000, 3000) / 1000.
+                time.sleep(interval)
         results = client.gather(jobs, errors="skip")
         elapsed = round(time.time() - t1, 3)
         # logger.info("gathered results type %s, len: %s", type(results), len(results))
