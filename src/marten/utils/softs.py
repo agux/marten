@@ -291,10 +291,21 @@ def impute(df, random_seed, client=None):
 
     return df, imputed_df
 
+
 def _optimize_torch():
-    cpu_cap = (100. - psutil.cpu_percent())/100.
+    cpu_cap = (100.0 - psutil.cpu_percent(0.1)) / 100.0
     n_cores = float(psutil.cpu_count())
-    torch.set_num_threads(max(1, int(n_cores*cpu_cap*0.9)))
+    n_threads = max(1, int(n_cores * cpu_cap * 0.85))
+    torch.set_num_threads(
+        n_threads
+    )  # Sets the number of threads used for intraop parallelism on CPU.
+    get_logger().info(
+        "machine: %s, cpu_cap: %s, n_cores: %s optimizing torch CPU thread: %s",
+        socket.gethostname(),
+        cpu_cap,
+        n_cores,
+        n_threads,
+    )
     # n_cores = float(psutil.cpu_count()) * 0.9
     # n_cores = float(psutil.cpu_count(logical=False))
     # n_workers = max(float(num_workers()), 1.)
@@ -302,6 +313,7 @@ def _optimize_torch():
 
     # Enable cuDNN auto-tuner
     # torch.backends.cudnn.benchmark = True
+
 
 class SOFTSPredictor:
 

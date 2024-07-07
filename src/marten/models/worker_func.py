@@ -1723,7 +1723,7 @@ def _search_space(model, max_covars):
                 learning_rate=loguniform(0.0001, 0.002),
                 lradj=["type1", "type2", "constant", "cosine"],
                 patience=range(3, 10+1),
-                batch_size=[2**w for w in range(4, 9+1)],
+                batch_size=[2**w for w in range(5, 9+1)],
                 dropout=uniform(0, 0.5),
                 activation=["relu","gelu","relu6","elu","selu","celu","leaky_relu","prelu","rrelu","glu"],
                 use_norm=[True, False],
