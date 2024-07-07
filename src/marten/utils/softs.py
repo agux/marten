@@ -302,8 +302,8 @@ def _optimize_torch():
     get_logger().info(
         "machine: %s, cpu_cap: %s, n_cores: %s optimizing torch CPU thread: %s",
         socket.gethostname(),
-        cpu_cap,
-        n_cores,
+        round(cpu_cap,3),
+        int(n_cores),
         n_threads,
     )
     # n_cores = float(psutil.cpu_count()) * 0.9
