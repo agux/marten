@@ -3,6 +3,7 @@ import uuid
 import psutil
 import shutil
 import random
+import socket
 import traceback
 import warnings
 from types import SimpleNamespace, MappingProxyType
@@ -291,21 +292,23 @@ def impute(df, random_seed, client=None):
     return df, imputed_df
 
 def _optimize_torch():
+    cpu_cap = 100. - psutil.cpu_percent()
     n_cores = float(psutil.cpu_count())
+    torch.set_num_threads(max(1, int(n_cores*cpu_cap*0.9)))
     # n_cores = float(psutil.cpu_count()) * 0.9
     # n_cores = float(psutil.cpu_count(logical=False))
-    n_workers = max(float(num_workers()), 1.)
-    torch.set_num_threads(max(1, int(n_cores / n_workers)))
+    # n_workers = max(float(num_workers()), 1.)
+    # torch.set_num_threads(max(1, int(n_cores / n_workers)))
 
     # Enable cuDNN auto-tuner
-    torch.backends.cudnn.benchmark = True
+    # torch.backends.cudnn.benchmark = True
 
 class SOFTSPredictor:
 
     @staticmethod
     def isBaseline(params):
         return params == baseline_config
-    
+
     @staticmethod
     def train(_df, config, model_id, random_seed, validate, save_model_file=False):
         df = _df.copy()
@@ -348,26 +351,26 @@ class SOFTSPredictor:
                 shutil.rmtree(os.path.join(config["checkpoints"], setting))
             return Exp
 
+        device = "CPU"
         try:
-            if not use_gpu(
+            if use_gpu(
                 model_config["use_gpu"],
                 getattr(args, "gpu_util_threshold", None),
                 getattr(args, "gpu_ram_threshold", None),
             ):
+                for attempt in Retrying(
+                    stop=stop_after_attempt(2),
+                    wait=wait_exponential(multiplier=1, max=10),
+                    retry=retry_if_exception(should_retry),
+                    before_sleep=log_retry,
+                ):
+                    with attempt:
+                        m = _train(model_config)
+                        device = "GPU:0"
+            else:
                 new_config = model_config.copy()
                 new_config["use_gpu"] = False
                 m = _train(new_config)
-                return m, m.metrics
-
-            for attempt in Retrying(
-                stop=stop_after_attempt(2),
-                wait=wait_exponential(multiplier=1, max=10),
-                retry=retry_if_exception(should_retry),
-                before_sleep=log_retry,
-            ):
-                with attempt:
-                    m = _train(model_config)
-                    return m, m.metrics
         except RetryError as e:
             new_config = model_config.copy()
             new_config["use_gpu"] = False
@@ -378,7 +381,11 @@ class SOFTSPredictor:
             else:
                 get_logger().warning(f"falling back to CPU due to RetryError: {str(e)}")
             m = _train(new_config)
-            return m, m.metrics
+
+        metrics = m.metrics
+        metrics["device"] = device
+        metrics["machine"] = socket.gethostname()
+        return m, metrics
 
     @staticmethod
     def predict(model, df, region):

@@ -573,6 +573,13 @@ def update_metrics_table(
     tag,
     hps_id,
 ):
+
+    device_info = {}
+    if "machine" in last_metric:
+        device_info["machine"] = last_metric["machine"]
+    if "device" in last_metric:
+        device_info["device"] = last_metric["device"]
+
     def action():
         with alchemyEngine.begin() as conn:
             conn.execute(
@@ -589,7 +596,8 @@ def update_metrics_table(
                         fit_time = :fit_time,
                         epochs = :epochs,
                         tag = :tag,
-                        sub_topk = :sub_topk
+                        sub_topk = :sub_topk,
+                        device_info = :device_info
                     WHERE
                         model = :model
                         AND anchor_symbol = :anchor_symbol
@@ -616,6 +624,7 @@ def update_metrics_table(
                     "epochs": epochs,
                     "sub_topk": topk_covar,
                     "hps_id": hps_id,
+                    "device_info": device_info,
                 },
             )
 

@@ -1,7 +1,7 @@
-import torch
 import re
 import warnings
 import traceback
+import socket
 import math
 import pandas as pd
 
@@ -198,6 +198,9 @@ class NPPredictor:
             )
             return m, metrics
 
+        device = "CPU"
+        m = None
+        metrics = None
         with warnings.catch_warnings():
             # suppress swarming warning:
             # WARNING - (py.warnings._showwarnmsg) -
@@ -217,35 +220,40 @@ class NPPredictor:
                     is None
                     and not wait_gpu
                 ):
-                    return _train_with_cpu()
-
-                for attempt in Retrying(
-                    stop=stop_after_attempt(5 if wait_gpu else 1),
-                    wait=wait_exponential(multiplier=1, max=10),
-                    retry=retry_if_exception(should_retry),
-                    before_sleep=log_retry,
-                ):
-                    with attempt:
-                        m, metrics = NPPredictor._try_fitting(
-                            df,
-                            epochs,
-                            random_seed,
-                            early_stopping,
-                            country,
-                            validate,
-                            **kwargs,
-                        )
-                        return m, metrics
+                    m, metrics = _train_with_cpu()
+                else:
+                    for attempt in Retrying(
+                        stop=stop_after_attempt(5 if wait_gpu else 1),
+                        wait=wait_exponential(multiplier=1, max=10),
+                        retry=retry_if_exception(should_retry),
+                        before_sleep=log_retry,
+                    ):
+                        with attempt:
+                            m, metrics = NPPredictor._try_fitting(
+                                df,
+                                epochs,
+                                random_seed,
+                                early_stopping,
+                                country,
+                                validate,
+                                **kwargs,
+                            )
+                            device = "GPU:0"
             except RetryError as e:
                 full_traceback = traceback.format_exc()
                 if "OutOfMemoryError" in str(e) or "out of memory" in full_traceback:
                     # final attempt to train on CPU
                     # remove `accelerator` parameter from **kwargs
                     get_logger().warning("falling back to CPU due to OutOfMemoryError")
-                    return _train_with_cpu()
+                    m, metrics =  _train_with_cpu()
                 else:
                     get_logger().warning(f"falling back to CPU due to RetryError: {str(e)}")
-                    return _train_with_cpu()
+                    m, metrics =  _train_with_cpu()
+
+        metrics["device"] = device
+        metrics["machine"] = socket.gethostname()
+
+        return m, metrics
 
     @staticmethod
     def predict(m, df, random_seed, future_steps):
