@@ -755,7 +755,7 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
                 params,
             ))
             if i < nworker:
-                interval = random.randint(1000, 3000) / 1000.
+                interval = random.randint(1000, 2000) / 1000.
                 time.sleep(interval)
         results = client.gather(jobs, errors="skip")
         elapsed = round(time.time() - t1, 3)

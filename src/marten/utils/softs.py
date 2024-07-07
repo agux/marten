@@ -292,7 +292,7 @@ def impute(df, random_seed, client=None):
     return df, imputed_df
 
 def _optimize_torch():
-    cpu_cap = 100. - psutil.cpu_percent()
+    cpu_cap = (100. - psutil.cpu_percent())/100.
     n_cores = float(psutil.cpu_count())
     torch.set_num_threads(max(1, int(n_cores*cpu_cap*0.9)))
     # n_cores = float(psutil.cpu_count()) * 0.9
