@@ -110,7 +110,7 @@ def wait_gpu(util_threshold=80, vram_threshold=80, stop_at=None):
     return (
         torch.cuda.utilization() >= util_threshold
         or torch.cuda.memory_usage() >= vram_threshold
-        or time.now() <= stop_at
+        or time.time() <= stop_at
     )
 
 
@@ -407,7 +407,7 @@ class SOFTSPredictor:
                     before_sleep=log_retry,
                 ):
                     with attempt:
-                        stop_at = time.now() + 60  # wait up to 60 seconds
+                        stop_at = time.time() + 60  # wait up to 60 seconds
                         while should_wait and wait_gpu(gpu_ut, gpu_rt, stop_at):
                             time.sleep(1)
                         m = _train(model_config)
