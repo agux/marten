@@ -1,4 +1,5 @@
 import os
+import time
 import uuid
 import psutil
 import shutil
@@ -75,14 +76,41 @@ def set_random_seed(seed):
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-
-def use_gpu(use_gpu, util_threshold=80, vram_threshold=80):
+def is_large_model(model_config, n_feat):
     return (
-        True
+        model_config["d_model"] >= 128
+        or model_config["d_core"] >= 128
+        or model_config["d_ff"] >= 128
+        or model_config["e_layers"] >= 8
+        or n_feat >= 128
+    )
+
+def use_gpu(model_config, n_feat, util_threshold=80, vram_threshold=80):
+    use_gpu = model_config["use_gpu"]
+    # larger models should wait for GPU
+    should_wait = (
+        is_large_model(model_config, n_feat)
         if use_gpu
-        and torch.cuda.utilization() < util_threshold
-        and torch.cuda.memory_usage() < vram_threshold
         else False
+    )
+    use_gpu = (
+        True
+        if should_wait
+        else (
+            use_gpu
+            and torch.cuda.utilization() < util_threshold
+            and torch.cuda.memory_usage() < vram_threshold
+        )
+    )
+    n_attempt = 7 if should_wait else 2
+    return use_gpu, should_wait, n_attempt
+
+
+def wait_gpu(util_threshold=80, vram_threshold=80, stop_at=None):
+    return (
+        torch.cuda.utilization() >= util_threshold
+        or torch.cuda.memory_usage() >= vram_threshold
+        or time.now() <= stop_at
     )
 
 
@@ -295,6 +323,8 @@ def impute(df, random_seed, client=None):
 def _optimize_torch():
     cpu_cap = (100.0 - psutil.cpu_percent(0.1)) / 100.0
     n_cores = float(psutil.cpu_count())
+    # n_workers = max(1.0, float(num_workers()))
+    # n_threads = min(int(n_cores * cpu_cap * 0.85), n_cores/n_workers)
     n_threads = max(1, int(n_cores * cpu_cap * 0.85))
     torch.set_num_threads(
         n_threads
@@ -302,14 +332,10 @@ def _optimize_torch():
     get_logger().info(
         "machine: %s, cpu_cap: %s, n_cores: %s optimizing torch CPU thread: %s",
         socket.gethostname(),
-        round(cpu_cap,3),
+        round(cpu_cap, 3),
         int(n_cores),
         n_threads,
     )
-    # n_cores = float(psutil.cpu_count()) * 0.9
-    # n_cores = float(psutil.cpu_count(logical=False))
-    # n_workers = max(float(num_workers()), 1.)
-    # torch.set_num_threads(max(1, int(n_cores / n_workers)))
 
     # Enable cuDNN auto-tuner
     # torch.backends.cudnn.benchmark = True
@@ -364,19 +390,26 @@ class SOFTSPredictor:
             return Exp
 
         device = "CPU"
+        gpu_ut = getattr(args, "gpu_util_threshold", None)
+        gpu_rt = getattr(args, "gpu_ram_threshold", None)
         try:
-            if use_gpu(
-                model_config["use_gpu"],
-                getattr(args, "gpu_util_threshold", None),
-                getattr(args, "gpu_ram_threshold", None),
-            ):
+            gpu, should_wait, n_attempt = use_gpu(
+                model_config,
+                len(df.columns),
+                gpu_ut,
+                gpu_rt,
+            )
+            if gpu:
                 for attempt in Retrying(
-                    stop=stop_after_attempt(2),
-                    wait=wait_exponential(multiplier=1, max=10),
+                    stop=stop_after_attempt(n_attempt),
+                    wait=wait_exponential(multiplier=1, max=15),
                     retry=retry_if_exception(should_retry),
                     before_sleep=log_retry,
                 ):
                     with attempt:
+                        stop_at = time.now() + 60  # wait up to 60 seconds
+                        while should_wait and wait_gpu(gpu_ut, gpu_rt, stop_at):
+                            time.sleep(1)
                         m = _train(model_config)
                         device = "GPU:0"
             else:

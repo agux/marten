@@ -17,6 +17,7 @@ from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
 from marten.utils.worker import await_futures, init_client, num_workers
 from marten.utils.neuralprophet import select_topk_features
+from marten.utils.softs import is_large_model
 from marten.utils.trainer import select_device
 from marten.models.worker_func import fit_with_covar, log_metrics_for_hyper_params, validate_hyperparams
 
@@ -736,6 +737,16 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
 
         return tuples if len(tuples) > 0 else None
 
+def power_demand(args, params):
+    match args.model:
+        case "NeuralProphet":
+            return 1
+        case "SOFTS":
+            return 2 if is_large_model(params, params["topk_covar"]) else 1
+        case _:
+            return 1
+
+
 def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args, iteration, domain_size, resume):
     global logger, client
     @scheduler.custom(n_jobs=n_jobs)
@@ -753,6 +764,7 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
                 covar_set_id,
                 hps_id,
                 params,
+                resources={"POWER": power_demand(args, params)},
             ))
             if i < nworker:
                 interval = random.randint(1000, 2000) / 1000.

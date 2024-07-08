@@ -2,9 +2,11 @@ import os
 import time
 import random
 import multiprocessing
+import torch
 import dask
 import dask.config
 from dask.distributed import WorkerPlugin, LocalCluster, Client, get_client
+
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
 from marten.utils.net import get_machine_ips
@@ -34,10 +36,25 @@ class LocalWorkerPlugin(WorkerPlugin):
         worker.logger = get_logger(self.logger_name, role="worker")
         worker.args = self.args
 
+def local_machine_power():
+    if not torch.cuda.is_available():
+        return 1
+    device_count = torch.cuda.device_count()
+    total_memory = 0
+    multi_processor_count = 0
+    for i in range(device_count):
+        total_memory += torch.cuda.get_device_properties(i).total_memory / (
+            1024**2
+        )  # Convert to MB
+        multi_processor_count += torch.cuda.get_device_properties(
+            i
+        ).multi_processor_count
+    return 2 if total_memory >= 8192 and multi_processor_count >= 64 else 1
 
 def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
-    dask.config.set(
+    with dask.config.set(
         {
+            "distributed.worker.resources.POWER": local_machine_power(),
             "distributed.scheduler.worker-ttl": "30 minutes",
             "distributed.worker.memory.terminate": False,
             "distributed.comm.retry.count": 10,
@@ -46,37 +63,36 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
             "distributed.admin.log-length": 0,
             "distributed.admin.low-level-log-length": 0,
         }
-    )
-
-    cluster = LocalCluster(
-        host="0.0.0.0",
-        scheduler_port=getattr(args, "scheduler_port", 0),
-        n_workers=getattr(
-            args,
-            "min_worker",
-            int(max_worker) if max_worker > 0 else multiprocessing.cpu_count(),
-        ),
-        threads_per_worker=threads,
-        processes=True,
-        dashboard_address=":8787" if dashboard_port is None else f":{dashboard_port}",
-        # memory_limit="2GB",
-        memory_limit=0,  # no limit
-    )
-    # unstable. worker got killed prematurely even there's job running
-    # cluster.adapt(
-    #     interval="15s",
-    #     target_duration="5m",
-    #     wait_count="2000",
-    #     minimum=getattr(
-    #         args,
-    #         "min_worker",
-    #         int(round(max_worker / 10.0, 0)) if max_worker > 0 else 4,
-    #     ),
-    #     maximum=max_worker if max_worker > 0 else multiprocessing.cpu_count(),
-    # )
-    client = Client(cluster)
-    client.register_plugin(LocalWorkerPlugin(name, args))
-    client.forward_logging()
+    ):
+        cluster = LocalCluster(
+            host="0.0.0.0",
+            scheduler_port=getattr(args, "scheduler_port", 0),
+            n_workers=getattr(
+                args,
+                "min_worker",
+                int(max_worker) if max_worker > 0 else multiprocessing.cpu_count(),
+            ),
+            threads_per_worker=threads,
+            processes=True,
+            dashboard_address=":8787" if dashboard_port is None else f":{dashboard_port}",
+            # memory_limit="2GB",
+            memory_limit=0,  # no limit
+        )
+        # unstable. worker got killed prematurely even there's job running
+        # cluster.adapt(
+        #     interval="15s",
+        #     target_duration="5m",
+        #     wait_count="2000",
+        #     minimum=getattr(
+        #         args,
+        #         "min_worker",
+        #         int(round(max_worker / 10.0, 0)) if max_worker > 0 else 4,
+        #     ),
+        #     maximum=max_worker if max_worker > 0 else multiprocessing.cpu_count(),
+        # )
+        client = Client(cluster)
+        client.register_plugin(LocalWorkerPlugin(name, args))
+        client.forward_logging()
     get_logger(name).info(
         "dask dashboard can be accessed at: %s", cluster.dashboard_link
     )
