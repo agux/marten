@@ -7,9 +7,10 @@ def should_retry(exception):
     exmsg = str(exception)
     return (
         isinstance(exception, torch.cuda.OutOfMemoryError)
-        or ("out of memory" in exmsg)
+        or "out of memory" in exmsg
         or "CUDA error" in exmsg
         or "cuDNN error" in exmsg
+        or "unable to find an engine" in exmsg
     )
 
 

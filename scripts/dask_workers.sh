@@ -40,5 +40,5 @@ nohup dask worker tcp://$SCHEDULER_IP:$PORT \
   --nworkers $NWORKERS \
   --nthreads $NTHREADS \
   --memory-limit 0 \
-  --resources "POWER=${POWER}"
+  --resources "POWER=${POWER}" \
   > >(tee -a $OUTPUT_LOG) 2>&1 &
