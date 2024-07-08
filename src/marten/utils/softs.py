@@ -379,6 +379,7 @@ class SOFTSPredictor:
         setting = os.path.join(model_id, str(uuid.uuid4()))
 
         def _train(config):
+            torch.cuda.empty_cache()
             Exp = Exp_Custom(SimpleNamespace(**config))
             Exp.train(
                 setting=setting,
