@@ -369,7 +369,7 @@ async def _train(config, setting, train, val, save_model_file):
 
 async def train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file):
     global resource_wait_time
-    large_model = is_large_model(model_config, len(train))
+    large_model = is_large_model(model_config, len(train.columns))
 
     for attempt in Retrying(
         stop=stop_after_attempt(n_attempt),
@@ -387,7 +387,7 @@ async def train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, set
             while should_wait and wait_gpu(gpu_ut, gpu_rt, stop_at):
                 time.sleep(1)
             if time.time() <= stop_at:
-                m = _train(model_config, setting, train, val, save_model_file)
+                m = await _train(model_config, setting, train, val, save_model_file)
                 return m
             else:
                 raise TimeoutError("timeout waiting for GPU")
@@ -396,7 +396,7 @@ async def train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, set
 async def train_on_cpu(model_config, setting, train, val, save_model_file):
     new_config = model_config.copy()
     new_config["use_gpu"] = False
-    large_model = is_large_model(model_config, len(train))
+    large_model = is_large_model(model_config, len(train.columns))
 
     if large_model:
         lock = Lock(f"{socket.gethostname()}::CPU")
@@ -407,7 +407,7 @@ async def train_on_cpu(model_config, setting, train, val, save_model_file):
                 time.sleep(1)
                 cpu_util = psutil.cpu_percent(0.1)
 
-    m = _train(new_config, setting, train, val, save_model_file)
+    m = await _train(new_config, setting, train, val, save_model_file)
     
     return m
 
