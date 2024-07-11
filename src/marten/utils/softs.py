@@ -353,7 +353,7 @@ def _optimize_torch(ratio=0.85):
     # Enable cuDNN auto-tuner
     # torch.backends.cudnn.benchmark = True
 
-def _train(config, setting, train, val, save_model_file):
+async def _train(config, setting, train, val, save_model_file):
     torch.cuda.empty_cache()
     Exp = Exp_Custom(SimpleNamespace(**config))
     Exp.train(
@@ -367,19 +367,9 @@ def _train(config, setting, train, val, save_model_file):
         shutil.rmtree(os.path.join(config["checkpoints"], setting))
     return Exp
 
-def train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file):
+async def train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file):
     global resource_wait_time
     large_model = is_large_model(model_config, len(train))
-
-    def _wait_and_train():
-        stop_at = time.time() + resource_wait_time  # wait up to 300 seconds
-        while should_wait and wait_gpu(gpu_ut, gpu_rt, stop_at):
-            time.sleep(1)
-        if time.time() <= stop_at:
-            m = _train(model_config, setting, train, val, save_model_file)
-            return m
-        else:
-            raise TimeoutError("timeout waiting for GPU")
 
     for attempt in Retrying(
         stop=stop_after_attempt(n_attempt),
@@ -391,11 +381,19 @@ def train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, 
             if large_model:
                 lock = Lock(f"{socket.gethostname()}::GPU-{model_config["gpu"]}")
                 if lock.acquire(timeout = f"{resource_wait_time}s"):
-                    asyncio.get_event_loop().create_task(release_lock(lock))
-            return _wait_and_train()
+                    asyncio.create_task(release_lock(lock))
+            
+            stop_at = time.time() + resource_wait_time  # wait up to 300 seconds
+            while should_wait and wait_gpu(gpu_ut, gpu_rt, stop_at):
+                time.sleep(1)
+            if time.time() <= stop_at:
+                m = _train(model_config, setting, train, val, save_model_file)
+                return m
+            else:
+                raise TimeoutError("timeout waiting for GPU")
             
 
-def train_on_cpu(model_config, setting, train, val, save_model_file):
+async def train_on_cpu(model_config, setting, train, val, save_model_file):
     new_config = model_config.copy()
     new_config["use_gpu"] = False
     large_model = is_large_model(model_config, len(train))
@@ -403,7 +401,7 @@ def train_on_cpu(model_config, setting, train, val, save_model_file):
     if large_model:
         lock = Lock(f"{socket.gethostname()}::CPU")
         if lock.acquire():
-            asyncio.get_event_loop().create_task(release_lock(lock))
+            asyncio.create_task(release_lock(lock))
             cpu_util = psutil.cpu_percent(0.1)
             while cpu_util >= 50:
                 time.sleep(1)
@@ -471,13 +469,13 @@ class SOFTSPredictor:
         )
         if gpu:
             try:
-                m = train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file)
+                m = asyncio.run(train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file))
                 device = "GPU:0"
             except Exception as e:
                 get_logger().warning(f"falling back to CPU due to error: {str(e)}")
-                m = train_on_cpu(model_config, setting, train, val, save_model_file)
+                m = asyncio.run(train_on_cpu(model_config, setting, train, val, save_model_file))
         else:
-            m = train_on_cpu(model_config, setting, train, val, save_model_file)
+            m = asyncio.run(train_on_cpu(model_config, setting, train, val, save_model_file))
 
         metrics = m.metrics
         metrics["device"] = device
