@@ -7,12 +7,14 @@ import random
 import socket
 import traceback
 import warnings
+import asyncio
 from types import SimpleNamespace, MappingProxyType
 
 import numpy as np
 import pandas as pd
 import torch
-from dask.distributed import get_worker, worker_client
+import torch.nn as nn
+from dask.distributed import get_worker, worker_client, Lock, MultiLock
 from sklearn.preprocessing import StandardScaler
 from statsmodels.tsa.statespace.varmax import VARMAX
 from statsmodels.tsa.arima.model import ARIMA
@@ -70,18 +72,20 @@ baseline_config = MappingProxyType(
     }
 )
 
+resource_wait_time = 300 #seconds, waiting for compute resource
 
 def set_random_seed(seed):
     random.seed(seed)
     torch.manual_seed(seed)
     np.random.seed(seed)
 
+
 def is_large_model(model_config, n_feat):
     return (
-        model_config["d_model"] >= 128
-        or model_config["d_core"] >= 128
-        or model_config["d_ff"] >= 128
-        or model_config["e_layers"] >= 8
+        model_config["d_model"] >= 256
+        or model_config["d_core"] >= 256
+        or model_config["d_ff"] >= 256
+        or model_config["e_layers"] >= 16
         or n_feat >= 128
     )
 
@@ -240,13 +244,21 @@ def _statsmodels_impute(df, model_fit, in_sample):
     return data_filled
 
 
-def _np_impute(df, random_seed):
+def _neupro_impute(df, random_seed):
     na_col = df.columns[1]
     df.rename(columns={na_col: "y"}, inplace=True)
 
     np_random_seed(random_seed)
     set_log_level("ERROR")
     _optimize_torch()
+
+    na_positions = df.isna()
+    df_nona = df.dropna()
+    scaler = StandardScaler()
+    scaler.fit(df_nona.iloc[:, 1:])
+    df_filled = df.ffill().bfill()
+    df.iloc[:, 1:] = scaler.transform(df_filled.iloc[:, 1:])
+    df[na_positions] = np.nan
 
     try:
         m = NeuralProphet(
@@ -279,6 +291,7 @@ def _np_impute(df, random_seed):
     forecast["ds"] = forecast["ds"].dt.date
     forecast["yhat1"] = forecast["yhat1"].astype(float)
     forecast.rename(columns={"yhat1": na_col}, inplace=True)
+    forecast[:, 1:] = scaler.inverse_transform(forecast[:, 1:])
 
     return forecast
 
@@ -297,7 +310,7 @@ def impute(df, random_seed, client=None):
         futures = []
         for na_col in na_cols:
             df_na = df[["ds", na_col]]
-            futures.append(client.submit(_np_impute, df_na, random_seed))
+            futures.append(client.submit(_neupro_impute, df_na, random_seed))
         return client.gather(futures)
 
     if client is not None:
@@ -306,7 +319,7 @@ def impute(df, random_seed, client=None):
         with worker_client() as client:
             results = _func(client)
     else:
-        results = [_np_impute(df[["ds", na_cols[0]]].copy(), random_seed)]
+        results = [_neupro_impute(df[["ds", na_cols[0]]].copy(), random_seed)]
     imputed_df = results[0]
     for result in results[1:]:
         imputed_df = imputed_df.merge(result, on="ds", how="left")
@@ -340,6 +353,71 @@ def _optimize_torch(ratio=0.85):
     # Enable cuDNN auto-tuner
     # torch.backends.cudnn.benchmark = True
 
+def _train(config, setting, train, val, save_model_file):
+    torch.cuda.empty_cache()
+    Exp = Exp_Custom(SimpleNamespace(**config))
+    Exp.train(
+        setting=setting,
+        train_data=train,
+        vali_data=val,
+    )
+    if val is not None:
+        Exp.test(setting=setting, test_data=val)  # collect validation metrics
+    if not save_model_file:
+        shutil.rmtree(os.path.join(config["checkpoints"], setting))
+    return Exp
+
+def train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file):
+    global resource_wait_time
+    large_model = is_large_model(model_config, len(train))
+
+    def _wait_and_train():
+        stop_at = time.time() + resource_wait_time  # wait up to 300 seconds
+        while should_wait and wait_gpu(gpu_ut, gpu_rt, stop_at):
+            time.sleep(1)
+        if time.time() <= stop_at:
+            m = _train(model_config, setting, train, val, save_model_file)
+            return m
+        else:
+            raise TimeoutError("timeout waiting for GPU")
+
+    for attempt in Retrying(
+        stop=stop_after_attempt(n_attempt),
+        wait=wait_exponential(multiplier=1, max=15),
+        retry=retry_if_exception(should_retry),
+        before_sleep=log_retry,
+    ):
+        with attempt:
+            if large_model:
+                lock = Lock(f"{socket.gethostname()}::GPU-{model_config["gpu"]}")
+                if lock.acquire(timeout = f"{resource_wait_time}s"):
+                    asyncio.get_event_loop().create_task(release_lock(lock))
+            return _wait_and_train()
+            
+
+def train_on_cpu(model_config, setting, train, val, save_model_file):
+    new_config = model_config.copy()
+    new_config["use_gpu"] = False
+    large_model = is_large_model(model_config, len(train))
+
+    if large_model:
+        lock = Lock(f"{socket.gethostname()}::CPU")
+        if lock.acquire():
+            asyncio.get_event_loop().create_task(release_lock(lock))
+            cpu_util = psutil.cpu_percent(0.1)
+            while cpu_util >= 50:
+                time.sleep(1)
+                cpu_util = psutil.cpu_percent(0.1)
+
+    m = _train(new_config, setting, train, val, save_model_file)
+    
+    return m
+
+
+async def release_lock(lock, after=15):
+    await asyncio.sleep(after)
+    if lock is not None and lock.locked():
+        lock.release()
 
 class SOFTSPredictor:
 
@@ -364,7 +442,8 @@ class SOFTSPredictor:
             model_config.pop("d_model_d_ff")
 
         n_feat = len(df.columns)
-        ratio = 0.85 if is_large_model(model_config, n_feat) else 0.33
+        large_model = is_large_model(model_config, n_feat)
+        ratio = 0.9 if large_model else 0.33
         _optimize_torch(ratio)
 
         train, val, _ = _prep_df(
@@ -378,57 +457,27 @@ class SOFTSPredictor:
 
         setting = os.path.join(model_id, str(uuid.uuid4()))
 
-        def _train(config):
-            torch.cuda.empty_cache()
-            Exp = Exp_Custom(SimpleNamespace(**config))
-            Exp.train(
-                setting=setting,
-                train_data=train,
-                vali_data=val,
-            )
-            if val is not None:
-                Exp.test(setting=setting, test_data=val)  # collect validation metrics
-            if not save_model_file:
-                shutil.rmtree(os.path.join(config["checkpoints"], setting))
-            return Exp
-
         device = "CPU"
-        gpu_ut = getattr(args, "gpu_util_threshold", None)
-        gpu_rt = getattr(args, "gpu_ram_threshold", None)
-        try:
-            gpu, should_wait, n_attempt = use_gpu(
-                model_config,
-                n_feat,
-                gpu_ut,
-                gpu_rt,
-            )
-            if gpu:
-                for attempt in Retrying(
-                    stop=stop_after_attempt(n_attempt),
-                    wait=wait_exponential(multiplier=1, max=15),
-                    retry=retry_if_exception(should_retry),
-                    before_sleep=log_retry,
-                ):
-                    with attempt:
-                        stop_at = time.time() + 60  # wait up to 60 seconds
-                        while should_wait and wait_gpu(gpu_ut, gpu_rt, stop_at):
-                            time.sleep(1)
-                        m = _train(model_config)
-                        device = "GPU:0"
-            else:
-                new_config = model_config.copy()
-                new_config["use_gpu"] = False
-                m = _train(new_config)
-        except RetryError as e:
-            new_config = model_config.copy()
-            new_config["use_gpu"] = False
-            full_traceback = traceback.format_exc()
-            if "OutOfMemoryError" in str(e) or "out of memory" in full_traceback:
-                # final attempt to train on CPU
-                get_logger().warning("falling back to CPU due to OutOfMemoryError")
-            else:
-                get_logger().warning(f"falling back to CPU due to RetryError: {str(e)}")
-            m = _train(new_config)
+        gpu_ut = getattr(args, "gpu_util_threshold", 0.8)
+        gpu_rt = getattr(args, "gpu_ram_threshold", 0.8)
+        gpu_ut = gpu_ut * 0.5 if large_model else gpu_ut
+        gpu_rt = gpu_rt * 0.5 if large_model else gpu_rt
+
+        gpu, should_wait, n_attempt = use_gpu(
+            model_config,
+            n_feat,
+            gpu_ut,
+            gpu_rt,
+        )
+        if gpu:
+            try:
+                m = train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file)
+                device = "GPU:0"
+            except Exception as e:
+                get_logger().warning(f"falling back to CPU due to error: {str(e)}")
+                m = train_on_cpu(model_config, setting, train, val, save_model_file)
+        else:
+            m = train_on_cpu(model_config, setting, train, val, save_model_file)
 
         metrics = m.metrics
         metrics["device"] = device
