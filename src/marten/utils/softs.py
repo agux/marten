@@ -291,7 +291,7 @@ def _neupro_impute(df, random_seed):
     forecast["ds"] = forecast["ds"].dt.date
     forecast["yhat1"] = forecast["yhat1"].astype(float)
     forecast.rename(columns={"yhat1": na_col}, inplace=True)
-    forecast[:, 1:] = scaler.inverse_transform(forecast[:, 1:])
+    forecast.iloc[:, 1:] = scaler.inverse_transform(forecast.iloc[:, 1:])
 
     return forecast
 
