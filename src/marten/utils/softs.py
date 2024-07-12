@@ -342,7 +342,7 @@ def _optimize_torch(ratio=0.85):
     torch.set_num_threads(
         n_threads
     )  # Sets the number of threads used for intraop parallelism on CPU.
-    get_logger().info(
+    get_logger().debug(
         "machine: %s, cpu_cap: %s, n_cores: %s optimizing torch CPU thread: %s",
         socket.gethostname(),
         round(cpu_cap, 3),

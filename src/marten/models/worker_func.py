@@ -222,15 +222,26 @@ def fit_with_covar(
 def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn, logger):
     cov_table = cov_table[:-5] if cov_table.endswith("_view") else cov_table
     last_col = impute_df.columns[-1]
-    sql = f"""
-        INSERT INTO {cov_table}_impute (symbol, date, {feature}) 
-        VALUES %s 
-        ON CONFLICT (symbol, date) 
-        DO UPDATE SET 
-            {feature} = EXCLUDED.{feature}
-    """
     impute_df = impute_df[["ds", last_col]]
-    impute_df.insert(0, "symbol", cov_symbol)
+    match cov_table:
+        case "currency_boc_safe" | "bond_metrics_em":
+            sql = f"""
+                INSERT INTO {cov_table}_impute (date, {feature}) 
+                VALUES %s 
+                ON CONFLICT (date) 
+                DO UPDATE SET 
+                    {feature} = EXCLUDED.{feature}
+            """
+        case _:
+            sql = f"""
+                INSERT INTO {cov_table}_impute (symbol, date, {feature}) 
+                VALUES %s 
+                ON CONFLICT (symbol, date) 
+                DO UPDATE SET 
+                    {feature} = EXCLUDED.{feature}
+            """
+            impute_df.insert(0, "symbol", cov_symbol)
+
     impute_df.rename(
         columns={"ds": "date", last_col: f"{feature}"},
         inplace=True,
@@ -242,6 +253,7 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn, logger):
         logger.warning(
             "%s imputation not persisted:%s\n%s", last_col, str(e), impute_df
         )
+        raise e
     # conn.commit()  # Commit the transaction
     # cursor.close()  # Close the cursor
 
