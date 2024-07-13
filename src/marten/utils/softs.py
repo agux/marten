@@ -113,9 +113,11 @@ def use_gpu(model_config, n_feat, util_threshold=80, vram_threshold=80):
 
 def wait_gpu(util_threshold=80, vram_threshold=80, stop_at=None):
     return (
-        torch.cuda.utilization() >= util_threshold
-        or torch.cuda.memory_usage() >= vram_threshold
-        or time.time() <= stop_at
+        (
+            torch.cuda.utilization() >= util_threshold
+            or torch.cuda.memory_usage() >= vram_threshold
+        )
+        and time.time() <= stop_at
     )
 
 
@@ -495,15 +497,18 @@ class SOFTSPredictor:
         m = None
         
         while m is None:
-            if gpu:
-                try:
-                    m = asyncio.run(train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file))
-                    device = "GPU:0"
-                except Exception as e:
-                    get_logger().warning(f"falling back to CPU due to error: {str(e)}")
+            try:
+                if gpu:
+                    try:
+                        m = asyncio.run(train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file))
+                        device = "GPU:0"
+                    except Exception as e:
+                        get_logger().warning(f"falling back to CPU due to error: {str(e)}")
+                        m = asyncio.run(train_on_cpu(model_config, setting, train, val, save_model_file))
+                else:
                     m = asyncio.run(train_on_cpu(model_config, setting, train, val, save_model_file))
-            else:
-                m = asyncio.run(train_on_cpu(model_config, setting, train, val, save_model_file))
+            except TimeoutError as e:
+                get_logger().warning(str(e))
 
         metrics = m.metrics
         metrics["device"] = device
