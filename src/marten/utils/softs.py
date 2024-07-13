@@ -83,9 +83,9 @@ def set_random_seed(seed):
 
 def is_large_model(model_config, n_feat):
     return (
-        model_config["d_model"] >= 256
-        or model_config["d_core"] >= 256
-        or model_config["d_ff"] >= 256
+        model_config["d_model"] >= 512
+        or model_config["d_core"] >= 512
+        or model_config["d_ff"] >= 512
         or model_config["e_layers"] >= 16
         or n_feat >= 128
     )
@@ -358,17 +358,24 @@ def _optimize_torch(ratio=0.85):
 
 def _train(config, setting, train, val, save_model_file):
     torch.cuda.empty_cache()
-    Exp = Exp_Custom(SimpleNamespace(**config))
-    Exp.train(
-        setting=setting,
-        train_data=train,
-        vali_data=val,
-    )
+    model = Exp_Custom(SimpleNamespace(**config))
+    try:
+        model.train(
+            setting=setting,
+            train_data=train,
+            vali_data=val,
+        )
+    except Exception as e:
+        model.cleanup()
+        if should_retry(e):
+            worker = get_worker()
+            worker.close_gracefully(restart=True)
+        raise e
     if val is not None:
-        Exp.test(setting=setting, test_data=val)  # collect validation metrics
+        model.test(setting=setting, test_data=val)  # collect validation metrics
     if not save_model_file:
         shutil.rmtree(os.path.join(config["checkpoints"], setting))
-    return Exp
+    return model
 
 def train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file):
     global resource_wait_time, lock_wait_time
@@ -376,34 +383,27 @@ def train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, 
 
     lock_key = f"{socket.gethostname()}::GPU-{model_config["gpu"]}"
 
-    for attempt in Retrying(
-        stop=stop_after_attempt(n_attempt),
-        wait=wait_exponential(multiplier=1, max=15),
-        retry=retry_if_exception(should_retry),
-        before_sleep=log_retry,
-    ):
-        with attempt:
-            if large_model:
-                lock = Lock(lock_key)
-                lock_wait_start = time.time()
-                lock_acquired = False
-                while time.time() - lock_wait_start <= resource_wait_time:
-                    if lock.acquire(timeout = f"{lock_wait_time}s"):
-                        lock_acquired = True
-                        release_lock(lock)
-                        get_logger().debug("lock acquired: %s", lock_key)
-                        break
-                if not lock_acquired:
-                    raise TimeoutError(f"Timeout waiting for GPU lock: {lock_key}")
-            
-            stop_at = time.time() + resource_wait_time  # wait up to 300 seconds
-            while should_wait and wait_gpu(gpu_ut, gpu_rt, stop_at):
-                time.sleep(1)
-            if time.time() <= stop_at:
-                m = _train(model_config, setting, train, val, save_model_file)
-                return m
-            else:
-                raise TimeoutError("Timeout waiting for GPU resource")
+    if large_model:
+        lock = Lock(lock_key)
+        lock_wait_start = time.time()
+        lock_acquired = False
+        while time.time() - lock_wait_start <= resource_wait_time:
+            if lock.acquire(timeout = f"{lock_wait_time}s"):
+                lock_acquired = True
+                release_lock(lock)
+                get_logger().debug("lock acquired: %s", lock_key)
+                break
+        if not lock_acquired:
+            raise TimeoutError(f"Timeout waiting for GPU lock: {lock_key}")
+    
+    stop_at = time.time() + resource_wait_time  # wait up to 300 seconds
+    while should_wait and wait_gpu(gpu_ut, gpu_rt, stop_at):
+        time.sleep(1)
+    if time.time() <= stop_at:
+        m = _train(model_config, setting, train, val, save_model_file)
+        return m
+    else:
+        raise TimeoutError("Timeout waiting for GPU resource")
             
 
 def train_on_cpu(model_config, setting, train, val, save_model_file):
