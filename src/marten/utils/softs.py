@@ -111,7 +111,7 @@ def use_gpu(model_config, n_feat, util_threshold=80, vram_threshold=80):
     return use_gpu, should_wait, n_attempt
 
 
-def wait_gpu(util_threshold=80, vram_threshold=80, stop_at=None):
+async def wait_gpu(util_threshold=80, vram_threshold=80, stop_at=None):
     return (
         (
             torch.cuda.utilization() >= util_threshold
@@ -398,7 +398,7 @@ async def train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, set
             
             stop_at = time.time() + resource_wait_time  # wait up to 300 seconds
             while should_wait and wait_gpu(gpu_ut, gpu_rt, stop_at):
-                time.sleep(1)
+                await asyncio.sleep(1)
             if time.time() <= stop_at:
                 m = await _train(model_config, setting, train, val, save_model_file)
                 return m
@@ -430,7 +430,7 @@ async def train_on_cpu(model_config, setting, train, val, save_model_file):
     stop_at = time.time() + resource_wait_time  # wait up to 300 seconds
     cpu_util = psutil.cpu_percent(0.1)
     while cpu_util >= cpu_util_threshold and time.time() <= stop_at:
-        time.sleep(1)
+        await asyncio.sleep(1)
         cpu_util = psutil.cpu_percent(0.1)
 
     ratio = 0.9 if large_model else 0.33
