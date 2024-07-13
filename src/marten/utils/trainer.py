@@ -5,7 +5,7 @@ from marten.utils.logger import get_logger
 
 def should_retry(exception):
     exmsg = str(exception)
-    return (
+    return not isinstance(exception, TimeoutError) and (
         isinstance(exception, torch.cuda.OutOfMemoryError)
         or "out of memory" in exmsg
         or "CUDA error" in exmsg

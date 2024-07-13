@@ -73,6 +73,7 @@ baseline_config = MappingProxyType(
 )
 
 resource_wait_time = 300 #seconds, waiting for compute resource
+lock_wait_time = 15
 
 def set_random_seed(seed):
     random.seed(seed)
@@ -368,7 +369,7 @@ async def _train(config, setting, train, val, save_model_file):
     return Exp
 
 async def train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file):
-    global resource_wait_time
+    global resource_wait_time, lock_wait_time
     large_model = is_large_model(model_config, len(train.columns))
 
     for attempt in Retrying(
@@ -380,8 +381,15 @@ async def train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, set
         with attempt:
             if large_model:
                 lock = Lock(f"{socket.gethostname()}::GPU-{model_config["gpu"]}")
-                if lock.acquire(timeout = f"{resource_wait_time}s"):
-                    asyncio.create_task(release_lock(lock))
+                lock_wait_start = time.time()
+                lock_acquired = False
+                while time.time() - lock_wait_start <= resource_wait_time:
+                    if lock.acquire(timeout = f"{lock_wait_time}s"):
+                        lock_acquired = True
+                        asyncio.create_task(release_lock(lock))
+                        break
+                if not lock_acquired:
+                    raise TimeoutError("Timeout waiting for GPU lock")
             
             stop_at = time.time() + resource_wait_time  # wait up to 300 seconds
             while should_wait and wait_gpu(gpu_ut, gpu_rt, stop_at):
@@ -390,29 +398,43 @@ async def train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, set
                 m = await _train(model_config, setting, train, val, save_model_file)
                 return m
             else:
-                raise TimeoutError("timeout waiting for GPU")
+                raise TimeoutError("Timeout waiting for GPU resource")
             
 
 async def train_on_cpu(model_config, setting, train, val, save_model_file):
+    global resource_wait_time, lock_wait_time
     new_config = model_config.copy()
     new_config["use_gpu"] = False
     large_model = is_large_model(model_config, len(train.columns))
-
+    cpu_util_threshold = 90
     if large_model:
+        cpu_util_threshold = 50
         lock = Lock(f"{socket.gethostname()}::CPU")
-        if lock.acquire():
-            asyncio.create_task(release_lock(lock))
-            cpu_util = psutil.cpu_percent(0.1)
-            while cpu_util >= 50:
-                time.sleep(1)
-                cpu_util = psutil.cpu_percent(0.1)
+        lock_wait_start = time.time()
+        lock_acquired = False
+        while time.time() - lock_wait_start <= resource_wait_time:
+            if lock.acquire(timeout = f"{lock_wait_time}s"):
+                lock_acquired = True
+                asyncio.create_task(release_lock(lock))
+                break
+        if not lock_acquired:
+            raise TimeoutError("Timeout waiting for CPU lock")
+                
+    stop_at = time.time() + resource_wait_time  # wait up to 300 seconds
+    cpu_util = psutil.cpu_percent(0.1)
+    while cpu_util >= cpu_util_threshold and time.time() <= stop_at:
+        time.sleep(1)
+        cpu_util = psutil.cpu_percent(0.1)
 
-    m = await _train(new_config, setting, train, val, save_model_file)
+    if time.time() <= stop_at:
+        m = await _train(new_config, setting, train, val, save_model_file)
+        return m
+    else:
+        raise TimeoutError("Timeout waiting for CPU resource")
     
-    return m
 
 
-async def release_lock(lock, after=15):
+async def release_lock(lock, after=10):
     await asyncio.sleep(after)
     if lock is not None and lock.locked():
         lock.release()
@@ -456,26 +478,32 @@ class SOFTSPredictor:
         setting = os.path.join(model_id, str(uuid.uuid4()))
 
         device = "CPU"
-        gpu_ut = getattr(args, "gpu_util_threshold", 0.8)
-        gpu_rt = getattr(args, "gpu_ram_threshold", 0.8)
+        gpu_ut = getattr(args, "gpu_util_threshold", 80)
+        gpu_rt = getattr(args, "gpu_ram_threshold", 80)
         gpu_ut = gpu_ut * 0.5 if large_model else gpu_ut
         gpu_rt = gpu_rt * 0.5 if large_model else gpu_rt
 
+        #TODO smarter device selection: what if GPU is busy and CPU is idle?
+        # swiftly detect availability between 2 devices
         gpu, should_wait, n_attempt = use_gpu(
             model_config,
             n_feat,
             gpu_ut,
             gpu_rt,
         )
-        if gpu:
-            try:
-                m = asyncio.run(train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file))
-                device = "GPU:0"
-            except Exception as e:
-                get_logger().warning(f"falling back to CPU due to error: {str(e)}")
+        
+        m = None
+        
+        while m is None:
+            if gpu:
+                try:
+                    m = asyncio.run(train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file))
+                    device = "GPU:0"
+                except Exception as e:
+                    get_logger().warning(f"falling back to CPU due to error: {str(e)}")
+                    m = asyncio.run(train_on_cpu(model_config, setting, train, val, save_model_file))
+            else:
                 m = asyncio.run(train_on_cpu(model_config, setting, train, val, save_model_file))
-        else:
-            m = asyncio.run(train_on_cpu(model_config, setting, train, val, save_model_file))
 
         metrics = m.metrics
         metrics["device"] = device
