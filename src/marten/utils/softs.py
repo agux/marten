@@ -374,6 +374,8 @@ async def train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, set
     global resource_wait_time, lock_wait_time
     large_model = is_large_model(model_config, len(train.columns))
 
+    lock_key = f"{socket.gethostname()}::GPU-{model_config["gpu"]}"
+
     for attempt in Retrying(
         stop=stop_after_attempt(n_attempt),
         wait=wait_exponential(multiplier=1, max=15),
@@ -382,16 +384,17 @@ async def train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, set
     ):
         with attempt:
             if large_model:
-                lock = Lock(f"{socket.gethostname()}::GPU-{model_config["gpu"]}")
+                lock = Lock(lock_key)
                 lock_wait_start = time.time()
                 lock_acquired = False
                 while time.time() - lock_wait_start <= resource_wait_time:
                     if lock.acquire(timeout = f"{lock_wait_time}s"):
                         lock_acquired = True
                         asyncio.create_task(release_lock(lock))
+                        get_logger().info("lock acquired: %s", lock_key)
                         break
                 if not lock_acquired:
-                    raise TimeoutError("Timeout waiting for GPU lock")
+                    raise TimeoutError(f"Timeout waiting for GPU lock: {lock_key}")
             
             stop_at = time.time() + resource_wait_time  # wait up to 300 seconds
             while should_wait and wait_gpu(gpu_ut, gpu_rt, stop_at):
@@ -410,23 +413,28 @@ async def train_on_cpu(model_config, setting, train, val, save_model_file):
     large_model = is_large_model(model_config, len(train.columns))
     cpu_util_threshold = 90
     if large_model:
+        lock_key = f"{socket.gethostname()}::CPU"
         cpu_util_threshold = 50
-        lock = Lock(f"{socket.gethostname()}::CPU")
+        lock = Lock(lock_key)
         lock_wait_start = time.time()
         lock_acquired = False
         while time.time() - lock_wait_start <= resource_wait_time:
             if lock.acquire(timeout = f"{lock_wait_time}s"):
                 lock_acquired = True
                 asyncio.create_task(release_lock(lock))
+                get_logger().info("lock acquired: %s", lock_key)
                 break
         if not lock_acquired:
-            raise TimeoutError("Timeout waiting for CPU lock")
+            raise TimeoutError(f"Timeout waiting for CPU lock {lock_key}")
                 
     stop_at = time.time() + resource_wait_time  # wait up to 300 seconds
     cpu_util = psutil.cpu_percent(0.1)
     while cpu_util >= cpu_util_threshold and time.time() <= stop_at:
         time.sleep(1)
         cpu_util = psutil.cpu_percent(0.1)
+
+    ratio = 0.9 if large_model else 0.33
+    _optimize_torch(ratio)
 
     if time.time() <= stop_at:
         m = await _train(new_config, setting, train, val, save_model_file)
@@ -440,6 +448,7 @@ async def release_lock(lock, after=10):
     await asyncio.sleep(after)
     if lock is not None and lock.locked():
         lock.release()
+        get_logger().info("releasing lock: %s", lock.name)
 
 class SOFTSPredictor:
 
