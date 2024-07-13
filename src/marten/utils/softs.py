@@ -445,10 +445,16 @@ async def train_on_cpu(model_config, setting, train, val, save_model_file):
 
 
 async def release_lock(lock, after=10):
+    get_logger().info("lock %s will be released in %s seconds", lock.name, after)
     await asyncio.sleep(after)
-    if lock is not None and lock.locked():
+    # if lock is not None and lock.locked():
+    #     lock.release()
+    #     get_logger().info("releasing lock: %s", lock.name)
+    try:
         lock.release()
-        get_logger().info("releasing lock: %s", lock.name)
+        get_logger().info("lock %s released", lock.name)
+    except Exception as e:
+        get_logger().warning("exception releasing lock %s: %s", lock.name, str(e))
 
 class SOFTSPredictor:
 
