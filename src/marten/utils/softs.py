@@ -84,9 +84,9 @@ def set_random_seed(seed):
 def is_large_model(model_config, n_feat):
     return (
         model_config["d_model"] >= 512
-        or model_config["d_core"] >= 512
-        or model_config["d_ff"] >= 512
-        or model_config["e_layers"] >= 16
+        or model_config["d_core"] >= 1024
+        or model_config["d_ff"] >= 1024
+        or model_config["e_layers"] >= 20
         or n_feat >= 128
     )
 
@@ -510,7 +510,7 @@ class SOFTSPredictor:
         )
         
         m = None
-        
+        cpu_timeout_count = 0
         while m is None:
             try:
                 if gpu:
@@ -524,6 +524,10 @@ class SOFTSPredictor:
                     m = train_on_cpu(model_config, setting, train, val, save_model_file)
             except TimeoutError as e:
                 get_logger().warning(str(e))
+                if "timeout waiting for CPU resource" in str(e):
+                    cpu_timeout_count += 1
+                if cpu_timeout_count > 1:
+                    gpu = True
 
         metrics = m.metrics
         metrics["device"] = device
