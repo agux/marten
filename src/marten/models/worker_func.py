@@ -437,6 +437,10 @@ def log_metrics_for_hyper_params(
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
     params = params.copy()
+
+    if "covar_dist" in params:
+        params.pop("covar_dist")
+        
     # to support distributed processing, we try to insert a new record (with primary keys only)
     # into hps_metrics first. If we hit duplicated key error, return that validation loss.
     # Otherwise we could proceed further code execution.
@@ -474,9 +478,6 @@ def log_metrics_for_hyper_params(
     if "topk_covar" in params:
         topk_covar = params["topk_covar"]
         params.pop("topk_covar")
-
-    if "covar_dist" in params:
-        params.pop("covar_dist")
 
     # if topk_covar is not None:
         # if "covar_dist" in params:
@@ -558,7 +559,7 @@ def log_metrics_for_hyper_params(
         topk_covar,
         tag,
         hps_id,
-        [col for col in df.columns if col not in ("ds", "y")],
+        ",".join([col for col in df.columns if col not in ("ds", "y")]),
     )
 
     return last_metric["Loss_val"]
