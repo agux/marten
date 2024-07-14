@@ -732,6 +732,10 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
                     param_dict["seasonality_mode"] = "additive"
                 if "normalize" not in param_dict:
                     param_dict["normalize"] = "soft"
+            elif model == "SOFTS":
+                if "covar_dist" not in param_dict:
+                    #TODO can we use empty list instead of real dirichlet sample?
+                    param_dict["covar_dist"] = []
 
             tuples.append((param_dict, row[1]))
 

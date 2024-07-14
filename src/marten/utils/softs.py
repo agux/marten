@@ -528,6 +528,7 @@ class SOFTSPredictor:
                     cpu_timeout_count += 1
                 if cpu_timeout_count > 1:
                     gpu = True
+                    cpu_timeout_count=0
 
         metrics = m.metrics
         metrics["device"] = device
