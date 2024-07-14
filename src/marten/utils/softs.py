@@ -337,7 +337,7 @@ def impute(df, random_seed, client=None):
 
 
 def _optimize_torch(ratio=0.85):
-    cpu_cap = (100.0 - psutil.cpu_percent(0.1)) / 100.0
+    cpu_cap = (100.0 - psutil.cpu_percent(1)) / 100.0
     n_cores = float(psutil.cpu_count())
     # n_workers = max(1.0, float(num_workers()))
     # n_threads = min(int(n_cores * cpu_cap * 0.85), n_cores/n_workers)
@@ -428,15 +428,14 @@ def train_on_cpu(model_config, setting, train, val, save_model_file):
             raise TimeoutError(f"Timeout waiting for CPU lock {lock_key}")
                 
     stop_at = time.time() + resource_wait_time  # wait up to 300 seconds
-    cpu_util = psutil.cpu_percent(0.1)
+    cpu_util = psutil.cpu_percent(1)
     while cpu_util >= cpu_util_threshold and time.time() <= stop_at:
         time.sleep(1)
-        cpu_util = psutil.cpu_percent(0.1)
-
-    ratio = 0.9 if large_model else 0.33
-    _optimize_torch(ratio)
+        cpu_util = psutil.cpu_percent(1)
 
     if time.time() <= stop_at:
+        ratio = 0.9 if large_model else 0.33
+        _optimize_torch(ratio)
         m = _train(new_config, setting, train, val, save_model_file)
         return m
     else:

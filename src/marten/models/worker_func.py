@@ -475,8 +475,15 @@ def log_metrics_for_hyper_params(
         topk_covar = params["topk_covar"]
         params.pop("topk_covar")
 
-    if topk_covar is not None:
-        df = select_topk_features(df, ranked_features, topk_covar)
+    if "covar_dist" in params:
+        params.pop("covar_dist")
+
+    # if topk_covar is not None:
+        # if "covar_dist" in params:
+            # df = select_randk_covars(df, ranked_features, params["covar_dist"], topk_covar)
+            # params.pop("covar_dist")
+        # else:
+            # df = select_topk_features(df, ranked_features, topk_covar)
 
     start_time = time.time()
     tag = None
@@ -551,6 +558,7 @@ def log_metrics_for_hyper_params(
         topk_covar,
         tag,
         hps_id,
+        [col for col in df.columns if col not in ("ds", "y")],
     )
 
     return last_metric["Loss_val"]
@@ -584,6 +592,7 @@ def update_metrics_table(
     topk_covar,
     tag,
     hps_id,
+    covars,
 ):
 
     device_info = {}
@@ -611,6 +620,7 @@ def update_metrics_table(
                         tag = :tag,
                         sub_topk = :sub_topk,
                         device_info = :device_info
+                        covars = :covars
                     WHERE
                         model = :model
                         AND anchor_symbol = :anchor_symbol
@@ -638,6 +648,7 @@ def update_metrics_table(
                     "sub_topk": topk_covar,
                     "hps_id": hps_id,
                     "device_info": device_info,
+                    "covars": covars,
                 },
             )
 
@@ -1728,19 +1739,20 @@ def _search_space(model, max_covars):
             # d_model_d_ff=[2**w for w in range(5, 8+1)],
             ss = f"""dict(
                 seq_len=range(5, 300+1),
-                d_model=[2**w for w in range(6, 12+1)],
-                d_core=[2**w for w in range(5, 12+1)],
-                d_ff=[2**w for w in range(6, 12+1)],
-                e_layers=range(4, 32+1),
+                d_model=[2**w for w in range(6, 9+1)],
+                d_core=[2**w for w in range(5, 11+1)],
+                d_ff=[2**w for w in range(6, 11+1)],
+                e_layers=range(4, 128+1),
                 learning_rate=loguniform(0.0001, 0.002),
                 lradj=["type1", "type2", "constant", "cosine"],
                 patience=range(3, 10+1),
-                batch_size=[2**w for w in range(5, 9+1)],
+                batch_size=[2**w for w in range(5, 8+1)],
                 dropout=uniform(0, 0.5),
                 activation=["relu","gelu","relu6","elu","selu","celu","leaky_relu","prelu","rrelu","glu"],
                 use_norm=[True, False],
                 optimizer=["Adam", "AdamW", "SGD"],
                 topk_covar=list(range(0, {max_covars}+1)),
+                covar_dist=dirichlet([1.0]*{max_covars}),
             )"""
         case _:
             raise NotImplementedError
@@ -1761,7 +1773,7 @@ def fast_bayesopt(
     # worker = get_worker()
     # logger = worker.logger
 
-    from scipy.stats import uniform, loguniform
+    from scipy.stats import uniform, loguniform, dirichlet
     from marten.models.hp_search import (
         _cleanup_stale_keys,
         _bayesopt_run,
@@ -1808,7 +1820,7 @@ def fast_bayesopt(
             covar_set_id,
             hps_id,
             ranked_features,
-            eval(space_str, {"uniform": uniform, "loguniform": loguniform}),
+            eval(space_str, {"uniform": uniform, "loguniform": loguniform, "dirichlet": dirichlet}),
             args,
             args.mini_itr,
             domain_size,

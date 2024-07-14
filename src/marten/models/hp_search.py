@@ -18,7 +18,7 @@ from marten.utils.logger import get_logger
 from marten.utils.worker import await_futures, init_client, num_workers
 from marten.utils.neuralprophet import select_topk_features
 from marten.utils.softs import is_large_model
-from marten.utils.trainer import select_device
+from marten.utils.trainer import select_device, select_randk_covars
 from marten.models.worker_func import fit_with_covar, log_metrics_for_hyper_params, validate_hyperparams
 
 from sqlalchemy import text
@@ -755,7 +755,12 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
         t1 = time.time()
         nworker = num_workers(False)
         for i, params in enumerate(params_batch):
-            new_df = select_topk_features(df, ranked_features, params["topk_covar"]) if "topk_covar" in params else df
+            new_df = df
+            if "topk_covar" in params:
+                if "covar_dist" in params:
+                    new_df = select_randk_covars(df, ranked_features, params["covar_dist"], params["topk_covar"])
+                else:
+                    new_df = select_topk_features(df, ranked_features, params["topk_covar"])
             jobs.append(client.submit(
                 validate_hyperparams,
                 args,

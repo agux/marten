@@ -48,3 +48,13 @@ def select_device(accelerator, util_threshold=80, vram_threshold=80):
         and torch.cuda.memory_usage() < vram_threshold
         else None
     )
+
+
+def select_randk_covars(df, ranked_features, covar_dist, k):
+    # get all column names not in ("ds", "y") from df
+    # covar_cols = [col for col in df.columns if col not in ("ds", "y")]
+    sorted_pairs = sorted(enumerate(covar_dist), key=lambda x: x[1], reverse=True)
+    top_k_indices = [index for index, _ in sorted_pairs[:k]]
+    top_k_features = [ranked_features[i] for i in top_k_indices]
+    columns_to_keep = ["ds", "y"] + top_k_features
+    return df[columns_to_keep]
