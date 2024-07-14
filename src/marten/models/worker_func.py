@@ -619,7 +619,7 @@ def update_metrics_table(
                         epochs = :epochs,
                         tag = :tag,
                         sub_topk = :sub_topk,
-                        device_info = :device_info
+                        device_info = :device_info,
                         covars = :covars
                     WHERE
                         model = :model
