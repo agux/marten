@@ -735,11 +735,12 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
                     if "normalize" not in param_dict:
                         param_dict["normalize"] = "soft"
                 case "SOFTS":
-                    if "covar_dist" not in param_dict:
-                        #TODO can we use empty list instead of real dirichlet sample?
-                        param_dict["covar_dist"] = [[]]
-                    else:
-                        param_dict["covar_dist"] = [param_dict["covar_dist"]]
+                    param_dict["covar_dist"] = 0.
+                    # if "covar_dist" not in param_dict:
+                    #     #TODO can we use empty list instead of real dirichlet sample?
+                    #     param_dict["covar_dist"] = 0.
+                    # else:
+                    #     param_dict["covar_dist"] = 0.
 
             tuples.append((param_dict, row[1]))
 
