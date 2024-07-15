@@ -755,7 +755,7 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit, 
                     # else:
                     #     param_dict["covar_dist"] = np.array(param_dict["covar_dist"])
 
-                    # logger.info("""param_dict["covar_dist"]: %s""", param_dict["covar_dist"])
+                    logger.info("""param_dict: %s""", param_dict)
 
             tuples.append((param_dict, row[1]))
 
