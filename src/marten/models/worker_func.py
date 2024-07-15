@@ -439,8 +439,10 @@ def log_metrics_for_hyper_params(
     params = params.copy()
 
     if "covar_dist" in params:
-        params.pop("covar_dist")
-        
+        # params.pop("covar_dist")
+        if isinstance(params["covar_dist"], np.ndarray):
+            params["covar_dist"] = params["covar_dist"].tolist()
+
     # to support distributed processing, we try to insert a new record (with primary keys only)
     # into hps_metrics first. If we hit duplicated key error, return that validation loss.
     # Otherwise we could proceed further code execution.
@@ -480,11 +482,11 @@ def log_metrics_for_hyper_params(
         params.pop("topk_covar")
 
     # if topk_covar is not None:
-        # if "covar_dist" in params:
-            # df = select_randk_covars(df, ranked_features, params["covar_dist"], topk_covar)
-            # params.pop("covar_dist")
-        # else:
-            # df = select_topk_features(df, ranked_features, topk_covar)
+    # if "covar_dist" in params:
+    # df = select_randk_covars(df, ranked_features, params["covar_dist"], topk_covar)
+    # params.pop("covar_dist")
+    # else:
+    # df = select_topk_features(df, ranked_features, topk_covar)
 
     start_time = time.time()
     tag = None
