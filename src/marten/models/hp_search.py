@@ -683,7 +683,7 @@ def hp_deserializer(dct):
             dct[key] = tuple(value)
     return dct
 
-def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
+def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit, feat_size):
     global alchemyEngine, logger
 
     with alchemyEngine.connect() as conn:
@@ -735,12 +735,12 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
                     if "normalize" not in param_dict:
                         param_dict["normalize"] = "soft"
                 case "SOFTS":
-                    param_dict["covar_dist"] = None
-                    # if "covar_dist" not in param_dict:
-                    #     #TODO can we use empty list instead of real dirichlet sample?
-                    #     param_dict["covar_dist"] = 0.
-                    # else:
-                    #     param_dict["covar_dist"] = 0.
+                    # param_dict["covar_dist"] = None
+                    if "covar_dist" not in param_dict:
+                        #TODO can we use fabricated list instead of real dirichlet sample?
+                        param_dict["covar_dist"] = np.full(feat_size, 1./float(feat_size))
+                    else:
+                        param_dict["covar_dist"] = np.array(param_dict["covar_dist"])
 
             tuples.append((param_dict, row[1]))
 
@@ -811,6 +811,7 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
             covar_set_id,
             hps_id,
             args.batch_size * iteration,
+            len(ranked_features),
         )
     if warmstart_tuples is not None:
         logger.info(
