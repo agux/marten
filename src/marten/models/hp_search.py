@@ -11,6 +11,7 @@ import json
 import math
 import multiprocessing
 import pandas as pd
+import numpy as np
 from dotenv import load_dotenv
 
 from marten.utils.database import get_database_engine
@@ -713,29 +714,30 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit):
         for row in results:
             # param_dict = json.loads(row[0], object_hook=hp_deserializer)
             param_dict = row[0]
-            if model == "NeuralProphet":
-                # Fill in default values if not exists in historical HP
-                # To match the size of tensors in bayesopt
-                if "optimizer" not in param_dict:
-                    param_dict["optimizer"] = "AdamW"
-                if "growth" not in param_dict:
-                    param_dict["growth"] = "linear"
-                if "ar_reg" not in param_dict:
-                    param_dict["ar_reg"] = 0
-                if "trend_reg" not in param_dict:
-                    param_dict["trend_reg"] = 0
-                if "trend_reg_threshold" not in param_dict:
-                    param_dict["trend_reg_threshold"] = False
-                if "seasonality_reg" not in param_dict:
-                    param_dict["seasonality_reg"] = 0
-                if "seasonality_mode" not in param_dict:
-                    param_dict["seasonality_mode"] = "additive"
-                if "normalize" not in param_dict:
-                    param_dict["normalize"] = "soft"
-            elif model == "SOFTS":
-                if "covar_dist" not in param_dict:
-                    #TODO can we use empty list instead of real dirichlet sample?
-                    param_dict["covar_dist"] = []
+            match model:
+                case "NeuralProphet":
+                    # Fill in default values if not exists in historical HP
+                    # To match the size of tensors in bayesopt
+                    if "optimizer" not in param_dict:
+                        param_dict["optimizer"] = "AdamW"
+                    if "growth" not in param_dict:
+                        param_dict["growth"] = "linear"
+                    if "ar_reg" not in param_dict:
+                        param_dict["ar_reg"] = 0
+                    if "trend_reg" not in param_dict:
+                        param_dict["trend_reg"] = 0
+                    if "trend_reg_threshold" not in param_dict:
+                        param_dict["trend_reg_threshold"] = False
+                    if "seasonality_reg" not in param_dict:
+                        param_dict["seasonality_reg"] = 0
+                    if "seasonality_mode" not in param_dict:
+                        param_dict["seasonality_mode"] = "additive"
+                    if "normalize" not in param_dict:
+                        param_dict["normalize"] = "soft"
+                case "SOFTS":
+                    if "covar_dist" not in param_dict:
+                        #TODO can we use empty list instead of real dirichlet sample?
+                        param_dict["covar_dist"] = np.empty((0), dtype=float)
 
             tuples.append((param_dict, row[1]))
 
