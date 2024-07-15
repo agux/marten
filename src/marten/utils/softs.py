@@ -367,9 +367,13 @@ def _train(config, setting, train, val, save_model_file):
         )
     except Exception as e:
         model.cleanup()
+        del model
+        torch.cuda.empty_cache()
         if should_retry(e):
             worker = get_worker()
-            worker.close_gracefully(restart=True)
+            if worker is not None:
+                get_logger().warning("trying to restart worker %s due to CUDA error %s", worker.name, str(e))
+                worker.close_gracefully(restart=True)
         raise e
     if val is not None:
         model.test(setting=setting, test_data=val)  # collect validation metrics
@@ -411,7 +415,7 @@ def train_on_cpu(model_config, setting, train, val, save_model_file):
     new_config = model_config.copy()
     new_config["use_gpu"] = False
     large_model = is_large_model(model_config, len(train.columns))
-    cpu_util_threshold = 90
+    cpu_util_threshold = 70
     if large_model:
         lock_key = f"{socket.gethostname()}::CPU"
         cpu_util_threshold = 50
@@ -527,7 +531,8 @@ class SOFTSPredictor:
                 if "timeout waiting for CPU resource" in str(e):
                     cpu_timeout_count += 1
                 if cpu_timeout_count > 1:
-                    gpu = True
+                    # retry with GPU
+                    gpu = model_config["use_gpu"]
                     cpu_timeout_count=0
 
         metrics = m.metrics
