@@ -5,7 +5,7 @@ import multiprocessing
 import torch
 import dask
 import dask.config
-from dask.distributed import WorkerPlugin, LocalCluster, Client, get_client
+from dask.distributed import WorkerPlugin, LocalCluster, Client, get_client, Future
 
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
@@ -251,3 +251,15 @@ def num_workers(local=True):
         return count
     else:
         return len(workers)
+
+
+def hps_task_callback(future: Future):
+    pass
+#     if future.status != "error":
+#         return
+#     #TODO how to enforce retry with GPU=False in case of CUDA error
+#     future.key
+#     future.done()
+#     future.retry()
+#     future.exception()
+#     future.client.restart_workers()

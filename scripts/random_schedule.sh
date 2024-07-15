@@ -15,3 +15,17 @@ at $HOUR:$MINUTE <<EOF
 cd $SCRIPT_DIR
 bash $ACTUAL_SCRIPT
 EOF
+
+# Schedule a second (backup) run 5 minutes later
+BACKUP_MINUTE=$((MINUTE + 5))
+if [ $BACKUP_MINUTE -ge 60 ]; then
+  BACKUP_MINUTE=$((BACKUP_MINUTE - 60))
+  BACKUP_HOUR=$((HOUR + 1))
+else
+  BACKUP_HOUR=$HOUR
+fi
+
+at $BACKUP_HOUR:$BACKUP_MINUTE <<EOF
+cd $SCRIPT_DIR
+bash $ACTUAL_SCRIPT
+EOF

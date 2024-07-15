@@ -397,27 +397,27 @@ def validate_hyperparams(args, df, ranked_features, covar_set_id, hps_id, params
     reg_params = params.copy()
     if args.model == "NeuralProphet":
         reg_search_params(reg_params)
-    try:
-        loss_val = log_metrics_for_hyper_params(
-            args.symbol,
-            df,
-            reg_params,
-            args.epochs,
-            args.random_seed,
-            select_device(
-                args.accelerator,
-                getattr(args, "gpu_util_threshold", None),
-                getattr(args, "gpu_ram_threshold", None),
-            ),
-            covar_set_id,
-            hps_id,
-            args.early_stopping,
-            args.infer_holiday,
-            ranked_features,
-        )
-    except Exception as e:
-        get_logger().error(traceback.format_exc())
-        raise e
+    # try:
+    loss_val = log_metrics_for_hyper_params(
+        args.symbol,
+        df,
+        reg_params,
+        args.epochs,
+        args.random_seed,
+        select_device(
+            args.accelerator,
+            getattr(args, "gpu_util_threshold", None),
+            getattr(args, "gpu_ram_threshold", None),
+        ),
+        covar_set_id,
+        hps_id,
+        args.early_stopping,
+        args.infer_holiday,
+        ranked_features,
+    )
+    # except Exception as e:
+        # get_logger().error(traceback.format_exc())
+        # raise e
     return (params, loss_val)
 
 

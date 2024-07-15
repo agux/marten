@@ -14,10 +14,10 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-from dask.distributed import get_worker, worker_client, Lock, MultiLock
+from dask.distributed import get_worker, worker_client, Lock
 from sklearn.preprocessing import StandardScaler
 from statsmodels.tsa.statespace.varmax import VARMAX
-from statsmodels.tsa.arima.model import ARIMA
+# from statsmodels.tsa.arima.model import ARIMA
 from tenacity import (
     stop_after_attempt,
     wait_exponential,
@@ -33,7 +33,7 @@ from neuralprophet import (
 from softs.exp.exp_custom import Exp_Custom
 
 from marten.utils.logger import get_logger
-from marten.utils.trainer import should_retry, log_retry, log_train_args, select_device
+from marten.utils.trainer import is_cuda_error, log_retry, log_train_args, select_device, cuda_memory_stats
 from marten.utils.holidays import get_next_trade_dates
 from marten.utils.worker import num_workers
 
@@ -369,11 +369,13 @@ def _train(config, setting, train, val, save_model_file):
         model.cleanup()
         del model
         torch.cuda.empty_cache()
-        if should_retry(e):
+        if is_cuda_error(e):
             worker = get_worker()
             if worker is not None:
-                get_logger().warning("trying to restart worker %s due to CUDA error %s", worker.name, str(e))
+                get_logger().warning("trying to restart worker %s due to CUDA error: %s.\n%s", worker.name, str(e), cuda_memory_stats())
                 worker.close_gracefully(restart=True)
+                with worker_client() as client:
+                    client.restart_workers(workers=[worker.address], raise_for_error=False)
         raise e
     if val is not None:
         model.test(setting=setting, test_data=val)  # collect validation metrics
@@ -522,6 +524,8 @@ class SOFTSPredictor:
                         m = train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file)
                         device = "GPU:0"
                     except Exception as e:
+                        if is_cuda_error(e):
+                            raise e
                         get_logger().warning(f"falling back to CPU due to error: {str(e)}")
                         m = train_on_cpu(model_config, setting, train, val, save_model_file)
                 else:

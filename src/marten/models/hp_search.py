@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
-from marten.utils.worker import await_futures, init_client, num_workers
+from marten.utils.worker import await_futures, init_client, num_workers, hps_task_callback
 from marten.utils.neuralprophet import select_topk_features
 from marten.utils.softs import is_large_model
 from marten.utils.trainer import select_device, select_randk_covars
@@ -767,7 +767,7 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
                     new_df = select_randk_covars(df, ranked_features, params["covar_dist"], params["topk_covar"])
                 else:
                     new_df = select_topk_features(df, ranked_features, params["topk_covar"])
-            jobs.append(client.submit(
+            future = client.submit(
                 validate_hyperparams,
                 args,
                 new_df,
@@ -776,8 +776,10 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
                 hps_id,
                 params,
                 resources={"POWER": power_demand(args, params)},
-                retries=2,
-            ))
+                retries=1,
+            )
+            # future.add_done_callback(hps_task_callback)
+            jobs.append(future)
             if i < nworker:
                 interval = random.randint(10000, 30000) / 1000.
                 time.sleep(interval)

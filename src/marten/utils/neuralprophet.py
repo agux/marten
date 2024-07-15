@@ -16,7 +16,7 @@ from dask.distributed import get_worker
 from neuralprophet import NeuralProphet, set_random_seed, set_log_level
 
 from marten.utils.logger import get_logger
-from marten.utils.trainer import should_retry, log_retry, log_train_args, select_device
+from marten.utils.trainer import is_cuda_error, log_retry, log_train_args, select_device
 
 
 LOSS_CAP = 99.99
@@ -225,7 +225,7 @@ class NPPredictor:
                     for attempt in Retrying(
                         stop=stop_after_attempt(5 if wait_gpu else 1),
                         wait=wait_exponential(multiplier=1, max=10),
-                        retry=retry_if_exception(should_retry),
+                        retry=retry_if_exception(is_cuda_error),
                         before_sleep=log_retry,
                     ):
                         with attempt:

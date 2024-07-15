@@ -3,7 +3,7 @@ from dask.distributed import get_worker
 from marten.utils.logger import get_logger
 
 
-def should_retry(exception):
+def is_cuda_error(exception):
     exmsg = str(exception)
     return not isinstance(exception, TimeoutError) and (
         isinstance(exception, torch.cuda.OutOfMemoryError)
@@ -12,6 +12,13 @@ def should_retry(exception):
         or "cuDNN error" in exmsg
         or "unable to find an engine" in exmsg
     )
+
+
+def cuda_memory_stats():
+    return {
+        "mem_allocated": f"{torch.cuda.memory_allocated() / 1024**2} MB",
+        "mem_cached": f"{torch.cuda.memory_cached() / 1024**2} MB",
+    }
 
 
 def log_retry(retry_state):
