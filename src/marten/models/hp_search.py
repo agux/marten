@@ -14,6 +14,8 @@ import pandas as pd
 import numpy as np
 from dotenv import load_dotenv
 
+from dask.distributed import get_worker
+
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
 from marten.utils.worker import await_futures, init_client, num_workers, hps_task_callback
@@ -494,7 +496,9 @@ def _load_covars(
 
     return df, covar_set_id
 
-def _load_covar_feature(alchemyEngine, cov_table, feature, symbols):
+def _load_covar_feature(cov_table, feature, symbols):
+    worker = get_worker()
+    alchemyEngine = worker.alchemyEngine
     match cov_table:
         case "bond_metrics_em" | "bond_metrics_em_view":
             query = f"""
@@ -526,6 +530,7 @@ def _load_covar_feature(alchemyEngine, cov_table, feature, symbols):
     return table_feature_df
 
 def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
+    global client
     # date_col = "ds" if args.model == "NeuralProphet" else "date"
     merged_df = df[["ds", "y"]]
     if args.covar_set_id is not None:
@@ -554,12 +559,21 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
 
     # covars_df contain these columns: cov_symbol, cov_table, feature
     by_table_feature = covars_df.groupby(["cov_table", "feature"])
+    futures = []
     for group1, sdf1 in by_table_feature:
         ## load covariate time series from different tables and/or features
         cov_table = group1[0]
         feature = group1[1]
 
-        table_feature_df = _load_covar_feature(alchemyEngine, cov_table, feature, sdf1["cov_symbol"])
+        futures.append(client.submit(_load_covar_feature, cov_table, feature, sdf1["cov_symbol"]))
+    
+    table_feature_dfs = client.gather(futures)
+
+    for group1, sdf1, table_feature_df in zip(by_table_feature, table_feature_dfs):
+        ## load covariate time series from different tables and/or features
+        cov_table = group1[0]
+        feature = group1[1]
+        # table_feature_df = _load_covar_feature(cov_table, feature, sdf1["cov_symbol"])
 
         # merge and append the feature column of table_feature_df to merged_df, by matching dates
         # split table_feature_df by symbol column
@@ -741,6 +755,8 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit, 
                         param_dict["covar_dist"] = np.full(feat_size, 1./float(feat_size))
                     else:
                         param_dict["covar_dist"] = np.array(param_dict["covar_dist"])
+
+                    logger.info("""param_dict["covar_dist"]: %s""", param_dict["covar_dist"])
 
             tuples.append((param_dict, row[1]))
 
