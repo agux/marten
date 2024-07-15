@@ -564,13 +564,11 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
         ## load covariate time series from different tables and/or features
         cov_table = group1[0]
         feature = group1[1]
-
         futures.append(client.submit(_load_covar_feature, cov_table, feature, sdf1["cov_symbol"]))
     
     table_feature_dfs = client.gather(futures)
 
     for (group1, sdf1), table_feature_df in zip(by_table_feature, table_feature_dfs):
-        # group1, sdf1 = group_and_sdf[0], group_and_sdf[1]
         ## load covariate time series from different tables and/or features
         cov_table = group1[0]
         feature = group1[1]
@@ -750,14 +748,14 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit, 
                     if "normalize" not in param_dict:
                         param_dict["normalize"] = "soft"
                 case "SOFTS":
-                    # param_dict["covar_dist"] = None
-                    if "covar_dist" not in param_dict:
-                        #TODO can we use fabricated list instead of real dirichlet sample?
-                        param_dict["covar_dist"] = np.full(feat_size, 1./float(feat_size))
-                    else:
-                        param_dict["covar_dist"] = np.array(param_dict["covar_dist"])
+                    param_dict["covar_dist"] = 0.0
+                    # if "covar_dist" not in param_dict:
+                    #     #TODO can we use fabricated list instead of real dirichlet sample?
+                    #     param_dict["covar_dist"] = np.full(feat_size, 1./float(feat_size))
+                    # else:
+                    #     param_dict["covar_dist"] = np.array(param_dict["covar_dist"])
 
-                    logger.info("""param_dict["covar_dist"]: %s""", param_dict["covar_dist"])
+                    # logger.info("""param_dict["covar_dist"]: %s""", param_dict["covar_dist"])
 
             tuples.append((param_dict, row[1]))
 
