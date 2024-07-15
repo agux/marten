@@ -569,7 +569,7 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
     
     table_feature_dfs = client.gather(futures)
 
-    for group1, sdf1, table_feature_df in zip(*by_table_feature, table_feature_dfs):
+    for (group1, sdf1), table_feature_df in zip(by_table_feature, table_feature_dfs):
         # group1, sdf1 = group_and_sdf[0], group_and_sdf[1]
         ## load covariate time series from different tables and/or features
         cov_table = group1[0]
