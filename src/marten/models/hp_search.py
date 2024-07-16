@@ -748,14 +748,14 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit, 
                     if "normalize" not in param_dict:
                         param_dict["normalize"] = "soft"
                 case "SOFTS":
-                    param_dict["covar_dist"] = 0.0
-                    # if "covar_dist" not in param_dict:
-                    #     #TODO can we use fabricated list instead of real dirichlet sample?
-                    #     param_dict["covar_dist"] = np.full(feat_size, 1./float(feat_size))
-                    # else:
-                    #     param_dict["covar_dist"] = np.array(param_dict["covar_dist"])
+                    # param_dict["covar_dist"] = 0.0
+                    if "covar_dist" not in param_dict:
+                        #TODO can we use fabricated list instead of real dirichlet sample?
+                        param_dict["covar_dist"] = np.full(feat_size, 1./float(feat_size))
+                    else:
+                        param_dict["covar_dist"] = np.array(param_dict["covar_dist"])
 
-                    logger.info("""param_dict: %s""", param_dict)
+                    # logger.info("""param_dict: %s""", param_dict)
 
             tuples.append((param_dict, row[1]))
 
