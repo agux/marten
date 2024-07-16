@@ -393,7 +393,8 @@ def train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, 
     large_model = is_large_model(model_config, len(train.columns))
 
     lock_key = f"{socket.gethostname()}::GPU-{model_config["gpu"]}"
-
+    lock = None
+    
     if large_model:
         lock = Lock(lock_key)
         lock_wait_start = time.time()
