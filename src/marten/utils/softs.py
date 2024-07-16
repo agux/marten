@@ -76,16 +76,16 @@ def set_random_seed(seed):
 def is_large_model(model_config, n_feat):
     score = 0
     if local_machine_power() > 1:
-        score += 1 if model_config["d_model"] >= 512 else 0
-        score += 1 if model_config["d_core"] >= 1024 else 0
-        score += 1 if model_config["d_ff"] >= 1024 else 0
-        score += 1 if model_config["e_layers"] >= 20 else 0
+        score += 1 if model_config["d_model"] >= 256 else 0
+        score += 1 if model_config["d_core"] >= 512 else 0
+        score += 1 if model_config["d_ff"] >= 512 else 0
+        score += 1 if model_config["e_layers"] >= 16 else 0
         score += 1 if n_feat >= 128 else 0
     else:
         score += 1 if model_config["d_model"] >= 128 else 0
         score += 1 if model_config["d_core"] >= 256 else 0
         score += 1 if model_config["d_ff"] >= 256 else 0
-        score += 1 if model_config["e_layers"] >= 16 else 0
+        score += 1 if model_config["e_layers"] >= 8 else 0
         score += 1 if n_feat >= 64 else 0
     return score >= 3
 
