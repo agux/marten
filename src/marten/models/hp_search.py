@@ -799,7 +799,7 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
             # future.add_done_callback(hps_task_callback)
             jobs.append(future)
             if i < nworker:
-                interval = random.randint(10000, 30000) / 1000.
+                interval = random.randint(5000, 15000) / 1000.
                 time.sleep(interval)
         results = client.gather(jobs, errors="skip")
         elapsed = round(time.time() - t1, 3)

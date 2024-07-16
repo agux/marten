@@ -586,7 +586,7 @@ class SOFTSPredictor:
                 else:
                     m = train_on_cpu(model_config, setting, train, val, save_model_file)
             except TimeoutError as e:
-                if "timeout waiting for CPU resource" in str(e):
+                if "waiting for CPU resource" in str(e):
                     cpu_timeout_count += 1
                     if cpu_timeout_count > 1:
                         # retry with GPU
