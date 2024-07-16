@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-from dask.distributed import get_worker, worker_client, Lock
+from dask.distributed import get_worker, worker_client, Lock, get_client
 from sklearn.preprocessing import StandardScaler
 from statsmodels.tsa.statespace.varmax import VARMAX
 # from statsmodels.tsa.arima.model import ARIMA
@@ -369,19 +369,24 @@ def _train(config, setting, train, val, save_model_file):
         model.cleanup()
         del model
         torch.cuda.empty_cache()
-        if is_cuda_error(e):
-            worker = get_worker()
-            if worker is not None:
-                get_logger().warning("trying to restart worker %s due to CUDA error: %s.\n%s", worker.name, str(e), cuda_memory_stats())
-                worker.close_gracefully(restart=True)
-                with worker_client() as client:
-                    client.restart_workers(workers=[worker.address], raise_for_error=False)
         raise e
     if val is not None:
         model.test(setting=setting, test_data=val)  # collect validation metrics
     if not save_model_file:
         shutil.rmtree(os.path.join(config["checkpoints"], setting))
     return model
+
+def restart_worker_on_cuda_error(exception, lock):
+    if is_cuda_error(exception):
+        if lock is not None:
+            try:
+                lock.release()
+            except Exception as e:
+                get_logger().warning("exception releasing lock %s: %s", lock.name, str(e))
+        worker = get_worker()
+        if worker is not None:
+            get_logger().warning("trying to restart worker %s due to CUDA error: %s.\n%s", worker.address, str(exception), cuda_memory_stats())
+            get_client().restart_workers(workers=[worker.address], timeout=600, raise_for_error=False)
 
 def train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file):
     global resource_wait_time, lock_wait_time
@@ -406,11 +411,14 @@ def train_on_gpu(n_attempt, should_wait, gpu_ut, gpu_rt, model_config, setting, 
     while should_wait and wait_gpu(gpu_ut, gpu_rt, stop_at):
         time.sleep(1)
     if time.time() <= stop_at:
-        m = _train(model_config, setting, train, val, save_model_file)
-        return m
+        try:
+            m = _train(model_config, setting, train, val, save_model_file)
+            return m
+        except Exception as e:
+            restart_worker_on_cuda_error(e, lock)
     else:
         raise TimeoutError("Timeout waiting for GPU resource")
-            
+
 
 def train_on_cpu(model_config, setting, train, val, save_model_file):
     global resource_wait_time, lock_wait_time
@@ -418,9 +426,11 @@ def train_on_cpu(model_config, setting, train, val, save_model_file):
     new_config["use_gpu"] = False
     large_model = is_large_model(model_config, len(train.columns))
     cpu_util_threshold = 70
+    mem_util_threshold = 70
     if large_model:
         lock_key = f"{socket.gethostname()}::CPU"
         cpu_util_threshold = 50
+        mem_util_threshold = 50
         lock = Lock(lock_key)
         lock_wait_start = time.time()
         lock_acquired = False
@@ -435,9 +445,11 @@ def train_on_cpu(model_config, setting, train, val, save_model_file):
                 
     stop_at = time.time() + resource_wait_time  # wait up to 300 seconds
     cpu_util = psutil.cpu_percent(1)
-    while cpu_util >= cpu_util_threshold and time.time() <= stop_at:
+    mem_util = psutil.virtual_memory().percent
+    while (cpu_util >= cpu_util_threshold or mem_util >= mem_util_threshold) and time.time() <= stop_at:
         time.sleep(1)
         cpu_util = psutil.cpu_percent(1)
+        mem_util = psutil.virtual_memory().percent
 
     if time.time() <= stop_at:
         ratio = 0.9 if large_model else 0.33
