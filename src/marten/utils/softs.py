@@ -16,6 +16,7 @@ import torch
 from dask.distributed import get_worker, worker_client, Lock, get_client
 from sklearn.preprocessing import StandardScaler
 from statsmodels.tsa.statespace.varmax import VARMAX
+
 # from statsmodels.tsa.arima.model import ARIMA
 from neuralprophet import (
     set_random_seed as np_random_seed,
@@ -25,7 +26,13 @@ from neuralprophet import (
 from softs.exp.exp_custom import Exp_Custom
 
 from marten.utils.logger import get_logger
-from marten.utils.trainer import is_cuda_error, log_retry, log_train_args, select_device, cuda_memory_stats
+from marten.utils.trainer import (
+    is_cuda_error,
+    log_retry,
+    log_train_args,
+    select_device,
+    cuda_memory_stats,
+)
 from marten.utils.holidays import get_next_trade_dates
 from marten.utils.worker import local_machine_power
 
@@ -64,8 +71,9 @@ baseline_config = MappingProxyType(
     }
 )
 
-resource_wait_time = 300 #seconds, waiting for compute resource
+resource_wait_time = 300  # seconds, waiting for compute resource
 lock_wait_time = 15
+
 
 def set_random_seed(seed):
     random.seed(seed)
@@ -89,14 +97,11 @@ def is_large_model(model_config, n_feat):
         score += 1 if n_feat >= 64 else 0
     return score >= 3
 
+
 def use_gpu(model_config, n_feat, util_threshold=80, vram_threshold=80):
     use_gpu = model_config["use_gpu"]
     # larger models should wait for GPU
-    should_wait = (
-        is_large_model(model_config, n_feat)
-        if use_gpu
-        else False
-    )
+    should_wait = is_large_model(model_config, n_feat) if use_gpu else False
     use_gpu = (
         True
         if should_wait
@@ -111,12 +116,9 @@ def use_gpu(model_config, n_feat, util_threshold=80, vram_threshold=80):
 
 def wait_gpu(util_threshold=80, vram_threshold=80, stop_at=None):
     return (
-        (
-            torch.cuda.utilization() >= util_threshold
-            or torch.cuda.memory_usage() >= vram_threshold
-        )
-        and time.time() <= stop_at
-    )
+        torch.cuda.utilization() >= util_threshold
+        or torch.cuda.memory_usage() >= vram_threshold
+    ) and time.time() <= stop_at
 
 
 def _fit_multivariate_impute_model(input, params):
@@ -354,10 +356,11 @@ def _optimize_torch(ratio=0.85):
     # Enable cuDNN auto-tuner
     # torch.backends.cudnn.benchmark = True
 
+
 def _train(config, setting, train, val, save_model_file):
     torch.cuda.empty_cache()
     model = Exp_Custom(SimpleNamespace(**config))
-    
+
     def _cleanup(model):
         if model is not None:
             model.cleanup()
@@ -382,6 +385,7 @@ def _train(config, setting, train, val, save_model_file):
 
     return model
 
+
 def restart_worker(exception, lock):
     if lock is not None:
         try:
@@ -390,14 +394,24 @@ def restart_worker(exception, lock):
             get_logger().warning("exception releasing lock %s: %s", lock.name, str(e))
     worker = get_worker()
     if worker is not None:
-        get_logger().warning("trying to restart worker %s due to CUDA error: %s.\n%s", worker.address, str(exception), cuda_memory_stats())
-        get_client().restart_workers(workers=[worker.address], timeout=600, raise_for_error=False)
+        get_logger().warning(
+            "trying to restart worker %s due to CUDA error: %s.\n%s",
+            worker.address,
+            str(exception),
+            cuda_memory_stats(),
+        )
+        get_client().restart_workers(
+            workers=[worker.address], timeout=600, raise_for_error=False
+        )
 
-def train_on_gpu(should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file):
+
+def train_on_gpu(
+    should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file
+):
     global resource_wait_time, lock_wait_time
     large_model = is_large_model(model_config, len(train.columns))
 
-    lock_key = f"{socket.gethostname()}::GPU-{model_config["gpu"]}"
+    lock_key = f"""{socket.gethostname()}::GPU-{model_config["gpu"]}"""
     lock = None
 
     if large_model:
@@ -405,13 +419,13 @@ def train_on_gpu(should_wait, gpu_ut, gpu_rt, model_config, setting, train, val,
         lock_wait_start = time.time()
         lock_acquired = False
         while time.time() - lock_wait_start <= resource_wait_time:
-            if lock.acquire(timeout = f"{lock_wait_time}s"):
+            if lock.acquire(timeout=f"{lock_wait_time}s"):
                 lock_acquired = True
                 get_logger().debug("lock acquired: %s", lock_key)
                 break
         if not lock_acquired:
             raise TimeoutError(f"Timeout waiting for GPU lock: {lock_key}")
-    
+
     stop_at = time.time() + resource_wait_time  # wait up to 300 seconds
     while should_wait and wait_gpu(gpu_ut, gpu_rt, stop_at):
         time.sleep(1)
@@ -423,6 +437,7 @@ def train_on_gpu(should_wait, gpu_ut, gpu_rt, model_config, setting, train, val,
         except Exception as e:
             if is_cuda_error(e):
                 restart_worker(e, lock)
+            release_lock(lock, 0)
             raise e
     else:
         release_lock(lock, 0)
@@ -444,17 +459,19 @@ def train_on_cpu(model_config, setting, train, val, save_model_file):
         lock_wait_start = time.time()
         lock_acquired = False
         while time.time() - lock_wait_start <= resource_wait_time:
-            if lock.acquire(timeout = f"{lock_wait_time}s"):
+            if lock.acquire(timeout=f"{lock_wait_time}s"):
                 lock_acquired = True
                 get_logger().debug("lock acquired: %s", lock_key)
                 break
         if not lock_acquired:
             raise TimeoutError(f"Timeout waiting for CPU lock {lock_key}")
-                
+
     stop_at = time.time() + 30  # wait up to 30 seconds
     cpu_util = psutil.cpu_percent(1)
     mem_util = psutil.virtual_memory().percent
-    while (cpu_util >= cpu_util_threshold or mem_util >= mem_util_threshold) and time.time() <= stop_at:
+    while (
+        cpu_util >= cpu_util_threshold or mem_util >= mem_util_threshold
+    ) and time.time() <= stop_at:
         time.sleep(1)
         cpu_util = psutil.cpu_percent(1)
         mem_util = psutil.virtual_memory().percent
@@ -468,13 +485,12 @@ def train_on_cpu(model_config, setting, train, val, save_model_file):
     else:
         release_lock(lock, 0)
         raise TimeoutError("Timeout waiting for CPU resource")
-    
 
 
 def release_lock(lock, after=10):
     if lock is None:
         return
-    
+
     def _release():
         get_logger().debug("lock %s will be released in %s seconds", lock.name, after)
         time.sleep(after)
@@ -483,9 +499,9 @@ def release_lock(lock, after=10):
             get_logger().debug("lock %s released", lock.name)
         except Exception as e:
             get_logger().warning("exception releasing lock %s: %s", lock.name, str(e))
-    
+
     threading.Timer(after, _release).start()
-    
+
 
 class SOFTSPredictor:
 
@@ -531,7 +547,7 @@ class SOFTSPredictor:
         gpu_ut = gpu_ut * 0.5 if large_model else gpu_ut
         gpu_rt = gpu_rt * 0.5 if large_model else gpu_rt
 
-        #TODO smarter device selection: what if GPU is busy and CPU is idle?
+        # TODO smarter device selection: what if GPU is busy and CPU is idle?
         # swiftly detect availability between 2 devices
         gpu, should_wait = use_gpu(
             model_config,
@@ -539,20 +555,33 @@ class SOFTSPredictor:
             gpu_ut,
             gpu_rt,
         )
-        
+
         m = None
         cpu_timeout_count = 0
         while m is None:
             try:
                 if gpu:
                     try:
-                        m = train_on_gpu(should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file)
+                        m = train_on_gpu(
+                            should_wait,
+                            gpu_ut,
+                            gpu_rt,
+                            model_config,
+                            setting,
+                            train,
+                            val,
+                            save_model_file,
+                        )
                         device = "GPU:0"
                     except Exception as e:
                         if is_cuda_error(e):
                             raise e
-                        get_logger().warning(f"falling back to CPU due to error: {str(e)}")
-                        m = train_on_cpu(model_config, setting, train, val, save_model_file)
+                        get_logger().warning(
+                            f"falling back to CPU due to error: {str(e)}"
+                        )
+                        m = train_on_cpu(
+                            model_config, setting, train, val, save_model_file
+                        )
                 else:
                     m = train_on_cpu(model_config, setting, train, val, save_model_file)
             except TimeoutError as e:
@@ -562,9 +591,9 @@ class SOFTSPredictor:
                         # retry with GPU
                         get_logger().debug("retrying: %s", str(e))
                         gpu = model_config["use_gpu"]
-                        cpu_timeout_count=0
+                        cpu_timeout_count = 0
                 else:
-                    get_logger().debug("retrying: %s", str(e))
+                    get_logger().warning("retrying: %s", str(e))
 
         metrics = m.metrics
         metrics["device"] = device
