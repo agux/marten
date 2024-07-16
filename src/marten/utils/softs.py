@@ -451,6 +451,7 @@ def train_on_cpu(model_config, setting, train, val, save_model_file):
     large_model = is_large_model(model_config, len(train.columns))
     cpu_util_threshold = 70
     mem_util_threshold = 70
+    lock = None
     if large_model:
         lock_key = f"{socket.gethostname()}::CPU"
         cpu_util_threshold = 50
