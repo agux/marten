@@ -36,6 +36,22 @@ class LocalWorkerPlugin(WorkerPlugin):
         worker.logger = get_logger(self.logger_name, role="worker")
         worker.args = self.args
 
+class TaskException(Exception):
+    def __init__(self, message, **args):
+        # Call the base class constructor with the message
+        super().__init__(message)
+        self.message = message
+        self.task_info = args
+
+    
+    def __str__(self):
+        # Return a custom string representation
+        if self.task_info:
+            return f"{self.args[0]} : {self.task_info}"
+        else:
+            return self.args[0]
+
+
 def local_machine_power():
     if not torch.cuda.is_available():
         return 1
@@ -56,6 +72,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
         {
             "distributed.worker.resources.POWER": local_machine_power(),
             "distributed.scheduler.worker-ttl": "30 minutes",
+            "distributed.scheduler.worker-saturation": 1.0,
             "distributed.worker.memory.terminate": False,
             "distributed.comm.retry.count": 10,
             "distributed.comm.timeouts.connect": 120,
@@ -253,13 +270,39 @@ def num_workers(local=True):
         return len(workers)
 
 
+def restart_worker(exception):
+    worker = get_worker()
+    if worker is not None:
+        get_logger().warning(
+            "trying to restart worker %s due to CUDA error: %s.\n%s",
+            worker.address,
+            str(exception),
+            cuda_memory_stats(),
+        )
+        get_client().restart_workers(
+            workers=[worker.address], timeout=600, raise_for_error=False
+        )
+
+
 def hps_task_callback(future: Future):
-    pass
-#     if future.status != "error":
-#         return
-#     #TODO how to enforce retry with GPU=False in case of CUDA error
-#     future.key
-#     future.done()
-#     future.retry()
-#     future.exception()
+    if future.status != "error":
+        return
+    #     #TODO how to enforce retry with GPU=False in case of CUDA error
+    #     future.key
+    #     future.done()
+    #     future.retry()
+    e = future.exception()
+    if not isinstance(e, TaskException):
+        return
+
+    if hasattr(e.task_info, "worker") and getattr(e.task_info, "restart_worker", False):
+        worker = e.task_info.worker
+        get_logger().warning(
+            "Restarting worker %s due to %s",
+            worker.address,
+            e.message,
+        )
+        future.client.restart_workers(
+            workers=[worker.address], timeout=600, raise_for_error=False
+        )
 #     future.client.restart_workers()

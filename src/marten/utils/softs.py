@@ -34,7 +34,7 @@ from marten.utils.trainer import (
     cuda_memory_stats,
 )
 from marten.utils.holidays import get_next_trade_dates
-from marten.utils.worker import local_machine_power
+from marten.utils.worker import local_machine_power, TaskException
 
 # Immutable / constant
 default_config = MappingProxyType(
@@ -386,12 +386,7 @@ def _train(config, setting, train, val, save_model_file):
     return model
 
 
-def restart_worker(exception, lock):
-    if lock is not None:
-        try:
-            lock.release()
-        except Exception as e:
-            get_logger().warning("exception releasing lock %s: %s", lock.name, str(e))
+def restart_worker(exception):
     worker = get_worker()
     if worker is not None:
         get_logger().warning(
@@ -435,9 +430,13 @@ def train_on_gpu(
             m = _train(model_config, setting, train, val, save_model_file)
             return m
         except Exception as e:
-            if is_cuda_error(e):
-                restart_worker(e, lock)
             release_lock(lock, 0)
+            if is_cuda_error(e):
+                raise TaskException(
+                    f"CUDA error: {str(e)} Memory stats: {cuda_memory_stats()}",
+                    worker=get_worker(),
+                    restart_worker=True,
+                )
             raise e
     else:
         release_lock(lock, 0)
@@ -586,7 +585,7 @@ class SOFTSPredictor:
                 else:
                     m = train_on_cpu(model_config, setting, train, val, save_model_file)
             except TimeoutError as e:
-                if "waiting for CPU resource" in str(e):
+                if "waiting for CPU".lower() in str(e).lower():
                     cpu_timeout_count += 1
                     if cpu_timeout_count > 1:
                         # retry with GPU

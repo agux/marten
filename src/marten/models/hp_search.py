@@ -9,6 +9,7 @@ import datetime
 import argparse
 import json
 import math
+import hashlib
 import multiprocessing
 import pandas as pd
 import numpy as np
@@ -780,6 +781,8 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
         nworker = num_workers(False)
         for i, params in enumerate(params_batch):
             new_df = df
+            param_str = json.dumps(params, sort_keys=True)
+            hpid = hashlib.md5(param_str.encode("utf-8")).hexdigest()
             if "topk_covar" in params:
                 if "covar_dist" in params:
                     new_df = select_randk_covars(df, ranked_features, params["covar_dist"], params["topk_covar"])
@@ -795,8 +798,9 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
                 params,
                 resources={"POWER": power_demand(args, params)},
                 retries=1,
+                key=f"{validate_hyperparams.__name__}-{hpid}",
             )
-            # future.add_done_callback(hps_task_callback)
+            future.add_done_callback(hps_task_callback)
             jobs.append(future)
             if i < nworker:
                 interval = random.randint(5000, 15000) / 1000.
