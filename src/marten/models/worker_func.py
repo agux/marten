@@ -943,7 +943,7 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, df, topk, nth_top
     covar_set_id = None
     new_df = None
     if best_setting.empty:
-        logger.warn(
+        logger.warning(
             (
                 "No hyper-parameter search or covariate metrics for %s. "
                 "Proceeding univariate prediction with default hyper-parameters. "
