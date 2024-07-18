@@ -404,11 +404,12 @@ def validate_hyperparams(args, df, ranked_features, covar_set_id, hps_id, params
         reg_params,
         args.epochs,
         args.random_seed,
-        select_device(
-            args.accelerator,
-            getattr(args, "gpu_util_threshold", None),
-            getattr(args, "gpu_ram_threshold", None),
-        ),
+        # select_device(
+        #     args.accelerator,
+        #     getattr(args, "gpu_util_threshold", None),
+        #     getattr(args, "gpu_ram_threshold", None),
+        # ),
+        args.accelerator,
         covar_set_id,
         hps_id,
         args.early_stopping,

@@ -434,7 +434,7 @@ def train_on_gpu(
             if is_cuda_error(e):
                 raise TaskException(
                     f"CUDA error: {str(e)} Memory stats: {cuda_memory_stats()}",
-                    worker=get_worker(),
+                    worker={"address": get_worker().address},
                     restart_worker=True,
                 )
             raise e
@@ -575,7 +575,7 @@ class SOFTSPredictor:
                         if is_cuda_error(e):
                             raise e
                         elif should_wait and isinstance(e, TimeoutError):
-                            t = 0.9 if is_large_model else 0.75
+                            t = 0.9 if is_large_model else 0.8
                             if random.random() < t:
                                 continue
                         get_logger().warning(
