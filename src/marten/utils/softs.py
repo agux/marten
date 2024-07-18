@@ -400,7 +400,7 @@ def restart_worker(exception):
 
 
 def train_on_gpu(
-    should_wait, gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file
+    gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file
 ):
     global resource_wait_time, lock_wait_time
     large_model = is_large_model(model_config, len(train.columns))
@@ -421,7 +421,7 @@ def train_on_gpu(
             raise TimeoutError(f"Timeout waiting for GPU lock: {lock_key}")
 
     stop_at = time.time() + resource_wait_time
-    while should_wait and wait_gpu(gpu_ut, gpu_rt, stop_at):
+    while wait_gpu(gpu_ut, gpu_rt, stop_at):
         time.sleep(1)
     if time.time() <= stop_at:
         release_lock(lock)
@@ -561,7 +561,6 @@ class SOFTSPredictor:
                 if gpu:
                     try:
                         m = train_on_gpu(
-                            should_wait,
                             gpu_ut,
                             gpu_rt,
                             model_config,
@@ -574,6 +573,10 @@ class SOFTSPredictor:
                     except Exception as e:
                         if is_cuda_error(e):
                             raise e
+                        elif should_wait and isinstance(e, TimeoutError):
+                            t = 0.9 if is_large_model else 0.75
+                            if random.random() < t:
+                                continue
                         get_logger().warning(
                             f"falling back to CPU due to error: {str(e)}"
                         )
@@ -584,12 +587,12 @@ class SOFTSPredictor:
                     m = train_on_cpu(model_config, setting, train, val, save_model_file)
             except TimeoutError as e:
                 # if "waiting for CPU".lower() in str(e).lower():
-                    # retry with GPU
+                # retry with GPU
                 get_logger().debug("retrying: %s", str(e))
                 if not gpu:
                     gpu = model_config["use_gpu"]
                 # else:
-                    # get_logger().warning("retrying: %s", str(e))
+                # get_logger().warning("retrying: %s", str(e))
 
         metrics = m.metrics
         metrics["device"] = device
