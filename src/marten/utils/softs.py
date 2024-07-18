@@ -28,7 +28,6 @@ from softs.exp.exp_custom import Exp_Custom
 from marten.utils.logger import get_logger
 from marten.utils.trainer import (
     is_cuda_error,
-    log_retry,
     log_train_args,
     select_device,
     cuda_memory_stats,
@@ -71,7 +70,7 @@ baseline_config = MappingProxyType(
     }
 )
 
-resource_wait_time = 300  # seconds, waiting for compute resource
+resource_wait_time = 30  # seconds, waiting for compute resource
 lock_wait_time = 15
 
 
@@ -421,7 +420,7 @@ def train_on_gpu(
         if not lock_acquired:
             raise TimeoutError(f"Timeout waiting for GPU lock: {lock_key}")
 
-    stop_at = time.time() + resource_wait_time  # wait up to 300 seconds
+    stop_at = time.time() + resource_wait_time
     while should_wait and wait_gpu(gpu_ut, gpu_rt, stop_at):
         time.sleep(1)
     if time.time() <= stop_at:
@@ -466,7 +465,7 @@ def train_on_cpu(model_config, setting, train, val, save_model_file):
         if not lock_acquired:
             raise TimeoutError(f"Timeout waiting for CPU lock {lock_key}")
 
-    stop_at = time.time() + 30  # wait up to 30 seconds
+    stop_at = time.time() + resource_wait_time
     cpu_util = psutil.cpu_percent(1)
     mem_util = psutil.virtual_memory().percent
     while (
@@ -557,7 +556,6 @@ class SOFTSPredictor:
         )
 
         m = None
-        cpu_timeout_count = 0
         while m is None:
             try:
                 if gpu:
@@ -585,15 +583,13 @@ class SOFTSPredictor:
                 else:
                     m = train_on_cpu(model_config, setting, train, val, save_model_file)
             except TimeoutError as e:
-                if "waiting for CPU".lower() in str(e).lower():
-                    cpu_timeout_count += 1
-                    if cpu_timeout_count > 1:
-                        # retry with GPU
-                        get_logger().debug("retrying: %s", str(e))
-                        gpu = model_config["use_gpu"]
-                        cpu_timeout_count = 0
-                else:
-                    get_logger().warning("retrying: %s", str(e))
+                # if "waiting for CPU".lower() in str(e).lower():
+                    # retry with GPU
+                get_logger().debug("retrying: %s", str(e))
+                if not gpu:
+                    gpu = model_config["use_gpu"]
+                # else:
+                    # get_logger().warning("retrying: %s", str(e))
 
         metrics = m.metrics
         metrics["device"] = device
