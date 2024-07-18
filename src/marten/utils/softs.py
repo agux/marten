@@ -101,15 +101,15 @@ def use_gpu(model_config, n_feat, util_threshold=80, vram_threshold=80):
     use_gpu = model_config["use_gpu"]
     # larger models should wait for GPU
     should_wait = is_large_model(model_config, n_feat) if use_gpu else False
-    use_gpu = (
-        True
-        if should_wait
-        else (
-            use_gpu
-            and torch.cuda.utilization() < util_threshold
-            and torch.cuda.memory_usage() < vram_threshold
-        )
-    )
+    # use_gpu = (
+    #     True
+    #     if should_wait
+    #     else (
+    #         use_gpu
+    #         and torch.cuda.utilization() < util_threshold
+    #         and torch.cuda.memory_usage() < vram_threshold
+    #     )
+    # )
     return use_gpu, should_wait
 
 
