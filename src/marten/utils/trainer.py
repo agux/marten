@@ -46,7 +46,7 @@ def log_train_args(df, *args, **kwargs):
         kwargs,
     )
 
-
+# this simple triage algorithm is to be deprecated
 def select_device(accelerator, util_threshold=80, vram_threshold=80):
     return (
         "gpu"

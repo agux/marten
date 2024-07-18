@@ -5,6 +5,7 @@ import psutil
 import shutil
 import random
 import socket
+import math
 import traceback
 import warnings
 import threading
@@ -557,7 +558,9 @@ class SOFTSPredictor:
         )
 
         m = None
+        attempt = 0
         while m is None:
+            attempt += 1
             try:
                 if gpu:
                     try:
@@ -575,7 +578,7 @@ class SOFTSPredictor:
                         if is_cuda_error(e):
                             raise e
                         elif should_wait and isinstance(e, TimeoutError):
-                            t = 0.9 if is_large_model else 0.8
+                            t = (0.9 if is_large_model else 0.8) * max(0.1, 1.0/(attempt**.2))
                             if random.random() < t:
                                 continue
                         get_logger().warning(

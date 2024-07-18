@@ -5,7 +5,13 @@ import multiprocessing
 import torch
 import dask
 import dask.config
-from dask.distributed import WorkerPlugin, LocalCluster, Client, get_client, Future
+from dask.distributed import (
+    WorkerPlugin,
+    LocalCluster,
+    Client,
+    get_client,
+    Future,
+)
 
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
@@ -268,20 +274,6 @@ def num_workers(local=True):
         return count
     else:
         return len(workers)
-
-
-def restart_worker(exception):
-    worker = get_worker()
-    if worker is not None:
-        get_logger().warning(
-            "trying to restart worker %s due to CUDA error: %s.\n%s",
-            worker.address,
-            str(exception),
-            cuda_memory_stats(),
-        )
-        get_client().restart_workers(
-            workers=[worker.address], timeout=600, raise_for_error=False
-        )
 
 
 def hps_task_callback(future: Future):
