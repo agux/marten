@@ -828,7 +828,7 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
             args.symbol,
             covar_set_id,
             hps_id,
-            args.batch_size * iteration,
+            args.batch_size * iteration * 2,
             len(ranked_features),
         )
     if warmstart_tuples is not None:
