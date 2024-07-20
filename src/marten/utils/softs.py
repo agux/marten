@@ -414,10 +414,10 @@ def train_on_gpu(
     while time.time() - lock_wait_start <= resource_wait_time:
         if lock.acquire(timeout=f"{lock_wait_time}s"):
             lock_acquired = True
-            get_logger().info("lock acquired: %s", lock_key)
+            get_logger().debug("lock acquired: %s", lock_key)
             break
     if not lock_acquired:
-        get_logger().info("Timeout waiting for GPU lock: %s", lock_key)
+        # get_logger().debug("Timeout waiting for GPU lock: %s", lock_key)
         raise TimeoutError(f"Timeout waiting for GPU lock: {lock_key}")
 
     stop_at = time.time() + resource_wait_time
@@ -491,7 +491,7 @@ def release_lock(lock, after=10):
         time.sleep(after)
         try:
             lock.release()
-            get_logger().info("lock %s released", lock.name)
+            get_logger().debug("lock %s released", lock.name)
         except Exception as e:
             get_logger().warning("exception releasing lock %s: %s", lock.name, str(e))
 
