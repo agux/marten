@@ -801,6 +801,9 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
             )
             future.add_done_callback(hps_task_callback)
             jobs.append(future)
+
+            logger.info("futures info from client: %s", client.futures)
+
             if i < nworker:
                 interval = random.randint(5000, 15000) / 1000.
                 time.sleep(interval)

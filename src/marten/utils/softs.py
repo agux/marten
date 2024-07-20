@@ -97,7 +97,7 @@ def is_large_model(model_config, n_feat):
         score += 1 if n_feat >= 64 else 0
     return score >= 3
 
-
+# to be deprecated
 def use_gpu(model_config, n_feat, util_threshold=80, vram_threshold=80):
     use_gpu = model_config["use_gpu"]
     # larger models should wait for GPU
@@ -404,23 +404,21 @@ def train_on_gpu(
     gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file
 ):
     global resource_wait_time, lock_wait_time
-    large_model = is_large_model(model_config, len(train.columns))
+    # large_model = is_large_model(model_config, len(train.columns))
 
     lock_key = f"""{socket.gethostname()}::GPU-{model_config["gpu"]}"""
-    lock = None
 
-    if large_model:
-        lock = Lock(lock_key)
-        lock_wait_start = time.time()
-        lock_acquired = False
-        while time.time() - lock_wait_start <= resource_wait_time:
-            if lock.acquire(timeout=f"{lock_wait_time}s"):
-                lock_acquired = True
-                get_logger().info("lock acquired: %s", lock_key)
-                break
-        if not lock_acquired:
-            get_logger().info("Timeout waiting for GPU lock: %s", lock_key)
-            raise TimeoutError(f"Timeout waiting for GPU lock: {lock_key}")
+    lock = Lock(lock_key)
+    lock_wait_start = time.time()
+    lock_acquired = False
+    while time.time() - lock_wait_start <= resource_wait_time:
+        if lock.acquire(timeout=f"{lock_wait_time}s"):
+            lock_acquired = True
+            get_logger().info("lock acquired: %s", lock_key)
+            break
+    if not lock_acquired:
+        get_logger().info("Timeout waiting for GPU lock: %s", lock_key)
+        raise TimeoutError(f"Timeout waiting for GPU lock: {lock_key}")
 
     stop_at = time.time() + resource_wait_time
     while wait_gpu(gpu_ut, gpu_rt, stop_at):
@@ -449,24 +447,20 @@ def train_on_cpu(model_config, setting, train, val, save_model_file):
     new_config = model_config.copy()
     new_config["use_gpu"] = False
     large_model = is_large_model(model_config, len(train.columns))
-    cpu_util_threshold = 70
-    mem_util_threshold = 70
-    lock = None
-    if large_model:
-        lock_key = f"{socket.gethostname()}::CPU"
-        cpu_util_threshold = 50
-        mem_util_threshold = 50
-        lock = Lock(lock_key)
-        lock_wait_start = time.time()
-        lock_acquired = False
-        while time.time() - lock_wait_start <= resource_wait_time:
-            if lock.acquire(timeout=f"{lock_wait_time}s"):
-                lock_acquired = True
-                get_logger().debug("lock acquired: %s", lock_key)
-                break
-        if not lock_acquired:
-            raise TimeoutError(f"Timeout waiting for CPU lock {lock_key}")
 
+    lock_key = f"{socket.gethostname()}::CPU"
+    lock = Lock(lock_key)
+    lock_wait_start = time.time()
+    lock_acquired = False
+    while time.time() - lock_wait_start <= resource_wait_time:
+        if lock.acquire(timeout=f"{lock_wait_time}s"):
+            lock_acquired = True
+            get_logger().debug("lock acquired: %s", lock_key)
+            break
+    if not lock_acquired:
+        raise TimeoutError(f"Timeout waiting for CPU lock {lock_key}")
+
+    cpu_util_threshold = mem_util_threshold = 30 if large_model else 50
     stop_at = time.time() + resource_wait_time
     cpu_util = psutil.cpu_percent(1)
     mem_util = psutil.virtual_memory().percent
@@ -479,7 +473,7 @@ def train_on_cpu(model_config, setting, train, val, save_model_file):
 
     if time.time() <= stop_at:
         release_lock(lock)
-        ratio = 0.9 if large_model else 0.7
+        ratio = 0.9 if large_model else 0.8
         _optimize_torch(ratio)
         m = _train(new_config, setting, train, val, save_model_file)
         return m
@@ -550,12 +544,15 @@ class SOFTSPredictor:
 
         # TODO smarter device selection: what if GPU is busy and CPU is idle?
         # swiftly detect availability between 2 devices
-        gpu, should_wait = use_gpu(
-            model_config,
-            n_feat,
-            gpu_ut,
-            gpu_rt,
-        )
+        # potential solution: 2 phases triage algorithm. 1.fast-track + 2. queuing for power
+        gpu = model_config["use_gpu"]
+        get_logger().info("futures info from worker: %s", worker.client.futures)
+        # worker.data
+        # worker.client
+        # worker.client.futures
+        # worker.client.get_metadata
+        # worker.client.processing
+        # worker.client.set_metadata
 
         m = None
         attempt = 0
@@ -577,8 +574,12 @@ class SOFTSPredictor:
                     except Exception as e:
                         if is_cuda_error(e):
                             raise e
-                        elif should_wait and isinstance(e, TimeoutError):
-                            t = (0.9 if is_large_model else 0.8) * max(0.1, 1.0/(attempt**.1))
+                        elif isinstance(e, TimeoutError):
+                            t = (
+                                0.9 * 1.0 / (attempt**0.05)
+                                if is_large_model
+                                else 0.8 * 1.0 / (attempt**0.2)
+                            )
                             if random.random() < t:
                                 continue
                         get_logger().warning(

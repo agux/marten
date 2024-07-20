@@ -277,6 +277,7 @@ def num_workers(local=True):
 
 
 def hps_task_callback(future: Future):
+    get_logger().info("future: %s", future)
     if future.status != "error":
         return
     #     #TODO how to enforce retry with GPU=False in case of CUDA error
