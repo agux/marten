@@ -97,6 +97,22 @@ def is_large_model(model_config, n_feat):
         score += 1 if n_feat >= 64 else 0
     return score >= 3
 
+def runnable_with_cpu(model_config, n_feat):
+    score = 0
+    if local_machine_power() > 1:
+        score += 1 if model_config["d_model"] >= 128 else 0
+        score += 1 if model_config["d_core"] >= 256 else 0
+        score += 1 if model_config["d_ff"] >= 256 else 0
+        score += 1 if model_config["e_layers"] >= 8 else 0
+        score += 1 if n_feat >= 64 else 0
+    else:
+        score += 1 if model_config["d_model"] >= 64 else 0
+        score += 1 if model_config["d_core"] >= 128 else 0
+        score += 1 if model_config["d_ff"] >= 128 else 0
+        score += 1 if model_config["e_layers"] >= 4 else 0
+        score += 1 if n_feat >= 32 else 0
+    return score < 3
+
 # to be deprecated
 def use_gpu(model_config, n_feat, util_threshold=80, vram_threshold=80):
     use_gpu = model_config["use_gpu"]
@@ -544,6 +560,7 @@ class SOFTSPredictor:
 
         n_feat = len(df.columns)
         large_model = is_large_model(model_config, n_feat)
+        cpu_trainable = runnable_with_cpu(model_config, n_feat)
         ratio = 0.9 if large_model else 0.33
         _optimize_torch(ratio)
 
@@ -593,6 +610,8 @@ class SOFTSPredictor:
                         device = "GPU:0"
                     except Exception as e:
                         if isinstance(e, TimeoutError):
+                            if not cpu_trainable:
+                                continue
                             match workload_stage():
                                 case "finishing":
                                     continue  # stick to GPU and avoid straggler last-task
