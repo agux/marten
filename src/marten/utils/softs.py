@@ -388,15 +388,19 @@ def _train(config, setting, train, val, save_model_file):
 
 def restart_worker(exception):
     worker = get_worker()
-    if worker is not None:
-        get_logger().warning(
-            "trying to restart worker %s due to CUDA error: %s.\n%s",
-            worker.address,
-            str(exception),
-            cuda_memory_stats(),
-        )
-        get_client().restart_workers(
-            workers=[worker.address], timeout=600, raise_for_error=False
+    if worker is None:
+        return
+    get_logger().warning(
+        "Restarting worker %s due to %s\n%s",
+        worker.address,
+        str(exception),
+        cuda_memory_stats(),
+    )
+    with worker_client() as client:
+        task_key = worker.get_current_task()
+        client.set_metadata([task_key, "CUDA error"], is_cuda_error(exception))
+        client.restart_workers(
+            workers=[worker.address], timeout=600
         )
 
 
@@ -446,7 +450,7 @@ def train_on_cpu(model_config, setting, train, val, save_model_file):
     global resource_wait_time, lock_wait_time
     new_config = model_config.copy()
     new_config["use_gpu"] = False
-    large_model = is_large_model(model_config, len(train.columns))
+    # large_model = is_large_model(model_config, len(train.columns))
 
     lock_key = f"{socket.gethostname()}::CPU"
     lock = Lock(lock_key)
@@ -460,7 +464,8 @@ def train_on_cpu(model_config, setting, train, val, save_model_file):
     if not lock_acquired:
         raise TimeoutError(f"Timeout waiting for CPU lock {lock_key}")
 
-    cpu_util_threshold = mem_util_threshold = 30 if large_model else 50
+    # cpu_util_threshold = mem_util_threshold = 30 if large_model else 50
+    cpu_util_threshold = mem_util_threshold = 20
     stop_at = time.time() + resource_wait_time
     cpu_util = psutil.cpu_percent(1)
     mem_util = psutil.virtual_memory().percent
@@ -473,7 +478,8 @@ def train_on_cpu(model_config, setting, train, val, save_model_file):
 
     if time.time() <= stop_at:
         release_lock(lock)
-        ratio = 0.9 if large_model else 0.8
+        # ratio = 0.9 if large_model else 0.8
+        ratio = 0.95
         _optimize_torch(ratio)
         m = _train(new_config, setting, train, val, save_model_file)
         return m
@@ -493,10 +499,26 @@ def release_lock(lock, after=10):
             lock.release()
             get_logger().debug("lock %s released", lock.name)
         except Exception as e:
-            get_logger().warning("exception releasing lock %s: %s", lock.name, str(e))
+            if "lock is not yet acquired" not in str(e).lower():
+                get_logger().warning("exception releasing lock %s: %s", lock.name, str(e))
 
     threading.Timer(after, _release).start()
 
+def workload_stage():
+    '''
+    starting / progressing / finishing
+    '''
+    with worker_client() as client:
+        workload_info = client.get_metadata(["workload_info"])
+        finished = workload_info["finished"]
+        total = workload_info["total"]
+        workers = client.scheduler_info()["workers"]
+        if total - finished <= len(workers):
+            return "finishing"
+        elif finished <= len(workers):
+            return "starting"
+        else:
+            return "progressing"
 
 class SOFTSPredictor:
 
@@ -546,13 +568,11 @@ class SOFTSPredictor:
         # swiftly detect availability between 2 devices
         # potential solution: 2 phases triage algorithm. 1.fast-track + 2. queuing for power
         gpu = model_config["use_gpu"]
-        get_logger().info("futures info from worker: %s", worker.client.futures)
-        # worker.data
-        # worker.client
-        # worker.client.futures
-        # worker.client.get_metadata
-        # worker.client.processing
-        # worker.client.set_metadata
+        cuda_error = False
+        task_key = worker.get_current_task()
+        if worker.client.get_metadata([task_key, "CUDA error"], False):
+            gpu = False
+            cuda_error = True
 
         m = None
         attempt = 0
@@ -572,29 +592,45 @@ class SOFTSPredictor:
                         )
                         device = "GPU:0"
                     except Exception as e:
-                        if is_cuda_error(e):
+                        if isinstance(e, TimeoutError):
+                            match workload_stage():
+                                case "finishing":
+                                    continue  # stick to GPU and avoid straggler last-task
+                                case "progressing":
+                                    if large_model:
+                                        continue
+                                    t = 0.3 * attempt**0.5
+                                    if random.random() < t:
+                                        continue
+                                    # t = (
+                                    #     0.9 * 1.0 / (attempt**0.05)
+                                    #     if large_model
+                                    #     else 0.8 * 1.0 / (attempt**0.2)
+                                    # )
+                                    # if random.random() < t:
+                                    #     continue
+                        elif is_cuda_error(e):
                             raise e
-                        elif isinstance(e, TimeoutError):
-                            t = (
-                                0.9 * 1.0 / (attempt**0.05)
-                                if is_large_model
-                                else 0.8 * 1.0 / (attempt**0.2)
+                        else:
+                            get_logger().warning(
+                                f"falling back to CPU due to error: {str(e)}"
                             )
-                            if random.random() < t:
-                                continue
-                        get_logger().warning(
-                            f"falling back to CPU due to error: {str(e)}"
-                        )
+                        # attempt = 0
                         m = train_on_cpu(
                             model_config, setting, train, val, save_model_file
                         )
                 else:
                     m = train_on_cpu(model_config, setting, train, val, save_model_file)
+            except TaskException as e:
+                if e.task_info["restart_worker"]:
+                    # TODO need to restart and re-train on CPU instead
+                    restart_worker(e)
             except TimeoutError as e:
                 # if "waiting for CPU".lower() in str(e).lower():
                 # retry with GPU
                 get_logger().debug("retrying: %s", str(e))
-                if not gpu:
+                # attempt = 0
+                if not gpu and not cuda_error:
                     gpu = model_config["use_gpu"]
                 # else:
                 # get_logger().warning("retrying: %s", str(e))

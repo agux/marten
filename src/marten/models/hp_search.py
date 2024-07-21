@@ -779,6 +779,9 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
         jobs = []
         t1 = time.time()
         nworker = num_workers(False)
+        client.set_metadata(["workload_info", "total"], len(params_batch))
+        client.set_metadata(["workload_info", "workers"], nworker)
+        client.set_metadata(["workload_info", "finished"], 0)
         for i, params in enumerate(params_batch):
             new_df = df
             hpid, _ = get_hpid(params)

@@ -11,6 +11,7 @@ from dask.distributed import (
     Client,
     get_client,
     Future,
+    Lock,
 )
 
 from marten.utils.database import get_database_engine
@@ -278,13 +279,20 @@ def num_workers(local=True):
 
 def hps_task_callback(future: Future):
     get_logger().info("future: %s", future)
-    if future.status != "error":
+
+    e = future.exception()
+    get_logger().warning("exception in future: %s", e)
+    if e is None:
+        lock_key = "workload_info.finished"
+        with Lock(lock_key):
+            fin = future.client.get_metadata(["workload_info", "finished"])
+            future.client.set_metadata(["workload_info", "finished"], fin+1)
         return
     #     #TODO how to enforce retry with GPU=False in case of CUDA error
     #     future.key
     #     future.done()
     #     future.retry()
-    e = future.exception()
+    
     if not isinstance(e, TaskException):
         return
 

@@ -13,7 +13,7 @@ MINUTE=$((RANDOM % 60))
 # Schedule the task using at
 at $HOUR:$MINUTE <<EOF
 cd $SCRIPT_DIR
-bash $ACTUAL_SCRIPT
+bash $ACTUAL_SCRIPT >> $SCRIPT_DIR/random_schedule.log 2>&1
 EOF
 
 # Schedule a second (backup) run 5 minutes later
@@ -27,5 +27,5 @@ fi
 
 at $BACKUP_HOUR:$BACKUP_MINUTE <<EOF
 cd $SCRIPT_DIR
-bash $ACTUAL_SCRIPT
+bash $ACTUAL_SCRIPT >> $SCRIPT_DIR/random_schedule.log 2>&1
 EOF
