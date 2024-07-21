@@ -17,6 +17,7 @@ fi
 
 COMMAND="$(pyenv which marten)"
 OUTPUT_LOG=output_etl.log
+PID_FILE=etl_process.pid
 
 # Check if 'marten etl' process is already running
 if pgrep -af 'marten etl' | grep -v 'grep'; then
@@ -44,6 +45,12 @@ fi
 export MALLOC_TRIM_THRESHOLD_=0
 # Run the script with nohup
 nohup "$COMMAND" "etl" "$@" > >(tee -a $OUTPUT_LOG) 2>&1 &
+PID=$!
 
-# Send email notification with the output log
-cat $OUTPUT_LOG | mail -s "$EMAIL_SUBJECT" $EMAIL_ADDR
+# Write the PID to a file
+echo $PID > $PID_FILE
+
+# Schedule the monitoring script to run in 1 minute
+at now + 1 minute <<EOF
+bash $SCRIPT_DIR/monitor_etl.sh
+EOF
