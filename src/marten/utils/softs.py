@@ -97,7 +97,7 @@ def is_large_model(model_config, n_feat):
         score += 1 if n_feat >= 64 else 0
     return score >= 3
 
-def runnable_with_cpu(model_config, n_feat):
+def trainable_with_cpu(model_config, n_feat):
     score = 0
     if local_machine_power() > 1:
         score += 1 if model_config["d_model"] >= 128 else 0
@@ -111,7 +111,7 @@ def runnable_with_cpu(model_config, n_feat):
         score += 1 if model_config["d_ff"] >= 128 else 0
         score += 1 if model_config["e_layers"] >= 4 else 0
         score += 1 if n_feat >= 32 else 0
-    return score < 3
+    return score <= 3
 
 # to be deprecated
 def use_gpu(model_config, n_feat, util_threshold=80, vram_threshold=80):
@@ -530,11 +530,13 @@ def workload_stage():
         total = workload_info["total"]
         workers = client.scheduler_info()["workers"]
         if total - finished <= len(workers):
-            return "finishing"
+            stage = "finishing"
         elif finished <= len(workers):
-            return "starting"
+            stage = "starting"
         else:
-            return "progressing"
+            stage = "progressing"
+        get_logger().info("finished:%s total:%s workers:%s stage:%s", finished, total, workers, stage)
+        return stage
 
 class SOFTSPredictor:
 
@@ -560,7 +562,7 @@ class SOFTSPredictor:
 
         n_feat = len(df.columns)
         large_model = is_large_model(model_config, n_feat)
-        cpu_trainable = runnable_with_cpu(model_config, n_feat)
+        cpu_trainable = trainable_with_cpu(model_config, n_feat)
         ratio = 0.9 if large_model else 0.33
         _optimize_torch(ratio)
 
@@ -618,7 +620,7 @@ class SOFTSPredictor:
                                 case "progressing":
                                     if large_model:
                                         continue
-                                    t = 0.3 * attempt**0.5
+                                    t = 0.4 * attempt**0.5
                                     if random.random() < t:
                                         continue
                                     # t = (
