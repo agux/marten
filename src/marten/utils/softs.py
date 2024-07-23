@@ -535,7 +535,7 @@ def workload_stage():
             stage = "starting"
         else:
             stage = "progressing"
-        get_logger().info("finished:%s total:%s workers:%s stage:%s", finished, total, workers, stage)
+        get_logger().info("finished:%s total:%s workers:%s stage:%s", finished, total, len(workers), stage)
         return stage
 
 class SOFTSPredictor:
@@ -563,8 +563,8 @@ class SOFTSPredictor:
         n_feat = len(df.columns)
         large_model = is_large_model(model_config, n_feat)
         cpu_trainable = trainable_with_cpu(model_config, n_feat)
-        ratio = 0.9 if large_model else 0.33
-        _optimize_torch(ratio)
+        # ratio = 0.9 if large_model else 0.33
+        # _optimize_torch(ratio)
 
         train, val, _ = _prep_df(
             df, validate, model_config["seq_len"], model_config["pred_len"], random_seed
