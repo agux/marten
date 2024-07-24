@@ -535,7 +535,7 @@ def workload_stage():
             stage = "starting"
         else:
             stage = "progressing"
-        get_logger().info("finished:%s total:%s workers:%s stage:%s", finished, total, len(workers), stage)
+        get_logger().debug("finished:%s total:%s workers:%s stage:%s", finished, total, len(workers), stage)
         return stage
 
 class SOFTSPredictor:
@@ -580,8 +580,8 @@ class SOFTSPredictor:
         device = "CPU"
         gpu_ut = getattr(args, "gpu_util_threshold", 80)
         gpu_rt = getattr(args, "gpu_ram_threshold", 80)
-        gpu_ut = gpu_ut * 0.5 if large_model else gpu_ut
-        gpu_rt = gpu_rt * 0.5 if large_model else gpu_rt
+        gpu_ut = min(gpu_ut, 10) if large_model else gpu_ut
+        gpu_rt = min(gpu_rt, 10) if large_model else gpu_rt
 
         # TODO smarter device selection: what if GPU is busy and CPU is idle?
         # swiftly detect availability between 2 devices
