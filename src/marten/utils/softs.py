@@ -131,9 +131,11 @@ def use_gpu(model_config, n_feat, util_threshold=80, vram_threshold=80):
 
 
 def wait_gpu(util_threshold=80, vram_threshold=80, stop_at=None):
-    return (
-        torch.cuda.utilization() >= util_threshold
-        or torch.cuda.memory_usage() >= vram_threshold
+    util = torch.cuda.utilization()
+    mu = torch.cuda.memory_usage()
+    return util > 0 and (
+        util >= util_threshold
+        or mu >= vram_threshold
     ) and time.time() <= stop_at
 
 
