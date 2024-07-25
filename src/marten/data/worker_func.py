@@ -1492,6 +1492,9 @@ def get_fund_dividend_events():
     if max_reg_date is not None:
         df = df[df["rights_registration_date"] >= (max_reg_date - timedelta(days=30))]
 
+    df = df.drop_duplicates(subset=['symbol', 'rights_registration_date'])
+    df.reset_index(drop=True, inplace=True)
+
     with alchemyEngine.begin() as conn:
         update_on_conflict(
             fund_dividend_events, conn, df, ["symbol", "rights_registration_date"]
