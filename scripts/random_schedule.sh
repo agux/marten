@@ -10,11 +10,11 @@ ACTUAL_SCRIPT="run_etl.sh"
 HOUR=18
 MINUTE=$((RANDOM % 60))
 
+# Format the time for the at command
+TIME=$(printf "%02d:%02d" $HOUR $MINUTE)
+
 # Schedule the task using at
-at $HOUR:$MINUTE <<EOF
-cd $SCRIPT_DIR
-bash $ACTUAL_SCRIPT >> $SCRIPT_DIR/random_schedule.log 2>&1
-EOF
+echo "cd $SCRIPT_DIR; bash $ACTUAL_SCRIPT >> $SCRIPT_DIR/random_schedule.log 2>&1" | at $TIME
 
 # Schedule a second (backup) run 5 minutes later
 BACKUP_MINUTE=$((MINUTE + 5))
@@ -25,7 +25,8 @@ else
   BACKUP_HOUR=$HOUR
 fi
 
-at $BACKUP_HOUR:$BACKUP_MINUTE <<EOF
-cd $SCRIPT_DIR
-bash $ACTUAL_SCRIPT >> $SCRIPT_DIR/random_schedule.log 2>&1
-EOF
+# Format the backup time for the at command
+BACKUP_TIME=$(printf "%02d:%02d" $BACKUP_HOUR $BACKUP_MINUTE)
+
+# Schedule the backup task using at
+echo "cd $SCRIPT_DIR; bash $ACTUAL_SCRIPT >> $SCRIPT_DIR/random_schedule.log 2>&1" | at $BACKUP_TIME
