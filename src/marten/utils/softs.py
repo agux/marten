@@ -355,6 +355,8 @@ def impute(df, random_seed, client=None):
 
 
 def _optimize_torch(ratio=0.85):
+    torch.cuda.set_per_process_memory_fraction(1.0)
+
     cpu_cap = (100.0 - psutil.cpu_percent(1)) / 100.0
     n_cores = float(psutil.cpu_count())
     # n_workers = max(1.0, float(num_workers()))
@@ -363,6 +365,8 @@ def _optimize_torch(ratio=0.85):
     torch.set_num_threads(
         n_threads
     )  # Sets the number of threads used for intraop parallelism on CPU.
+    torch.set_num_interop_threads(n_threads)
+
     get_logger().debug(
         "machine: %s, cpu_cap: %s, n_cores: %s optimizing torch CPU thread: %s",
         socket.gethostname(),
