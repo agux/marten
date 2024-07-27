@@ -111,7 +111,7 @@ def trainable_with_cpu(model_config, n_feat):
         score += 1 if model_config["d_ff"] >= 128 else 0
         score += 1 if model_config["e_layers"] >= 4 else 0
         score += 1 if n_feat >= 32 else 0
-    return score <= 3
+    return score < 3
 
 # to be deprecated
 def use_gpu(model_config, n_feat, util_threshold=80, vram_threshold=80):
