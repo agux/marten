@@ -547,7 +547,7 @@ def workload_stage():
                 stage = "starting"
             else:
                 stage = "progressing"
-        get_logger().debug("finished:%s total:%s workers:%s stage:%s", finished, total, len(workers), stage)
+            get_logger().debug("finished:%s total:%s workers:%s stage:%s", finished, total, len(workers), stage)
         return stage
 
 class SOFTSPredictor:
