@@ -427,24 +427,26 @@ def restart_worker(exception):
 
 
 def train_on_gpu(
-    gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file
+    gpu_ut, gpu_rt, model_config, setting, train, val, save_model_file, use_device_lock=True
 ):
     global resource_wait_time, lock_wait_time
     # large_model = is_large_model(model_config, len(train.columns))
 
     lock_key = f"""{socket.gethostname()}::GPU-{model_config["gpu"]}"""
 
-    lock = Lock(lock_key)
-    lock_wait_start = time.time()
-    lock_acquired = False
-    while time.time() - lock_wait_start <= resource_wait_time:
-        if lock.acquire(timeout=f"{lock_wait_time}s"):
-            lock_acquired = True
-            get_logger().debug("lock acquired: %s", lock_key)
-            break
-    if not lock_acquired:
-        # get_logger().debug("Timeout waiting for GPU lock: %s", lock_key)
-        raise TimeoutError(f"Timeout waiting for GPU lock: {lock_key}")
+    lock = None
+    if use_device_lock:
+        lock = Lock(lock_key)
+        lock_wait_start = time.time()
+        lock_acquired = False
+        while time.time() - lock_wait_start <= resource_wait_time:
+            if lock.acquire(timeout=f"{lock_wait_time}s"):
+                lock_acquired = True
+                get_logger().debug("lock acquired: %s", lock_key)
+                break
+        if not lock_acquired:
+            # get_logger().debug("Timeout waiting for GPU lock: %s", lock_key)
+            raise TimeoutError(f"Timeout waiting for GPU lock: {lock_key}")
 
     stop_at = time.time() + resource_wait_time
     while wait_gpu(gpu_ut, gpu_rt, stop_at):
@@ -468,26 +470,27 @@ def train_on_gpu(
         raise TimeoutError("Timeout waiting for GPU resource")
 
 
-def train_on_cpu(model_config, setting, train, val, save_model_file):
+def train_on_cpu(cpu_util_threshold, mem_util_threshold, model_config, setting, train, val, save_model_file, use_device_lock=True):
     global resource_wait_time, lock_wait_time
     new_config = model_config.copy()
     new_config["use_gpu"] = False
     # large_model = is_large_model(model_config, len(train.columns))
 
-    lock_key = f"{socket.gethostname()}::CPU"
-    lock = Lock(lock_key)
-    lock_wait_start = time.time()
-    lock_acquired = False
-    while time.time() - lock_wait_start <= resource_wait_time:
-        if lock.acquire(timeout=f"{lock_wait_time}s"):
-            lock_acquired = True
-            get_logger().debug("lock acquired: %s", lock_key)
-            break
-    if not lock_acquired:
-        raise TimeoutError(f"Timeout waiting for CPU lock {lock_key}")
+    lock = None
+    if use_device_lock:
+        lock_key = f"{socket.gethostname()}::CPU"
+        lock = Lock(lock_key)
+        lock_wait_start = time.time()
+        lock_acquired = False
+        while time.time() - lock_wait_start <= resource_wait_time:
+            if lock.acquire(timeout=f"{lock_wait_time}s"):
+                lock_acquired = True
+                get_logger().debug("lock acquired: %s", lock_key)
+                break
+        if not lock_acquired:
+            raise TimeoutError(f"Timeout waiting for CPU lock {lock_key}")
 
     # cpu_util_threshold = mem_util_threshold = 30 if large_model else 50
-    cpu_util_threshold = mem_util_threshold = 20
     stop_at = time.time() + resource_wait_time
     cpu_util = psutil.cpu_percent(1)
     mem_util = psutil.virtual_memory().percent
@@ -528,19 +531,22 @@ def release_lock(lock, after=10):
 
 def workload_stage():
     '''
-    starting / progressing / finishing
+    starting / progressing / finishing / unknown
     '''
     with worker_client() as client:
-        workload_info = client.get_metadata(["workload_info"])
-        finished = workload_info["finished"]
-        total = workload_info["total"]
-        workers = client.scheduler_info()["workers"]
-        if total - finished <= len(workers):
-            stage = "finishing"
-        elif finished <= len(workers):
-            stage = "starting"
+        workload_info = client.get_metadata(["workload_info"], None)
+        if workload_info is None:
+            stage = "unknown"
         else:
-            stage = "progressing"
+            finished = workload_info["finished"]
+            total = workload_info["total"]
+            workers = client.scheduler_info()["workers"]
+            if total - finished <= len(workers):
+                stage = "finishing"
+            elif finished <= len(workers):
+                stage = "starting"
+            else:
+                stage = "progressing"
         get_logger().debug("finished:%s total:%s workers:%s stage:%s", finished, total, len(workers), stage)
         return stage
 
@@ -548,10 +554,15 @@ class SOFTSPredictor:
 
     @staticmethod
     def isBaseline(params):
-        return params == baseline_config
+        for k in baseline_config.keys():
+            if k not in params or params[k] != baseline_config[k]:
+                return False
+        return True
+        # return params == baseline_config
 
     @staticmethod
     def train(_df, config, model_id, random_seed, validate, save_model_file=False):
+        is_base_config = SOFTSPredictor.isBaseline(config)
         df = _df.copy()
         worker = get_worker()
         args = worker.args
@@ -588,6 +599,7 @@ class SOFTSPredictor:
         gpu_rt = getattr(args, "gpu_ram_threshold", 80)
         gpu_ut = min(gpu_ut, 10) if large_model else gpu_ut
         gpu_rt = min(gpu_rt, 10) if large_model else gpu_rt
+        cpu_util_threshold = mem_util_threshold = 20 if large_model else 85
 
         # TODO smarter device selection: what if GPU is busy and CPU is idle?
         # swiftly detect availability between 2 devices
@@ -644,10 +656,10 @@ class SOFTSPredictor:
                             )
                         # attempt = 0
                         m = train_on_cpu(
-                            model_config, setting, train, val, save_model_file
+                            cpu_util_threshold, mem_util_threshold, model_config, setting, train, val, save_model_file,
                         )
                 else:
-                    m = train_on_cpu(model_config, setting, train, val, save_model_file)
+                    m = train_on_cpu(cpu_util_threshold, mem_util_threshold, model_config, setting, train, val, save_model_file)
             except TaskException as e:
                 if e.task_info["restart_worker"]:
                     # TODO need to restart and re-train on CPU instead
