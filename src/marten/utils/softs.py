@@ -365,7 +365,10 @@ def _optimize_torch(ratio=0.85):
     torch.set_num_threads(
         n_threads
     )  # Sets the number of threads used for intraop parallelism on CPU.
-    torch.set_num_interop_threads(n_threads)
+
+    # comment out to avoid below error: 
+    # cannot set number of interop threads after parallel work has started or set_num_interop_threads called
+    # torch.set_num_interop_threads(n_threads)
 
     get_logger().debug(
         "machine: %s, cpu_cap: %s, n_cores: %s optimizing torch CPU thread: %s",
