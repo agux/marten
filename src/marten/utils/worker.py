@@ -79,7 +79,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
         {
             "distributed.worker.resources.POWER": local_machine_power(),
             "distributed.scheduler.worker-ttl": "30 minutes",
-            "distributed.scheduler.worker-saturation": 0.5,
+            "distributed.scheduler.worker-saturation": 0.2,
             "distributed.worker.memory.terminate": False,
             "distributed.comm.retry.count": 10,
             "distributed.comm.timeouts.connect": 120,

@@ -71,8 +71,8 @@ baseline_config = MappingProxyType(
     }
 )
 
-resource_wait_time = 30  # seconds, waiting for compute resource
-lock_wait_time = 15
+resource_wait_time = 5  # seconds, waiting for compute resource
+lock_wait_time = 2
 
 
 def set_random_seed(seed):

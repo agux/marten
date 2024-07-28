@@ -6,8 +6,8 @@ import traceback
 import math
 import os
 
-# OPENBLAS_NUM_THREADS = 1
-# os.environ["OPENBLAS_NUM_THREADS"] = f"{OPENBLAS_NUM_THREADS}"
+OPENBLAS_NUM_THREADS = 1
+os.environ["OPENBLAS_NUM_THREADS"] = f"{OPENBLAS_NUM_THREADS}"
 
 import numpy as np
 from datetime import datetime, timedelta
