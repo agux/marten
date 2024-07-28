@@ -594,7 +594,7 @@ class SOFTSPredictor:
 
     @staticmethod
     def train(_df, config, model_id, random_seed, validate, save_model_file=False):
-        # is_base_config = SOFTSPredictor.isBaseline(config)
+        is_base_config = SOFTSPredictor.isBaseline(config)
         df = _df.copy()
         worker = get_worker()
         args = worker.args
@@ -629,8 +629,16 @@ class SOFTSPredictor:
         device = "CPU"
         gpu_ut = getattr(args, "gpu_util_threshold", 80)
         gpu_rt = getattr(args, "gpu_ram_threshold", 80)
-        gpu_ut = min(gpu_ut, 10) if large_model else gpu_ut
-        gpu_rt = min(gpu_rt, 10) if large_model else gpu_rt
+        gpu_ut = (
+            min(gpu_ut, 10)
+            if large_model
+            else gpu_ut if is_base_config else 0.3 * gpu_ut
+        )
+        gpu_rt = (
+            min(gpu_rt, 10)
+            if large_model
+            else gpu_rt if is_base_config else 0.3 * gpu_rt
+        )
         cpu_util_threshold = mem_util_threshold = 20 if large_model else 85
 
         # TODO smarter device selection: what if GPU is busy and CPU is idle?

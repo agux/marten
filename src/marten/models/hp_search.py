@@ -712,7 +712,7 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit, 
                     and hps_id = :hps_id
                     and loss_val is not null
                 order by loss_val
-                limit :limit
+                # limit :limit
             """
             ),
             {
@@ -720,7 +720,7 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit, 
                 "anchor_symbol": anchor_symbol,
                 "covar_set_id": covar_set_id,
                 "hps_id": hps_id,
-                "limit": limit,
+                # "limit": limit,
             },
         )
 
