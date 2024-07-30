@@ -280,17 +280,21 @@ def num_workers(local=True):
 def hps_task_callback(future: Future):
     get_logger().debug("done future: %s", future)
     exception = None
+    result = None
     try:
-        future.result()
+        result = future.result()
 
         lock_key = "workload_info.finished"
         with Lock(lock_key):
             fin = future.client.get_metadata(["workload_info", "finished"])
             future.client.set_metadata(["workload_info", "finished"], fin+1)
-        return
     except Exception as e:
         exception = e
 
+    if not isinstance(result, Exception) and exception is None:
+        return
+    elif exception is None:
+        exception = result
     #     #TODO how to enforce retry with GPU=False in case of CUDA error
     #     future.key
     #     future.done()

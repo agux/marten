@@ -1853,6 +1853,7 @@ def fast_bayesopt(
                 base_loss,
                 min_loss,
             )
+            client.restart()
 
 
 def update_covar_set_id(alchemyEngine, hps_id, covar_set_id):
