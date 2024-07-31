@@ -559,6 +559,7 @@ def workload_stage():
     starting / progressing / finishing / unknown
     """
     with worker_client() as client:
+        client.retry
         workload_info = client.get_metadata(["workload_info"], None)
         if workload_info is None:
             stage = "unknown"

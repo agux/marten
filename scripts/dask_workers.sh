@@ -41,4 +41,7 @@ nohup dask worker tcp://$SCHEDULER_IP:$PORT \
   --nthreads $NTHREADS \
   --memory-limit 0 \
   --resources "POWER=${POWER}" \
+  --lifetime "1 hour" \
+  --lifetime-stagger "1 minute" \
+  --lifetime-restart \
   > >(tee -a $OUTPUT_LOG) 2>&1 &

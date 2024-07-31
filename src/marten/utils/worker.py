@@ -77,10 +77,13 @@ def local_machine_power():
 def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     with dask.config.set(
         {
+            "distributed.worker.memory.terminate": False,
+            "distributed.worker.lifetime.duration": "1 hour",
+            "distributed.worker.lifetime.stagger": "1 minutes",
+            "distributed.worker.lifetime.restart": True,
             "distributed.worker.resources.POWER": local_machine_power(),
             "distributed.scheduler.worker-ttl": "30 minutes",
             "distributed.scheduler.worker-saturation": 0.1,
-            "distributed.worker.memory.terminate": False,
             "distributed.comm.retry.count": 10,
             "distributed.comm.timeouts.connect": 120,
             "distributed.nanny.pre-spawn-environ.MALLOC_TRIM_THRESHOLD_": 0,
