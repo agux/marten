@@ -75,6 +75,8 @@ def local_machine_power():
     return 2 if total_memory >= 8192 and multi_processor_count >= 64 else 1
 
 def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
+    # setting worker resources in environment variable for restarted workers
+    os.environ["DASK_DISTRIBUTED__WORKER__RESOURCES__POWER"] = local_machine_power()
     with dask.config.set(
         {
             "distributed.worker.memory.terminate": False,
