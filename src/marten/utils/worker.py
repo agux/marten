@@ -76,7 +76,7 @@ def local_machine_power():
 
 def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     # setting worker resources in environment variable for restarted workers
-    os.environ["DASK_DISTRIBUTED__WORKER__RESOURCES__POWER"] = str(local_machine_power())
+    # os.environ["DASK_DISTRIBUTED__WORKER__RESOURCES__POWER"] = str(local_machine_power())
     dask.config.set(
         {
             "distributed.worker.memory.terminate": False,
@@ -84,6 +84,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
             "distributed.worker.lifetime.stagger": "1 minutes",
             "distributed.worker.lifetime.restart": True,
             "distributed.worker.resources.POWER": local_machine_power(),
+            "distributed.scheduler.work-stealing-interval": "5 seconds",
             "distributed.scheduler.worker-ttl": "30 minutes",
             "distributed.scheduler.worker-saturation": 0.1,
             "distributed.comm.retry.count": 10,

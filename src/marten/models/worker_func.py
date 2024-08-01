@@ -1172,6 +1172,7 @@ def train_predict(
     **kwargs,
 ):
     m, metrics = train(
+        model=model,
         df=df,
         country=country,
         epochs=epochs,
@@ -1235,7 +1236,7 @@ def forecast(
     logger.info(
         (
             "%s - forecasting with setting:\n"
-            "model: %s\n"
+            "symbol: %s\n"
             "hpid: %s\n"
             "loss: %s\n"
             "loss_val: %s\n"
