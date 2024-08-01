@@ -11,6 +11,6 @@ OUTPUT_LOG=predict.log
 rm -f .lr_find_*.ckpt
 
 export MALLOC_TRIM_THRESHOLD_=0
-export DASK_DISTRIBUTED__WORKER__RESOURCES__POWER=2
+# export DASK_DISTRIBUTED__WORKER__RESOURCES__POWER=2
 
 nohup "$CLI" "predict" "$@" > >(tee -a $OUTPUT_LOG) 2>&1 &
