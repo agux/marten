@@ -374,7 +374,7 @@ def train(
                 kwargs["accelerator"] == True or kwargs["accelerator"] == "gpu"
             )
             return SOFTSPredictor.train(
-                df=df,
+                df,
                 config=kwargs,
                 model_id="generic_model",
                 random_seed=random_seed,
