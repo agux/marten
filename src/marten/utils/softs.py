@@ -777,7 +777,7 @@ class SOFTSPredictor:
         cpu_rt = 20
 
         match lock_acquired.name:
-            case gpu_lock_key:
+            case name if name == gpu_lock_key:
                 while wait_gpu(gpu_ut, gpu_rt):
                     time.sleep(1)
             case _: # CPU
