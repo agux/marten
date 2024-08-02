@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 
 from pprint import pformat
 
-local_machine_power = None
+compute_power = None
 
 class LocalWorkerPlugin(WorkerPlugin):
     def __init__(self, logger_name, args):
@@ -61,14 +61,14 @@ class TaskException(Exception):
 
 
 def local_machine_power():
-    global local_machine_power
+    global compute_power
 
-    if local_machine_power is not None:
-        return local_machine_power
+    if compute_power is not None:
+        return compute_power
 
     if not torch.cuda.is_available():
-        local_machine_power = 1
-        return local_machine_power
+        compute_power = 1
+        return compute_power
 
     device_count = torch.cuda.device_count()
     total_memory = 0
@@ -80,10 +80,8 @@ def local_machine_power():
         multi_processor_count += torch.cuda.get_device_properties(
             i
         ).multi_processor_count
-    local_machine_power = (
-        2 if total_memory >= 8192 and multi_processor_count >= 64 else 1
-    )
-    return local_machine_power
+    compute_power = 2 if total_memory >= 8192 and multi_processor_count >= 64 else 1
+    return compute_power
 
 def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     # setting worker resources in environment variable for restarted workers
