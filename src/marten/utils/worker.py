@@ -23,6 +23,7 @@ from datetime import datetime, timedelta
 
 from pprint import pformat
 
+local_machine_power = None
 
 class LocalWorkerPlugin(WorkerPlugin):
     def __init__(self, logger_name, args):
@@ -60,8 +61,15 @@ class TaskException(Exception):
 
 
 def local_machine_power():
+    global local_machine_power
+
+    if local_machine_power is not None:
+        return local_machine_power
+
     if not torch.cuda.is_available():
-        return 1
+        local_machine_power = 1
+        return local_machine_power
+
     device_count = torch.cuda.device_count()
     total_memory = 0
     multi_processor_count = 0
@@ -72,18 +80,22 @@ def local_machine_power():
         multi_processor_count += torch.cuda.get_device_properties(
             i
         ).multi_processor_count
-    return 2 if total_memory >= 8192 and multi_processor_count >= 64 else 1
+    local_machine_power = (
+        2 if total_memory >= 8192 and multi_processor_count >= 64 else 1
+    )
+    return local_machine_power
 
 def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     # setting worker resources in environment variable for restarted workers
     # os.environ["DASK_DISTRIBUTED__WORKER__RESOURCES__POWER"] = str(local_machine_power())
+    power = local_machine_power()
     dask.config.set(
         {
             "distributed.worker.memory.terminate": False,
             "distributed.worker.lifetime.duration": "1 hour",
             "distributed.worker.lifetime.stagger": "1 minutes",
             "distributed.worker.lifetime.restart": True,
-            "distributed.worker.resources.POWER": local_machine_power(),
+            "distributed.worker.resources.POWER": power,
             "distributed.scheduler.work-stealing-interval": "5 seconds",
             "distributed.scheduler.worker-ttl": "30 minutes",
             "distributed.scheduler.worker-saturation": 0.1,

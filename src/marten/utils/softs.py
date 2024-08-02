@@ -132,13 +132,21 @@ def use_gpu(model_config, n_feat, util_threshold=80, vram_threshold=80):
     return use_gpu, should_wait
 
 
+def wait_cpu(util_threshold=80, mem_threshold=80, stop_at=None):
+    cpu_util = psutil.cpu_percent(1)
+    mem_util = psutil.virtual_memory().percent
+    return (cpu_util >= util_threshold or mem_util >= mem_threshold) and (
+        stop_at is None or time.time() <= stop_at
+    )
+
+
 def wait_gpu(util_threshold=80, vram_threshold=80, stop_at=None):
     util = torch.cuda.utilization()
     mu = torch.cuda.memory_usage()
     return (
         util > 0
         and (util >= util_threshold or mu >= vram_threshold)
-        and time.time() <= stop_at
+        and (stop_at is None or time.time() <= stop_at)
     )
 
 
@@ -514,14 +522,8 @@ def train_on_cpu(
 
     # cpu_util_threshold = mem_util_threshold = 30 if large_model else 50
     stop_at = time.time() + resource_wait_time
-    cpu_util = psutil.cpu_percent(1)
-    mem_util = psutil.virtual_memory().percent
-    while (
-        cpu_util >= cpu_util_threshold or mem_util >= mem_util_threshold
-    ) and time.time() <= stop_at:
+    while wait_cpu(cpu_util_threshold, mem_util_threshold, stop_at):
         time.sleep(1)
-        cpu_util = psutil.cpu_percent(1)
-        mem_util = psutil.virtual_memory().percent
 
     if time.time() <= stop_at:
         release_lock(lock, 2 if base_model else 5)
@@ -740,12 +742,69 @@ class SOFTSPredictor:
 
     @staticmethod
     def predict(model, df, region):
+        global resource_wait_time, lock_wait_time
+
         seq_len = model.args.seq_len
         pred_len = model.args.pred_len
         input, _, scaler = _prep_df(
             df, False, seq_len, pred_len, model.args.random_seed
         )
-        forecast = model.predict(setting=model.setting, pred_data=input)
+
+        # worker = get_worker()
+        # args = worker.args
+
+        lock_acquired = None
+        gpu_lock_key = f"""{socket.gethostname()}::GPU-{model.args.gpu}"""
+        cpu_lock_key = f"""{socket.gethostname()}::CPU"""
+
+        while True:
+            if model.args.use_gpu:
+                lock = Lock(gpu_lock_key)
+                if lock.acquire(timeout=f"{lock_wait_time}s"):
+                    lock_acquired = lock
+                    get_logger().debug("lock acquired: %s", gpu_lock_key)
+                    break
+
+            lock = Lock(cpu_lock_key)
+            if lock.acquire(timeout=f"{lock_wait_time}s"):
+                lock_acquired = lock
+                get_logger().debug("lock acquired: %s", cpu_lock_key)
+                break
+
+        gpu_ut = 20
+        gpu_rt = 30
+        cpu_ut = 20
+        cpu_rt = 20
+
+        match lock_acquired.name:
+            case gpu_lock_key:
+                while wait_gpu(gpu_ut, gpu_rt):
+                    time.sleep(1)
+            case _: # CPU
+                if model.args.use_gpu:
+                    model.args.use_gpu = False
+                while wait_cpu(cpu_ut, cpu_rt):
+                    time.sleep(1)
+                _optimize_torch(0.9)
+
+        release_lock(lock_acquired, 5)
+        try:
+            forecast = model.predict(setting=model.setting, pred_data=input)
+        except Exception as e:
+            release_lock(lock_acquired, 0)
+            if is_cuda_error(e):
+                model.args.use_gpu = False
+                # wait CPU resource before prediction
+                lock = Lock(cpu_lock_key)
+                lock.acquire()
+                while wait_cpu(cpu_ut, cpu_rt):
+                    time.sleep(1)
+                _optimize_torch(0.9)
+                release_lock(lock, 5)
+                forecast = model.predict(setting=model.setting, pred_data=input)
+            else:
+                raise e
+
         yhat = None
         for fc in reversed(forecast):
             fc = scaler.inverse_transform(fc)
