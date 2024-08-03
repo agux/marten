@@ -350,41 +350,40 @@ def train(
     early_stopping=True,
     country=None,
     validate=True,
+    save_model_file=False,
     **kwargs,
 ):
     worker = get_worker()
     args = worker.args
 
-    try:
-        match model:
-            case "NeuralProphet":
-                return NPPredictor.train(
-                    df=df,
-                    holiday_region=country,
-                    accelerator=kwargs.pop("accelerator"),
-                    early_stopping=early_stopping,
-                    random_seed=random_seed,
-                    validate=validate,
-                    epochs=epochs,
-                    params=kwargs,
-                )
-            case "SOFTS":
-                kwargs["pred_len"] = args.future_steps
-                kwargs["train_epochs"] = epochs
-                kwargs["use_gpu"] = (
-                    kwargs["accelerator"] == True or kwargs["accelerator"] == "gpu"
-                )
-                return SOFTSPredictor.train(
-                    df,
-                    config=kwargs,
-                    model_id="generic_model",
-                    random_seed=random_seed,
-                    validate=validate,
-                )
-            case _:
-                raise NotImplementedError
-    except Exception:
-        get_logger().error(traceback.format_exc())
+    match model:
+        case "NeuralProphet":
+            return NPPredictor.train(
+                df=df,
+                holiday_region=country,
+                accelerator=kwargs.pop("accelerator"),
+                early_stopping=early_stopping,
+                random_seed=random_seed,
+                validate=validate,
+                epochs=epochs,
+                params=kwargs,
+            )
+        case "SOFTS":
+            kwargs["pred_len"] = args.future_steps
+            kwargs["train_epochs"] = epochs
+            kwargs["use_gpu"] = (
+                kwargs["accelerator"] == True or kwargs["accelerator"] == "gpu"
+            )
+            return SOFTSPredictor.train(
+                df,
+                config=kwargs,
+                model_id="generic_model" + "_validate" if validate else "",
+                random_seed=random_seed,
+                validate=validate,
+                save_model_file=save_model_file,
+            )
+        case _:
+            raise NotImplementedError
 
 
 def reg_search_params(params):
@@ -1174,19 +1173,20 @@ def train_predict(
     future_steps,
     **kwargs,
 ):
-    m, metrics = train(
-        model=model,
-        df=df,
-        country=country,
-        epochs=epochs,
-        random_seed=random_seed,
-        early_stopping=early_stopping,
-        validate=validate,
-        n_forecasts=future_steps,
-        **kwargs,
-    )
-
     try:
+        m, metrics = train(
+            model=model,
+            df=df,
+            country=country,
+            epochs=epochs,
+            random_seed=random_seed,
+            early_stopping=early_stopping,
+            validate=validate,
+            n_forecasts=future_steps,
+            save_model_file=True,
+            **kwargs,
+        )
+
         match model:
             case "NeuralProphet":
                 forecast = NPPredictor.predict(m, df, random_seed, future_steps)
@@ -1195,8 +1195,9 @@ def train_predict(
                 m.cleanup()
             case _:
                 raise NotImplementedError
-    except Exception:
+    except Exception as e:
         get_logger().error(traceback.format_exc())
+        raise e
 
     return forecast, metrics
 
@@ -1307,6 +1308,7 @@ def forecast(
                 validate=True,
                 country=region,
                 changepoints_range=1.0,
+                # save_model_file=True,
                 **hyperparams,
             )
         )

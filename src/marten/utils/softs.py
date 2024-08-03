@@ -412,10 +412,16 @@ def _train(config, setting, train, val, save_model_file):
     except Exception as e:
         _cleanup(model)
         raise e
+
     if val is not None:
         model.test(setting=setting, test_data=val)  # collect validation metrics
+
     if not save_model_file:
-        shutil.rmtree(os.path.join(config["checkpoints"], setting))
+        file_path = os.path.join(config["checkpoints"], setting)
+        try:
+            shutil.rmtree(file_path)
+        except Exception as e:
+            get_logger().warning("failed to remove model file: %s", file_path)
 
     _cleanup(model)
 
