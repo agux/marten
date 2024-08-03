@@ -776,16 +776,15 @@ class SOFTSPredictor:
         cpu_ut = 20
         cpu_rt = 20
 
-        match lock_acquired.name:
-            case name if name == gpu_lock_key:
-                while wait_gpu(gpu_ut, gpu_rt):
-                    time.sleep(1)
-            case _: # CPU
-                if model.args.use_gpu:
-                    model.args.use_gpu = False
-                while wait_cpu(cpu_ut, cpu_rt):
-                    time.sleep(1)
-                _optimize_torch(0.9)
+        if lock_acquired.name == gpu_lock_key:
+            while wait_gpu(gpu_ut, gpu_rt):
+                time.sleep(1)
+        else: # CPU
+            if model.args.use_gpu:
+                model.args.use_gpu = False
+            while wait_cpu(cpu_ut, cpu_rt):
+                time.sleep(1)
+            _optimize_torch(0.9)
 
         release_lock(lock_acquired, 5)
         try:
@@ -796,12 +795,14 @@ class SOFTSPredictor:
                 model.args.use_gpu = False
                 # wait CPU resource before prediction
                 lock = Lock(cpu_lock_key)
-                lock.acquire()
-                while wait_cpu(cpu_ut, cpu_rt):
-                    time.sleep(1)
-                _optimize_torch(0.9)
-                release_lock(lock, 5)
-                forecast = model.predict(setting=model.setting, pred_data=input)
+                if lock.acquire(timeout="24 hours"):
+                    while wait_cpu(cpu_ut, cpu_rt):
+                        time.sleep(1)
+                    _optimize_torch(0.9)
+                    release_lock(lock, 5)
+                    forecast = model.predict(setting=model.setting, pred_data=input)
+                else:
+                    raise TimeoutError("timeout waiting for CPU lock")
             else:
                 raise e
 

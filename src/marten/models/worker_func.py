@@ -355,33 +355,36 @@ def train(
     worker = get_worker()
     args = worker.args
 
-    match model:
-        case "NeuralProphet":
-            return NPPredictor.train(
-                df=df,
-                holiday_region=country,
-                accelerator=kwargs.pop("accelerator"),
-                early_stopping=early_stopping,
-                random_seed=random_seed,
-                validate=validate,
-                epochs=epochs,
-                params=kwargs,
-            )
-        case "SOFTS":
-            kwargs["pred_len"] = args.future_steps
-            kwargs["train_epochs"] = epochs
-            kwargs["use_gpu"] = (
-                kwargs["accelerator"] == True or kwargs["accelerator"] == "gpu"
-            )
-            return SOFTSPredictor.train(
-                df,
-                config=kwargs,
-                model_id="generic_model",
-                random_seed=random_seed,
-                validate=validate,
-            )
-        case _:
-            raise NotImplementedError
+    try:
+        match model:
+            case "NeuralProphet":
+                return NPPredictor.train(
+                    df=df,
+                    holiday_region=country,
+                    accelerator=kwargs.pop("accelerator"),
+                    early_stopping=early_stopping,
+                    random_seed=random_seed,
+                    validate=validate,
+                    epochs=epochs,
+                    params=kwargs,
+                )
+            case "SOFTS":
+                kwargs["pred_len"] = args.future_steps
+                kwargs["train_epochs"] = epochs
+                kwargs["use_gpu"] = (
+                    kwargs["accelerator"] == True or kwargs["accelerator"] == "gpu"
+                )
+                return SOFTSPredictor.train(
+                    df,
+                    config=kwargs,
+                    model_id="generic_model",
+                    random_seed=random_seed,
+                    validate=validate,
+                )
+            case _:
+                raise NotImplementedError
+    except Exception:
+        get_logger().error(traceback.format_exc())
 
 
 def reg_search_params(params):
@@ -1183,14 +1186,17 @@ def train_predict(
         **kwargs,
     )
 
-    match model:
-        case "NeuralProphet":
-            forecast = NPPredictor.predict(m, df, random_seed, future_steps)
-        case "SOFTS":
-            forecast = SOFTSPredictor.predict(m, df, country)
-            m.cleanup()
-        case _:
-            raise NotImplementedError
+    try:
+        match model:
+            case "NeuralProphet":
+                forecast = NPPredictor.predict(m, df, random_seed, future_steps)
+            case "SOFTS":
+                forecast = SOFTSPredictor.predict(m, df, country)
+                m.cleanup()
+            case _:
+                raise NotImplementedError
+    except Exception:
+        get_logger().error(traceback.format_exc())
 
     return forecast, metrics
 
