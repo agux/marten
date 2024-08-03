@@ -831,5 +831,7 @@ class SOFTSPredictor:
         future_df = pd.concat([df, new_df], ignore_index=True)
         future_df = future_df.iloc[len(future_df) - len(yhat) :]
         future_df["yhat_n"] = yhat
+        # convert numpy.float32 column types to float
+        future_df = future_df.astype({col: float for col in future_df.select_dtypes(include=[np.float32]).columns})
 
         return future_df
