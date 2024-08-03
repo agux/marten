@@ -377,7 +377,7 @@ def train(
             return SOFTSPredictor.train(
                 df,
                 config=kwargs,
-                model_id="generic_model" + "_validate" if validate else "",
+                model_id=f"""generic_model{"_validate" if validate else ""}""",
                 random_seed=random_seed,
                 validate=validate,
                 save_model_file=save_model_file,
