@@ -423,7 +423,7 @@ def _train(config, setting, train, val, save_model_file):
         except Exception as e:
             get_logger().warning("failed to remove model file: %s", file_path)
 
-    _cleanup(model)
+        _cleanup(model)
 
     return model
 
