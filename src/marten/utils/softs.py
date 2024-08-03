@@ -821,10 +821,10 @@ class SOFTSPredictor:
                 yhat.insert(0, fc[0, -1])
 
         # re-construct df with date and other columns
-        last_date = df["ds"].max()
+        last_date = input["date"].max()
         future_horizons = get_next_trade_dates(last_date, region, pred_len)
         new_dict = {
-            col: [None] * len(future_horizons) for col in df.columns if col != "ds"
+            col: [None] * len(future_horizons) for col in input.columns if col != "date"
         }
         new_dict["ds"] = future_horizons
         new_df = pd.DataFrame(new_dict)
