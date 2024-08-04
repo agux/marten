@@ -492,7 +492,7 @@ def train_on_gpu(
                 )
             raise e
     else:
-        release_lock(lock, 0)
+        release_lock(lock_acquired, 0)
         raise TimeoutError("Timeout waiting for GPU resource")
 
 
@@ -539,7 +539,7 @@ def train_on_cpu(
         m = _train(new_config, setting, train, val, save_model_file)
         return m
     else:
-        release_lock(lock, 0)
+        release_lock(lock_acquired, 0)
         raise TimeoutError("Timeout waiting for CPU resource")
 
 
@@ -558,8 +558,11 @@ def release_lock(lock, after=10):
                 get_logger().warning(
                     "exception releasing lock %s: %s", lock.name, str(e)
                 )
-
-    threading.Timer(after, _release).start()
+                
+    if after<=0:
+        _release()
+    else:
+        threading.Timer(after, _release).start()
 
 
 def workload_stage():
@@ -648,7 +651,7 @@ class SOFTSPredictor:
             if large_model
             else gpu_rt if is_base_config else 0.3 * gpu_rt
         )
-        cpu_util_threshold = mem_util_threshold = 20 if large_model else 85
+        cpu_util_threshold = mem_util_threshold = 25 if large_model else 60
 
         # TODO smarter device selection: what if GPU is busy and CPU is idle?
         # swiftly detect availability between 2 devices
@@ -762,35 +765,42 @@ class SOFTSPredictor:
         lock_acquired = None
         gpu_lock_key = f"""{socket.gethostname()}::GPU-{model.args.gpu}"""
         cpu_lock_key = f"""{socket.gethostname()}::CPU"""
+        gpu_ut = 20
+        gpu_rt = 30
+        cpu_ut = 30
+        cpu_rt = 50
 
         while True:
+            lock_acquired = None
             if model.args.use_gpu:
                 lock = Lock(gpu_lock_key)
                 if lock.acquire(timeout=f"{lock_wait_time}s"):
                     lock_acquired = lock
                     get_logger().debug("lock acquired: %s", gpu_lock_key)
+            else:
+                lock = Lock(cpu_lock_key)
+                if lock.acquire(timeout=f"{lock_wait_time}s"):
+                    lock_acquired = lock
+                    get_logger().debug("lock acquired: %s", cpu_lock_key)
+            
+            if lock_acquired is None:
+                continue
+
+            stop_at = time.time() + resource_wait_time
+            if lock_acquired.name == gpu_lock_key:
+                while wait_gpu(gpu_ut, gpu_rt, stop_at):
+                    time.sleep(1)
+                if time.time() <= stop_at:
                     break
-
-            lock = Lock(cpu_lock_key)
-            if lock.acquire(timeout=f"{lock_wait_time}s"):
-                lock_acquired = lock
-                get_logger().debug("lock acquired: %s", cpu_lock_key)
-                break
-
-        gpu_ut = 20
-        gpu_rt = 30
-        cpu_ut = 20
-        cpu_rt = 20
-
-        if lock_acquired.name == gpu_lock_key:
-            while wait_gpu(gpu_ut, gpu_rt):
-                time.sleep(1)
-        else: # CPU
-            if model.args.use_gpu:
-                model.args.use_gpu = False
-            while wait_cpu(cpu_ut, cpu_rt):
-                time.sleep(1)
-            _optimize_torch(0.9)
+            else: # CPU
+                while wait_cpu(cpu_ut, cpu_rt, stop_at):
+                    time.sleep(1)
+                if time.time() <= stop_at:
+                    if model.args.use_gpu:
+                        model.args.use_gpu = False
+                    _optimize_torch(0.9)
+                    break
+            release_lock(lock_acquired, 0)
 
         release_lock(lock_acquired, 5)
         try:

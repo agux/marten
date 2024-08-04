@@ -90,6 +90,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     dask.config.set(
         {
             "distributed.worker.memory.terminate": False,
+            # NOTE restarting worker may cause distributed.lock to malfunction, setting None to its client.scheduler
             # "distributed.worker.lifetime.duration": "1 hour",
             # "distributed.worker.lifetime.stagger": "1 minutes",
             # "distributed.worker.lifetime.restart": True,
