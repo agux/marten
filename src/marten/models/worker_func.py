@@ -1654,6 +1654,11 @@ def save_ensemble_snapshot(
             ens_df["yhat_n"] += df["yhat_n"]
 
     ens_df.reset_index(inplace=True)
+    avg_yhat = ens_df["yhat_n"].mean()
+    avg_yhat["plus_one"] = avg_yhat["yhat_n"] + 1.0
+    avg_yhat["accumulated_returns"] = avg_yhat["plus_one"].cumprod()
+    cum_returns = avg_yhat["accumulated_returns"].iloc[-1] - 1.0
+    ens_df.drop(columns=["plus_one", "accumulated_returns"], inplace=True)
 
     with alchemyEngine.begin() as conn:
         result = conn.execute(
@@ -1665,12 +1670,12 @@ def save_ensemble_snapshot(
                     (
                         model,symbol,hyper_params,
                         region,random_seed,future_steps,
-                        group_id
+                        group_id,avg_yhat,cum_returns
                     )
                 values(
                     :model,:symbol,:hyper_params,
                     :region,:random_seed,:future_steps,
-                    :group_id
+                    :group_id,:avg_yhat,:cum_returns
                 ) RETURNING id
                 """
             ),
@@ -1682,6 +1687,8 @@ def save_ensemble_snapshot(
                 "random_seed": random_seed,
                 "future_steps": future_steps,
                 "group_id": group_id,
+                "avg_yhat": avg_yhat,
+                "cum_returns": cum_returns,
             },
         )
         snapshot_id = result.fetchone()[0]
