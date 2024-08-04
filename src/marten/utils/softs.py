@@ -492,7 +492,7 @@ def train_on_gpu(
                 )
             raise e
     else:
-        release_lock(lock_acquired, 0)
+        release_lock(lock, 0)
         raise TimeoutError("Timeout waiting for GPU resource")
 
 
@@ -539,7 +539,7 @@ def train_on_cpu(
         m = _train(new_config, setting, train, val, save_model_file)
         return m
     else:
-        release_lock(lock_acquired, 0)
+        release_lock(lock, 0)
         raise TimeoutError("Timeout waiting for CPU resource")
 
 
@@ -558,7 +558,7 @@ def release_lock(lock, after=10):
                 get_logger().warning(
                     "exception releasing lock %s: %s", lock.name, str(e)
                 )
-                
+
     if after<=0:
         _release()
     else:
