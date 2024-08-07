@@ -1655,9 +1655,9 @@ def save_ensemble_snapshot(
 
     ens_df.reset_index(inplace=True)
     avg_yhat = ens_df["yhat_n"].mean()
-    avg_yhat["plus_one"] = avg_yhat["yhat_n"] + 1.0
-    avg_yhat["accumulated_returns"] = avg_yhat["plus_one"].cumprod()
-    cum_returns = avg_yhat["accumulated_returns"].iloc[-1] - 1.0
+    ens_df["plus_one"] = ens_df["yhat_n"] + 1.0
+    ens_df["accumulated_returns"] = ens_df["plus_one"].cumprod()
+    cum_returns = ens_df["accumulated_returns"].iloc[-1] - 1.0
     ens_df.drop(columns=["plus_one", "accumulated_returns"], inplace=True)
 
     with alchemyEngine.begin() as conn:
@@ -1765,7 +1765,7 @@ def _search_space(model, max_covars):
                 d_model=[2**w for w in range(6, 9+1)],
                 d_core=[2**w for w in range(5, 10+1)],
                 d_ff=[2**w for w in range(6, 10+1)],
-                e_layers=range(4, 32+1),
+                e_layers=range(4, 16+1),
                 learning_rate=loguniform(0.0001, 0.002),
                 lradj=["type1", "type2", "constant", "cosine"],
                 patience=range(3, 10+1),

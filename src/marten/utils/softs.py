@@ -441,7 +441,7 @@ def restart_worker(exception):
     with worker_client() as client:
         task_key = worker.get_current_task()
         client.set_metadata([task_key, "CUDA error"], is_cuda_error(exception))
-        client.restart_workers(workers=[worker.address], timeout=600)
+        client.restart_workers(workers=[worker.address], timeout=900)
 
 
 def train_on_gpu(
@@ -478,7 +478,7 @@ def train_on_gpu(
     while wait_gpu(gpu_ut, gpu_rt, stop_at):
         time.sleep(1)
     if time.time() <= stop_at:
-        release_lock(lock, 2 if base_model else 5)
+        release_lock(lock, 2 if base_model else 7)
         try:
             m = _train(model_config, setting, train, val, save_model_file)
             return m
@@ -532,9 +532,9 @@ def train_on_cpu(
         time.sleep(1)
 
     if time.time() <= stop_at:
-        release_lock(lock, 2 if base_model else 5)
+        release_lock(lock, 2 if base_model else 7)
         # ratio = 0.9 if large_model else 0.8
-        ratio = 0.5 if base_model else 0.95
+        ratio = 0.5 if base_model else 0.85
         _optimize_torch(ratio)
         m = _train(new_config, setting, train, val, save_model_file)
         return m
