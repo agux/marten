@@ -452,7 +452,6 @@ def train_on_gpu(
     train,
     val,
     save_model_file,
-    use_device_lock=True,
 ):
     global resource_wait_time, lock_wait_time
     # large_model = is_large_model(model_config, len(train.columns))
@@ -460,19 +459,17 @@ def train_on_gpu(
 
     lock_key = f"""{socket.gethostname()}::GPU-{model_config["gpu"]}"""
 
-    lock = None
-    if use_device_lock:
-        lock = Lock(lock_key)
-        lock_wait_start = time.time()
-        lock_acquired = False
-        while time.time() - lock_wait_start <= resource_wait_time:
-            if lock.acquire(timeout=f"{lock_wait_time}s"):
-                lock_acquired = True
-                get_logger().debug("lock acquired: %s", lock_key)
-                break
-        if not lock_acquired:
-            # get_logger().debug("Timeout waiting for GPU lock: %s", lock_key)
-            raise TimeoutError(f"Timeout waiting for GPU lock: {lock_key}")
+    lock = Lock(lock_key)
+    lock_wait_start = time.time()
+    lock_acquired = False
+    while time.time() - lock_wait_start <= resource_wait_time:
+        if lock.acquire(timeout=f"{lock_wait_time}s"):
+            lock_acquired = True
+            get_logger().debug("lock acquired: %s", lock_key)
+            break
+    if not lock_acquired:
+        # get_logger().debug("Timeout waiting for GPU lock: %s", lock_key)
+        raise TimeoutError(f"Timeout waiting for GPU lock: {lock_key}")
 
     stop_at = time.time() + resource_wait_time
     while wait_gpu(gpu_ut, gpu_rt, stop_at):
@@ -504,7 +501,6 @@ def train_on_cpu(
     train,
     val,
     save_model_file,
-    use_device_lock=True,
 ):
     global resource_wait_time, lock_wait_time
     new_config = model_config.copy()
@@ -512,19 +508,17 @@ def train_on_cpu(
     # large_model = is_large_model(model_config, len(train.columns))
     base_model = SOFTSPredictor.isBaseline(model_config)
 
-    lock = None
-    if use_device_lock:
-        lock_key = f"{socket.gethostname()}::CPU"
-        lock = Lock(lock_key)
-        lock_wait_start = time.time()
-        lock_acquired = False
-        while time.time() - lock_wait_start <= resource_wait_time:
-            if lock.acquire(timeout=f"{lock_wait_time}s"):
-                lock_acquired = True
-                get_logger().debug("lock acquired: %s", lock_key)
-                break
-        if not lock_acquired:
-            raise TimeoutError(f"Timeout waiting for CPU lock {lock_key}")
+    lock_key = f"{socket.gethostname()}::CPU"
+    lock = Lock(lock_key)
+    lock_wait_start = time.time()
+    lock_acquired = False
+    while time.time() - lock_wait_start <= resource_wait_time:
+        if lock.acquire(timeout=f"{lock_wait_time}s"):
+            lock_acquired = True
+            get_logger().debug("lock acquired: %s", lock_key)
+            break
+    if not lock_acquired:
+        raise TimeoutError(f"Timeout waiting for CPU lock {lock_key}")
 
     # cpu_util_threshold = mem_util_threshold = 30 if large_model else 50
     stop_at = time.time() + resource_wait_time
