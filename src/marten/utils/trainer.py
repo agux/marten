@@ -1,4 +1,6 @@
 import torch
+import psutil
+import socket
 from dask.distributed import get_worker
 from marten.utils.logger import get_logger
 
@@ -65,3 +67,31 @@ def select_randk_covars(df, ranked_features, covar_dist, k):
     top_k_features = [ranked_features[i] for i in top_k_indices]
     columns_to_keep = ["ds", "y"] + top_k_features
     return df[columns_to_keep]
+
+
+def optimize_torch(ratio=0.85):
+    torch.cuda.set_per_process_memory_fraction(1.0)
+
+    cpu_cap = (100.0 - psutil.cpu_percent(1)) / 100.0
+    n_cores = float(psutil.cpu_count())
+    # n_workers = max(1.0, float(num_workers()))
+    # n_threads = min(int(n_cores * cpu_cap * 0.85), n_cores/n_workers)
+    n_threads = max(1, int(n_cores * cpu_cap * ratio))
+    torch.set_num_threads(
+        n_threads
+    )  # Sets the number of threads used for intraop parallelism on CPU.
+
+    # comment out to avoid below error:
+    # cannot set number of interop threads after parallel work has started or set_num_interop_threads called
+    # torch.set_num_interop_threads(n_threads)
+
+    get_logger().debug(
+        "machine: %s, cpu_cap: %s, n_cores: %s optimizing torch CPU thread: %s",
+        socket.gethostname(),
+        round(cpu_cap, 3),
+        int(n_cores),
+        n_threads,
+    )
+
+    # Enable cuDNN auto-tuner
+    # torch.backends.cudnn.benchmark = True

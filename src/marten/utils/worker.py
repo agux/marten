@@ -1,7 +1,9 @@
 import os
 import time
 import random
+import psutil
 import multiprocessing
+import threading
 import torch
 import dask
 import dask.config
@@ -10,6 +12,8 @@ from dask.distributed import (
     LocalCluster,
     Client,
     get_client,
+    get_worker,
+    worker_client,
     Future,
     Lock,
 )
@@ -17,6 +21,8 @@ from dask.distributed import (
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
 from marten.utils.net import get_machine_ips
+from marten.utils.trainer import is_cuda_error, cuda_memory_stats
+
 from dotenv import load_dotenv
 
 from datetime import datetime, timedelta
@@ -331,3 +337,86 @@ def hps_task_callback(future: Future):
             workers=[worker.address], timeout=600, raise_for_error=False
         )
 #     future.client.restart_workers()
+
+
+def restart_worker(exception):
+    worker = get_worker()
+    if worker is None:
+        return
+    get_logger().warning(
+        "Restarting worker %s due to %s\n%s",
+        worker.address,
+        str(exception),
+        cuda_memory_stats(),
+    )
+    with worker_client() as client:
+        task_key = worker.get_current_task()
+        client.set_metadata([task_key, "CUDA error"], is_cuda_error(exception))
+        client.restart_workers(workers=[worker.address], timeout=900)
+
+
+def release_lock(lock, after=10):
+    if lock is None:
+        return
+
+    def _release():
+        get_logger().debug("lock %s will be released in %s seconds", lock.name, after)
+        time.sleep(after)
+        try:
+            lock.release()
+            get_logger().debug("lock %s released", lock.name)
+        except Exception as e:
+            if "lock is not yet acquired" not in str(e).lower():
+                get_logger().warning(
+                    "exception releasing lock %s: %s", lock.name, str(e)
+                )
+
+    if after <= 0:
+        _release()
+    else:
+        threading.Timer(after, _release).start()
+
+def wait_gpu(util_threshold=80, vram_threshold=80, stop_at=None):
+    util = torch.cuda.utilization()
+    mu = torch.cuda.memory_usage()
+    return (
+        util > 0
+        and (util >= util_threshold or mu >= vram_threshold)
+        and (stop_at is None or time.time() <= stop_at)
+    )
+
+
+def wait_cpu(util_threshold=80, mem_threshold=80, stop_at=None):
+    cpu_util = psutil.cpu_percent(1)
+    mem_util = psutil.virtual_memory().percent
+    return (cpu_util >= util_threshold or mem_util >= mem_threshold) and (
+        stop_at is None or time.time() <= stop_at
+    )
+
+
+def workload_stage():
+    """
+    starting / progressing / finishing / unknown
+    """
+    with worker_client() as client:
+        workload_info = client.get_metadata(["workload_info"], None)
+        if workload_info is None:
+            stage = "unknown"
+        else:
+            finished = workload_info["finished"]
+            total = workload_info["total"]
+            workers = client.scheduler_info()["workers"]
+            if total - finished <= len(workers):
+                stage = "finishing"
+            elif finished <= len(workers):
+                stage = "starting"
+            else:
+                stage = "progressing"
+            get_logger().debug(
+                "finished:%s total:%s workers:%s stage:%s",
+                finished,
+                total,
+                len(workers),
+                stage,
+            )
+        return stage

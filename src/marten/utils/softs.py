@@ -32,9 +32,18 @@ from marten.utils.trainer import (
     log_train_args,
     select_device,
     cuda_memory_stats,
+    optimize_torch,
 )
 from marten.utils.holidays import get_next_trade_dates
-from marten.utils.worker import local_machine_power, TaskException
+from marten.utils.worker import (
+    local_machine_power,
+    TaskException,
+    release_lock,
+    wait_cpu,
+    wait_gpu,
+    restart_worker,
+    workload_stage,
+)
 
 # Immutable / constant
 default_config = MappingProxyType(
@@ -130,24 +139,6 @@ def use_gpu(model_config, n_feat, util_threshold=80, vram_threshold=80):
     #     )
     # )
     return use_gpu, should_wait
-
-
-def wait_cpu(util_threshold=80, mem_threshold=80, stop_at=None):
-    cpu_util = psutil.cpu_percent(1)
-    mem_util = psutil.virtual_memory().percent
-    return (cpu_util >= util_threshold or mem_util >= mem_threshold) and (
-        stop_at is None or time.time() <= stop_at
-    )
-
-
-def wait_gpu(util_threshold=80, vram_threshold=80, stop_at=None):
-    util = torch.cuda.utilization()
-    mu = torch.cuda.memory_usage()
-    return (
-        util > 0
-        and (util >= util_threshold or mu >= vram_threshold)
-        and (stop_at is None or time.time() <= stop_at)
-    )
 
 
 def _fit_multivariate_impute_model(input, params):
@@ -282,7 +273,7 @@ def _neupro_impute(df, random_seed):
 
     np_random_seed(random_seed)
     set_log_level("ERROR")
-    _optimize_torch()
+    optimize_torch()
 
     na_positions = df.isna()
     df_nona = df.dropna()
@@ -365,34 +356,6 @@ def impute(df, random_seed, client=None):
     return df, imputed_df
 
 
-def _optimize_torch(ratio=0.85):
-    torch.cuda.set_per_process_memory_fraction(1.0)
-
-    cpu_cap = (100.0 - psutil.cpu_percent(1)) / 100.0
-    n_cores = float(psutil.cpu_count())
-    # n_workers = max(1.0, float(num_workers()))
-    # n_threads = min(int(n_cores * cpu_cap * 0.85), n_cores/n_workers)
-    n_threads = max(1, int(n_cores * cpu_cap * ratio))
-    torch.set_num_threads(
-        n_threads
-    )  # Sets the number of threads used for intraop parallelism on CPU.
-
-    # comment out to avoid below error:
-    # cannot set number of interop threads after parallel work has started or set_num_interop_threads called
-    # torch.set_num_interop_threads(n_threads)
-
-    get_logger().debug(
-        "machine: %s, cpu_cap: %s, n_cores: %s optimizing torch CPU thread: %s",
-        socket.gethostname(),
-        round(cpu_cap, 3),
-        int(n_cores),
-        n_threads,
-    )
-
-    # Enable cuDNN auto-tuner
-    # torch.backends.cudnn.benchmark = True
-
-
 def _train(config, setting, train, val, save_model_file):
     torch.cuda.empty_cache()
     model = Exp_Custom(SimpleNamespace(**config))
@@ -426,22 +389,6 @@ def _train(config, setting, train, val, save_model_file):
         _cleanup(model)
 
     return model
-
-
-def restart_worker(exception):
-    worker = get_worker()
-    if worker is None:
-        return
-    get_logger().warning(
-        "Restarting worker %s due to %s\n%s",
-        worker.address,
-        str(exception),
-        cuda_memory_stats(),
-    )
-    with worker_client() as client:
-        task_key = worker.get_current_task()
-        client.set_metadata([task_key, "CUDA error"], is_cuda_error(exception))
-        client.restart_workers(workers=[worker.address], timeout=900)
 
 
 def train_on_gpu(
@@ -529,63 +476,12 @@ def train_on_cpu(
         release_lock(lock, 2 if base_model else 7)
         # ratio = 0.9 if large_model else 0.8
         ratio = 0.5 if base_model else 0.85
-        _optimize_torch(ratio)
+        optimize_torch(ratio)
         m = _train(new_config, setting, train, val, save_model_file)
         return m
     else:
         release_lock(lock, 0)
         raise TimeoutError("Timeout waiting for CPU resource")
-
-
-def release_lock(lock, after=10):
-    if lock is None:
-        return
-
-    def _release():
-        get_logger().debug("lock %s will be released in %s seconds", lock.name, after)
-        time.sleep(after)
-        try:
-            lock.release()
-            get_logger().debug("lock %s released", lock.name)
-        except Exception as e:
-            if "lock is not yet acquired" not in str(e).lower():
-                get_logger().warning(
-                    "exception releasing lock %s: %s", lock.name, str(e)
-                )
-
-    if after<=0:
-        _release()
-    else:
-        threading.Timer(after, _release).start()
-
-
-def workload_stage():
-    """
-    starting / progressing / finishing / unknown
-    """
-    with worker_client() as client:
-        client.retry
-        workload_info = client.get_metadata(["workload_info"], None)
-        if workload_info is None:
-            stage = "unknown"
-        else:
-            finished = workload_info["finished"]
-            total = workload_info["total"]
-            workers = client.scheduler_info()["workers"]
-            if total - finished <= len(workers):
-                stage = "finishing"
-            elif finished <= len(workers):
-                stage = "starting"
-            else:
-                stage = "progressing"
-            get_logger().debug(
-                "finished:%s total:%s workers:%s stage:%s",
-                finished,
-                total,
-                len(workers),
-                stage,
-            )
-        return stage
 
 
 class SOFTSPredictor:
@@ -792,7 +688,7 @@ class SOFTSPredictor:
                 if time.time() <= stop_at:
                     if model.args.use_gpu:
                         model.args.use_gpu = False
-                    _optimize_torch(0.9)
+                    optimize_torch(0.9)
                     break
             release_lock(lock_acquired, 0)
 
@@ -808,7 +704,7 @@ class SOFTSPredictor:
                 if lock.acquire(timeout="24 hours"):
                     while wait_cpu(cpu_ut, cpu_rt):
                         time.sleep(1)
-                    _optimize_torch(0.9)
+                    optimize_torch(0.9)
                     release_lock(lock, 5)
                     forecast = model.predict(setting=model.setting, pred_data=input)
                 else:
