@@ -114,7 +114,7 @@ def trainable_with_cpu(model_config, n_feat):
         score += 1 if model_config["d_core"] >= 256 else 0
         score += 1 if model_config["d_ff"] >= 256 else 0
         score += 1 if model_config["e_layers"] >= 8 else 0
-        score += 1 if n_feat >= 64 else 0
+        score += 0 if n_feat < 64 else 1 if n_feat < 128 else 2 if n_feat < 256 else 3
     else:
         score += 1 if model_config["d_model"] >= 64 else 0
         score += 1 if model_config["d_core"] >= 128 else 0
