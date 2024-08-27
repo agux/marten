@@ -69,7 +69,7 @@ def select_randk_covars(df, ranked_features, covar_dist, k):
     return df[columns_to_keep]
 
 
-def optimize_torch(ratio=0.85):
+def optimize_torch(ratio=0.85) -> int:
     torch.cuda.set_per_process_memory_fraction(1.0)
 
     cpu_cap = (100.0 - psutil.cpu_percent(1)) / 100.0
@@ -92,6 +92,8 @@ def optimize_torch(ratio=0.85):
         int(n_cores),
         n_threads,
     )
+
+    return n_threads
 
     # Enable cuDNN auto-tuner
     # torch.backends.cudnn.benchmark = True
