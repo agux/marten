@@ -52,13 +52,14 @@ class LocalWorkerPlugin(WorkerPlugin):
 
         # worker.logger.info(torch.__config__.parallel_info())
 
-        match self.args.model.lower():
-            case "timemixer":
-                from marten.models.time_mixer import TimeMixerModel
+        if hasattr(self.args, "model"):
+            match self.args.model.lower():
+                case "timemixer":
+                    from marten.models.time_mixer import TimeMixerModel
 
-                worker.model = TimeMixerModel()
-            case _:
-                worker.model = None
+                    worker.model = TimeMixerModel()
+                case _:
+                    worker.model = None
 
 
 class TaskException(Exception):
