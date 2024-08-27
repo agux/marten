@@ -181,7 +181,7 @@ class TimeMixerModel(BaseModel):
             down_sampling_window=model_config["down_sampling_window"],
             down_sampling_method=model_config["down_sampling_method"],
             use_norm=model_config["use_norm"],
-            decoder_input_size_multiplier=model_config["decoder_input_size_multiplier"],
+            # decoder_input_size_multiplier=model_config["decoder_input_size_multiplier"],
             loss=HuberLoss(),
             # valid_loss=None,
             max_steps=model_config["max_steps"],
