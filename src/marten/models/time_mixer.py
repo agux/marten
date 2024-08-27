@@ -188,7 +188,9 @@ class TimeMixerModel(BaseModel):
             learning_rate=model_config["learning_rate"],
             # num_lr_decays = -1,
             early_stop_patience_steps=(
-                model_config["early_stop_patience_steps"] if model_config["validate"] else -1
+                model_config["early_stop_patience_steps"]
+                if model_config["validate"]
+                else -1
             ),
             val_check_steps=int(model_config["max_steps"] / 100.0),
             batch_size=model_config["batch_size"],
@@ -197,7 +199,7 @@ class TimeMixerModel(BaseModel):
             # num_workers_loader = 0,
             # drop_last_loader = False,
             optimizer=optimizer,
-            optimizer_model_config=optim_args,
+            optimizer_kwargs=optim_args,
             # lr_scheduler=None,
             # lr_scheduler_model_config=None,
             # NOTE: scaling will be set when instantiating `NeuralForecast`.
