@@ -210,6 +210,7 @@ class TimeMixerModel(BaseModel):
             enable_model_summary=False,
             accelerator=model_config["accelerator"],
             # devices="auto",
+            devices=model_config["devices"],
         )
         self.nf = NeuralForecast(
             models=[self.model],
