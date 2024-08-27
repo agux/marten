@@ -15,3 +15,5 @@ bokeh>=3.4.0
 holidays>=0.47
 arm-mango>=1.4.3
 statsmodels>=0.14.2
+ray>=2.33.0
+neuralforecast>=1.7.3

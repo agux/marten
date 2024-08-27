@@ -50,6 +50,17 @@ class LocalWorkerPlugin(WorkerPlugin):
         worker.logger = get_logger(self.logger_name, role="worker")
         worker.args = self.args
 
+        worker.logger.info(torch.__config__.parallel_info())
+
+        match self.args.model.lower():
+            case "timemixer":
+                from marten.models.time_mixer import TimeMixerModel
+
+                worker.model = TimeMixerModel()
+            case _:
+                worker.model = None
+
+
 class TaskException(Exception):
     def __init__(self, message, **args):
         # Call the base class constructor with the message
@@ -103,7 +114,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
             "distributed.worker.resources.POWER": power,
             "distributed.scheduler.work-stealing-interval": "5 seconds",
             "distributed.scheduler.worker-ttl": "30 minutes",
-            "distributed.scheduler.worker-saturation": 0.1,
+            "distributed.scheduler.worker-saturation": 0.0001,
             "distributed.comm.retry.count": 10,
             "distributed.comm.timeouts.connect": 120,
             "distributed.nanny.pre-spawn-environ.MALLOC_TRIM_THRESHOLD_": 0,

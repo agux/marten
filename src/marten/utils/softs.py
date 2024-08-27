@@ -7,7 +7,7 @@ import random
 import socket
 import math
 import traceback
-import warnings
+
 import threading
 from types import SimpleNamespace, MappingProxyType
 
@@ -19,18 +19,13 @@ from sklearn.preprocessing import StandardScaler
 from statsmodels.tsa.statespace.varmax import VARMAX
 
 # from statsmodels.tsa.arima.model import ARIMA
-from neuralprophet import (
-    set_random_seed as np_random_seed,
-    set_log_level,
-    NeuralProphet,
-)
 from softs.exp.exp_custom import Exp_Custom
 
+from marten.data.worker_func import impute
 from marten.utils.logger import get_logger
 from marten.utils.trainer import (
     is_cuda_error,
     log_train_args,
-    select_device,
     cuda_memory_stats,
     optimize_torch,
 )
@@ -265,95 +260,6 @@ def _statsmodels_impute(df, model_fit, in_sample):
     #                 inplace=True,
     #             )
     return data_filled
-
-
-def _neupro_impute(df, random_seed):
-    na_col = df.columns[1]
-    df.rename(columns={na_col: "y"}, inplace=True)
-
-    np_random_seed(random_seed)
-    set_log_level("ERROR")
-    # optimize_torch()
-
-    na_positions = df.isna()
-    df_nona = df.dropna()
-    scaler = StandardScaler()
-    scaler.fit(df_nona.iloc[:, 1:])
-    df_filled = df.ffill().bfill()
-    df.iloc[:, 1:] = scaler.transform(df_filled.iloc[:, 1:])
-    df[na_positions] = np.nan
-
-    try:
-        m = NeuralProphet(
-            accelerator=select_device(True),
-            # changepoints_range=1.0,
-        )
-        m.fit(
-            df,
-            progress=None,
-            #   early_stopping=True,
-            checkpointing=False,
-        )
-    except Exception as e:
-        m = NeuralProphet(
-            # changepoints_range=1.0,
-        )
-        m.fit(
-            df,
-            progress=None,
-            #   early_stopping=True,
-            checkpointing=False,
-        )
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", FutureWarning)
-        warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
-        forecast = m.predict(df)
-
-    forecast = forecast[["ds", "yhat1"]]
-    forecast["ds"] = forecast["ds"].dt.date
-    forecast["yhat1"] = forecast["yhat1"].astype(float)
-    forecast.rename(columns={"yhat1": na_col}, inplace=True)
-    forecast.iloc[:, 1:] = scaler.inverse_transform(forecast.iloc[:, 1:])
-
-    return forecast
-
-
-def impute(df, random_seed, client=None):
-    df_na = df.iloc[:, 1:].isna()
-
-    if not df_na.any().any():
-        return df, None
-
-    na_counts = df_na.sum()
-    na_cols = na_counts[na_counts > 0].index.tolist()
-    na_row_indices = df[df.iloc[:, 1:].isna().any(axis=1)].index
-
-    def _func(client):
-        futures = []
-        for na_col in na_cols:
-            df_na = df[["ds", na_col]]
-            futures.append(client.submit(_neupro_impute, df_na, random_seed))
-        return client.gather(futures)
-
-    if client is not None:
-        results = _func(client)
-    elif len(na_cols) > 1:
-        with worker_client() as client:
-            results = _func(client)
-    else:
-        results = [_neupro_impute(df[["ds", na_cols[0]]].copy(), random_seed)]
-    imputed_df = results[0]
-    for result in results[1:]:
-        imputed_df = imputed_df.merge(result, on="ds", how="left")
-
-    for na_col in na_cols:
-        df[na_col].fillna(imputed_df[na_col], inplace=True)
-
-    # Select imputed rows only
-    imputed_df = imputed_df.loc[na_row_indices].copy()
-
-    return df, imputed_df
 
 
 def _train(config, setting, train, val, save_model_file):

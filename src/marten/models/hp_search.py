@@ -9,7 +9,6 @@ import datetime
 import argparse
 import json
 import math
-import hashlib
 import multiprocessing
 import pandas as pd
 import numpy as np
@@ -17,6 +16,7 @@ from dotenv import load_dotenv
 
 from dask.distributed import get_worker
 
+from marten.models.base_model import BaseModel
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
 from marten.utils.worker import await_futures, init_client, num_workers, hps_task_callback
@@ -50,10 +50,11 @@ alchemyEngine = None
 args = None
 client = None
 futures = []
+model: BaseModel = None
 
 
 def init(args):
-    global client
+    global client, model
 
     _init_local_resource()
 
@@ -62,6 +63,13 @@ def init(args):
         int(multiprocessing.cpu_count() * 0.8) if args.worker < 1 else args.worker,
         dashboard_port=args.dashboard_port,
     )
+
+    match args.model.lower():
+        case "timemixer":
+            from marten.models.time_mixer import TimeMixerModel
+            model = TimeMixerModel()
+        case _:
+            model = None
 
 
 def _init_local_resource():
@@ -697,8 +705,8 @@ def hp_deserializer(dct):
             dct[key] = tuple(value)
     return dct
 
-def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit, feat_size):
-    global alchemyEngine, logger
+def preload_warmstart_tuples(model_name, anchor_symbol, covar_set_id, hps_id, limit, feat_size):
+    global alchemyEngine, logger, model
 
     with alchemyEngine.connect() as conn:
         results = conn.execute(
@@ -716,7 +724,7 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit, 
             # limit :limit
             ),
             {
-                "model": model,
+                "model": model_name,
                 "anchor_symbol": anchor_symbol,
                 "covar_set_id": covar_set_id,
                 "hps_id": hps_id,
@@ -728,7 +736,7 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit, 
         for row in results:
             # param_dict = json.loads(row[0], object_hook=hp_deserializer)
             param_dict = row[0]
-            match model:
+            match model_name:
                 case "NeuralProphet":
                     # Fill in default values if not exists in historical HP
                     # To match the size of tensors in bayesopt
@@ -757,19 +765,22 @@ def preload_warmstart_tuples(model, anchor_symbol, covar_set_id, hps_id, limit, 
                         param_dict["covar_dist"] = np.array(param_dict["covar_dist"])
 
                     # logger.info("""param_dict: %s""", param_dict)
+                case _:
+                    param_dict = model.restore_params(param_dict, feat_size)
 
             tuples.append((param_dict, row[1]))
 
         return tuples if len(tuples) > 0 else None
 
 def power_demand(args, params):
+    global model
     match args.model:
         case "NeuralProphet":
             return 1
         case "SOFTS":
             return 2 if is_large_model(params, params["topk_covar"]) else 1
         case _:
-            return 1
+            return model.power_demand(args, params)
 
 
 def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args, iteration, domain_size, resume):

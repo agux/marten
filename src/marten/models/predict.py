@@ -3,7 +3,7 @@ import os
 OPENBLAS_NUM_THREADS = 1
 os.environ["OPENBLAS_NUM_THREADS"] = f"{OPENBLAS_NUM_THREADS}"
 
-
+from marten.models.base_model import BaseModel
 from marten.utils.logger import get_logger
 from marten.utils.worker import init_client
 from marten.utils.database import get_database_engine
@@ -22,10 +22,11 @@ from dotenv import load_dotenv
 logger = get_logger(__name__)
 client = None
 alchemyEngine = None
+model: BaseModel = None
 
 
 def init(args):
-    global client, alchemyEngine
+    global client, alchemyEngine, model
     client = init_client(
         __name__,
         args.max_worker,
@@ -46,9 +47,17 @@ def init(args):
         db_url = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
         alchemyEngine = get_database_engine(db_url)
 
+    match args.model.lower():
+        case "timemixer":
+            from marten.models.time_mixer import TimeMixerModel
+
+            model = TimeMixerModel()
+        case _:
+            model = None
+
 
 def main(args):
-    global client, alchemyEngine, logger
+    global client, alchemyEngine, logger, model
 
     t_start = time.time()
     init(args)
@@ -56,12 +65,12 @@ def main(args):
     for symbol in args.symbols:
         if args.adhoc:
             # future = client.submit(predict_adhoc, symbol, args)
-            hps_id, cutoff_date, ranked_features, df = (
-                covars_and_search(client, symbol, alchemyEngine, logger, args)
+            hps_id, cutoff_date, ranked_features, df = covars_and_search(
+                model, client, symbol, alchemyEngine, logger, args
             )
             logger.info("Starting adhoc prediction")
             t3_start = time.time()
-            
+
             ensemble_topk_prediction(
                 client,
                 symbol,

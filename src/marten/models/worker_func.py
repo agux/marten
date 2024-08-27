@@ -22,6 +22,7 @@ from tenacity import (
     Retrying,
 )
 
+from marten.data.worker_func import impute
 from marten.utils.worker import await_futures
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
@@ -117,6 +118,7 @@ def fit_with_covar(
     # Local import of get_worker to avoid circular import issue?
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
+    model = worker.model
 
     def _func():
         merged_df = merge_covar_df(
@@ -184,7 +186,9 @@ def fit_with_covar(
                 )
                 m.cleanup()
             case _:
-                raise NotImplementedError
+                if not model.accept_missing_data():
+                    merged_df, impute_df = impute(merged_df, random_seed)
+                metrics = model.train(merged_df, **model.baseline_params())
 
         fit_time = time.time() - start_time
         # get the row count in merged_df as timesteps
@@ -343,7 +347,7 @@ def save_covar_metrics(
 
 
 def train(
-    model,
+    model_name,
     df,
     epochs=None,
     random_seed=7,
@@ -355,8 +359,9 @@ def train(
 ):
     worker = get_worker()
     args = worker.args
+    model = worker.model
 
-    match model:
+    match model_name:
         case "NeuralProphet":
             return NPPredictor.train(
                 df=df,
@@ -383,7 +388,13 @@ def train(
                 save_model_file=save_model_file,
             )
         case _:
-            raise NotImplementedError
+            config = kwargs.copy()
+            if config["accelerator"] == True:
+                config["accelerator"] = "auto"
+            config["max_steps"] = epochs
+            config["h"] = args.future_steps
+            metrics = model.train(df, random_seed=random_seed, validate=validate, **config)
+            return (None, metrics)
 
 
 def reg_search_params(params):
@@ -448,6 +459,8 @@ def log_metrics_for_hyper_params(
 ):
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
+    model = worker.model
+
     params = params.copy()
 
     # to support distributed processing, we try to insert a new record (with primary keys only)
@@ -551,7 +564,16 @@ def log_metrics_for_hyper_params(
             m, last_metric = SOFTSPredictor.train(df, params, hpid, random_seed, True)
             m.cleanup()
         case _:
-            raise NotImplementedError
+            if model.is_baseline(**params):
+                tag = (
+                    "baseline,univariate"
+                    if covar_set_id == 0
+                    else "baseline,multivariate"
+                )
+            params["h"] = args.future_steps
+            params["max_steps"] = epochs
+            params["accelerator"] = "auto" if accelerator == True or accelerator is None else accelerator
+            last_metric = model.train(df, validate=True, **params)
 
     fit_time = time.time() - start_time
 
@@ -1058,7 +1080,7 @@ def distance(forecast):
 
 def save_forecast_snapshot(
     alchemyEngine,
-    model,
+    model_name,
     symbol,
     hyper_params,
     covar_set_id,
@@ -1106,7 +1128,7 @@ def save_forecast_snapshot(
                 """
             ),
             {
-                "model": model,
+                "model": model_name,
                 "symbol": symbol,
                 "hyper_params": hyper_params,
                 "covar_set_id": covar_set_id,
@@ -1141,7 +1163,7 @@ def save_forecast_snapshot(
         snapshot_id = result.fetchone()[0]
 
         ## save to forecast_params table
-        match model:
+        match model_name:
             case "NeuralProphet":
                 forecast_params = forecast[
                     ["ds", "trend", "season_yearly", "yhat_n"]
@@ -1149,7 +1171,8 @@ def save_forecast_snapshot(
             case "SOFTS":
                 forecast_params = forecast[["ds", "yhat_n"]].copy()
             case _:
-                raise NotImplementedError
+                forecast_params = get_worker().model.trim_forecast(forecast)
+
         forecast_params.rename(columns={"ds": "date"}, inplace=True)
         forecast_params.loc[:, "symbol"] = symbol
         forecast_params.loc[:, "snapshot_id"] = snapshot_id
@@ -1175,7 +1198,7 @@ def train_predict(
 ):
     try:
         m, metrics = train(
-            model=model,
+            model_name=model,
             df=df,
             country=country,
             epochs=epochs,
@@ -1194,7 +1217,7 @@ def train_predict(
                 forecast = SOFTSPredictor.predict(m, df, country)
                 m.cleanup()
             case _:
-                raise NotImplementedError
+                forecast = get_worker().model.predict(df, random_seed=random_seed, h=future_steps)
     except Exception as e:
         get_logger().error(traceback.format_exc())
         raise e
@@ -1737,8 +1760,8 @@ def count_topk_hp(alchemyEngine, model, hps_id, base_loss):
         return result.fetchone()[0]
 
 
-def _search_space(model, max_covars):
-    match model:
+def _search_space(model_name, model, max_covars):
+    match model_name:
         case "NeuralProphet":
             ss = f"""dict(
                 growth=["linear", "discontinuous"],
@@ -1778,11 +1801,12 @@ def _search_space(model, max_covars):
                 covar_dist=dirichlet([1.0]*{max_covars}),
             )"""
         case _:
-            raise NotImplementedError
+            return model.search_space(max_covars=max_covars)
     return ss
 
 
 def fast_bayesopt(
+    model,
     client,
     alchemyEngine,
     logger,
@@ -1805,7 +1829,7 @@ def fast_bayesopt(
 
     _cleanup_stale_keys()
 
-    space_str = _search_space(args.model, min(args.max_covars, len(ranked_features)))
+    space_str = _search_space(args.model, model, min(args.max_covars, len(ranked_features)))
 
     # Convert args to a dictionary, excluding non-serializable items
     args_dict = {k: v for k, v in vars(args).items() if not callable(v)}
@@ -1823,9 +1847,8 @@ def fast_bayesopt(
     elif domain_size < base_ds:
         domain_size = base_ds
 
-    if args.model == "SOFTS":
-        from marten.utils.softs import impute
-
+    if args.model == "SOFTS" or (model is not None and not model.accept_missing_data()):
+        from marten.data import impute
         df, _ = impute(df, args.random_seed, client)
 
     # split large iterations into smaller runs to avoid OOM / memory leak
@@ -1882,7 +1905,7 @@ def update_covar_set_id(alchemyEngine, hps_id, covar_set_id):
         conn.execute(text(sql), {"hps_id": hps_id, "covar_set_id": covar_set_id})
 
 
-def _univariate_default_hp(client, anchor_df, args, hps_id):
+def _univariate_default_hp(model, client, anchor_df, args, hps_id):
     df = anchor_df[["ds", "y"]]
     params = None
     match args.model:
@@ -1894,7 +1917,7 @@ def _univariate_default_hp(client, anchor_df, args, hps_id):
         case "SOFTS":
             params = baseline_config
         case _:
-            raise NotImplementedError
+            params = model.baseline_params()
     return client.submit(
         log_metrics_for_hyper_params,
         args.symbol,
@@ -1954,7 +1977,7 @@ def min_covar_loss_val(alchemyEngine, model, symbol, ts_date):
         return result.fetchone()[0]
 
 
-def covars_and_search(client, symbol, alchemyEngine, logger, args):
+def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     global LOSS_CAP
 
     import marten.models.hp_search as hps
@@ -1989,7 +2012,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
         anchor_table,
     )
 
-    univ_loss = _univariate_default_hp(client, anchor_df, args, hps_id)
+    univ_loss = _univariate_default_hp(model, client, anchor_df, args, hps_id)
 
     min_covar_loss = min_covar_loss_val(alchemyEngine, args.model, symbol, cutoff_date)
     min_covar_loss = min_covar_loss if min_covar_loss is not None else LOSS_CAP
@@ -2047,7 +2070,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     # scale-in to preserve more memory for hps
     worker_size = (
         args.min_worker
-        if args.model == "SOFTS"
+        if args.model != "NeuralProphet"
         else max(args.min_worker, round(args.max_worker * 0.5))
     )
     logger.info("Scaling down dask cluster to %s", worker_size)
@@ -2066,6 +2089,7 @@ def covars_and_search(client, symbol, alchemyEngine, logger, args):
     update_covar_set_id(alchemyEngine, hps_id, covar_set_id)
 
     fast_bayesopt(
+        model,
         client,
         alchemyEngine,
         logger,

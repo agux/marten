@@ -5,7 +5,7 @@ from marten.utils.logger import get_logger
 def configure_parser(parser):
     parser.add_argument(
         "--model",
-        choices=["NeuralProphet", "SOFTS"],
+        choices=["NeuralProphet", "SOFTS", "TimeMixer"],
         default="SOFTS",
         help="Model to be used for the prediction. Defaults to SOFTS.",
     )
