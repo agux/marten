@@ -44,7 +44,7 @@ baseline_params = {
     "batch_size": 32,
     # step_size = 1,
     "random_seed": 7,
-    "optimizer": "AdamW",
+    "optimizer": "Adam",
     # num_workers_loader = 0,
     # drop_last_loader = False,
     # lr_scheduler=None,
@@ -78,23 +78,11 @@ class TimeMixerModel(BaseModel):
     def _select_optimizer(self, **kwargs: Any) -> Tuple[Type[Optimizer], dict]:
         match kwargs["optimizer"]:
             case "Adam":
-                model_optim = optim.Adam(
-                    self.model.parameters(),
-                    lr=self.args.learning_rate,
-                    fused=self.args.use_gpu,
-                )
+                model_optim = optim.Adam
             case "AdamW":
-                model_optim = optim.AdamW(
-                    self.model.parameters(),
-                    lr=self.args.learning_rate,
-                    fused=self.args.use_gpu,
-                )
+                model_optim = optim.AdamW
             case "SGD":
-                model_optim = optim.SGD(
-                    self.model.parameters(),
-                    lr=self.args.learning_rate,
-                    fused=self.args.use_gpu,
-                )
+                model_optim = optim.SGD
         optim_args = {
             "lr": kwargs["learning_rate"],
             "fused": kwargs["accelerator"] in ("gpu", "auto")
