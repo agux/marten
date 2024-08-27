@@ -165,10 +165,8 @@ class BaseModel(ABC):
         self.model_args = kwargs
         accelerator = self._select_accelerator(kwargs["accelerator"])
         kwargs["accelerator"] = accelerator
+        kwargs["devices"] = optimize_torch(self.torch_cpu_ratio()) if accelerator == "cpu" else "auto"
         self.model_args = kwargs
-        if accelerator == "cpu":
-            n_threads = optimize_torch(self.torch_cpu_ratio())
-            kwargs["devices"] = n_threads
         try:
             metrics = self._train(df, **kwargs)
         except Exception as e:
@@ -177,9 +175,8 @@ class BaseModel(ABC):
                 restart_worker(e)
             elif accelerator != "cpu":
                 # fallback to train on CPU
-                n_threads = optimize_torch(self.torch_cpu_ratio())
-                kwargs["devices"] = n_threads
                 kwargs["accelerator"] = "cpu"
+                kwargs["devices"] = optimize_torch(self.torch_cpu_ratio())
                 self.model_args = kwargs
                 metrics = self._train(df, **kwargs)
             else:
