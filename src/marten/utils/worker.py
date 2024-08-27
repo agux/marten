@@ -50,7 +50,7 @@ class LocalWorkerPlugin(WorkerPlugin):
         worker.logger = get_logger(self.logger_name, role="worker")
         worker.args = self.args
 
-        worker.logger.info(torch.__config__.parallel_info())
+        # worker.logger.info(torch.__config__.parallel_info())
 
         match self.args.model.lower():
             case "timemixer":

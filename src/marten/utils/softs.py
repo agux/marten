@@ -381,8 +381,8 @@ def train_on_cpu(
     if time.time() <= stop_at:
         release_lock(lock, 2 if base_model else 7)
         # ratio = 0.9 if large_model else 0.8
-        # ratio = 0.5 if base_model else 0.85
-        # optimize_torch(ratio)
+        ratio = 0.5 if base_model else 0.85
+        optimize_torch(ratio)
         m = _train(new_config, setting, train, val, save_model_file)
         return m
     else:
@@ -420,8 +420,8 @@ class SOFTSPredictor:
         n_feat = len(df.columns)
         large_model = is_large_model(model_config, n_feat)
         cpu_trainable = trainable_with_cpu(model_config, n_feat)
-        # ratio = 0.9 if large_model else 0.33
-        # _optimize_torch(ratio)
+        ratio = 0.9 if large_model else 0.33
+        _optimize_torch(ratio)
 
         train, val, _ = _prep_df(
             df, validate, model_config["seq_len"], model_config["pred_len"], random_seed
@@ -594,7 +594,7 @@ class SOFTSPredictor:
                 if time.time() <= stop_at:
                     if model.args.use_gpu:
                         model.args.use_gpu = False
-                    # optimize_torch(0.9)
+                    optimize_torch(0.9)
                     break
             release_lock(lock_acquired, 0)
 
@@ -610,7 +610,7 @@ class SOFTSPredictor:
                 if lock.acquire(timeout="24 hours"):
                     while wait_cpu(cpu_ut, cpu_rt):
                         time.sleep(1)
-                    # optimize_torch(0.9)
+                    optimize_torch(0.9)
                     release_lock(lock, 5)
                     forecast = model.predict(setting=model.setting, pred_data=input)
                 else:

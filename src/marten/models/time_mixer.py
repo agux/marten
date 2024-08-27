@@ -69,10 +69,10 @@ class TimeMixerModel(BaseModel):
         return 2
 
     def gpu_threshold(self) -> Tuple[float, float]:
-        return 0.3, 0.3
+        return 30, 30
 
     def cpu_threshold(self) -> Tuple[float, float]:
-        return 0.5, 0.5
+        return 50, 50
 
     def _select_optimizer(self, **kwargs: Any) -> Tuple[Type[Optimizer], dict]:
         match kwargs["optimizer"]:

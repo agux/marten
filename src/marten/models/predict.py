@@ -115,14 +115,23 @@ def main(args):
 if __name__ == "__main__":
     try:
         args = SimpleNamespace(
-            worker=-1,
+            adhoc=True,
+            model="TimeMixer",
+            min_worker=2,
+            max_worker=4,
             early_stopping=True,
-            timestep_limit=1200,
+            scheduler_port=8999,
+            timestep_limit=-1,
+            mini_itr=3,
+            max_itr=3,
+            batch_size=50,
+            domain_size=500000,
             random_seed=7,
-            epochs=500,
-            future_steps=60,
+            epochs=1000,
+            future_steps=20,
+            max_covars=500,
             # symbols=["511220", "513800", "930955"],
-            symbols=["511220"],
+            symbols=["399673"],
         )
 
         main(args)

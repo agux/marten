@@ -166,8 +166,8 @@ class BaseModel(ABC):
         accelerator = self._select_accelerator(kwargs["accelerator"])
         kwargs["accelerator"] = accelerator
         self.model_args = kwargs
-        # if accelerator == "cpu":
-        #     optimize_torch(self.torch_cpu_ratio())
+        if accelerator == "cpu":
+            optimize_torch(self.torch_cpu_ratio())
         try:
             metrics = self._train(df, **kwargs)
         except Exception as e:
