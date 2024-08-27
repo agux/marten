@@ -44,6 +44,7 @@ baseline_params = {
     "batch_size": 32,
     # step_size = 1,
     "random_seed": 7,
+    "optimizer": "AdamW",
     # num_workers_loader = 0,
     # drop_last_loader = False,
     # lr_scheduler=None,
@@ -271,6 +272,7 @@ class TimeMixerModel(BaseModel):
             local_scaler_type=[None, "standard", "robust", "robust-iqr", "minmax", "boxcox"],
             topk_covar=list(range(0, {kwargs["max_covars"]}+1)),
             covar_dist=dirichlet([1.0]*{kwargs["max_covars"]}),
+            optimizer=["Adam", "AdamW", "SGD"],
         )
         """
 
