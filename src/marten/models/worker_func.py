@@ -196,6 +196,8 @@ def fit_with_covar(
                     if isinstance(accelerator, str)
                     else "auto" if accelerator == True else "cpu"
                 )
+                config["validate"] = True
+                config["random_seed"] = random_seed
                 metrics = model.train(merged_df, **config)
 
         fit_time = time.time() - start_time
@@ -397,8 +399,11 @@ def train(
             )
         case _:
             config = kwargs.copy()
-            if config["accelerator"] == True:
-                config["accelerator"] = "auto"
+            config["accelerator"] = (
+                kwargs["accelerator"]
+                if isinstance(kwargs["accelerator"], str)
+                else "auto" if kwargs["accelerator"] == True else "cpu"
+            )
             config["max_steps"] = epochs
             config["h"] = args.future_steps
             metrics = model.train(
