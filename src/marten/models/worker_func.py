@@ -188,7 +188,15 @@ def fit_with_covar(
             case _:
                 if not model.accept_missing_data():
                     merged_df, impute_df = impute(merged_df, random_seed)
-                metrics = model.train(merged_df, **model.baseline_params())
+                config = model.baseline_params()
+                config["h"] = args.future_steps
+                config["max_steps"] = args.epochs
+                config["accelerator"] = (
+                    accelerator
+                    if isinstance(accelerator, str)
+                    else "auto" if accelerator == True else "cpu"
+                )
+                metrics = model.train(merged_df, **config)
 
         fit_time = time.time() - start_time
         # get the row count in merged_df as timesteps
@@ -393,7 +401,9 @@ def train(
                 config["accelerator"] = "auto"
             config["max_steps"] = epochs
             config["h"] = args.future_steps
-            metrics = model.train(df, random_seed=random_seed, validate=validate, **config)
+            metrics = model.train(
+                df, random_seed=random_seed, validate=validate, **config
+            )
             return (None, metrics)
 
 
@@ -430,9 +440,10 @@ def validate_hyperparams(args, df, ranked_features, covar_set_id, hps_id, params
         ranked_features,
     )
     # except Exception as e:
-        # get_logger().error(traceback.format_exc())
-        # raise e
+    # get_logger().error(traceback.format_exc())
+    # raise e
     return (params, loss_val)
+
 
 def get_hpid(params):
     params = params.copy()
@@ -443,6 +454,7 @@ def get_hpid(params):
     param_str = json.dumps(params, sort_keys=True)
     hpid = hashlib.md5(param_str.encode("utf-8")).hexdigest()
     return hpid, param_str
+
 
 def log_metrics_for_hyper_params(
     anchor_symbol,
@@ -572,7 +584,9 @@ def log_metrics_for_hyper_params(
                 )
             params["h"] = args.future_steps
             params["max_steps"] = epochs
-            params["accelerator"] = "auto" if accelerator == True or accelerator is None else accelerator
+            params["accelerator"] = (
+                "auto" if accelerator == True or accelerator is None else accelerator
+            )
             last_metric = model.train(df, validate=True, **params)
 
     fit_time = time.time() - start_time
@@ -1217,7 +1231,9 @@ def train_predict(
                 forecast = SOFTSPredictor.predict(m, df, country)
                 m.cleanup()
             case _:
-                forecast = get_worker().model.predict(df, random_seed=random_seed, h=future_steps)
+                forecast = get_worker().model.predict(
+                    df, random_seed=random_seed, h=future_steps
+                )
     except Exception as e:
         get_logger().error(traceback.format_exc())
         raise e
@@ -1829,7 +1845,9 @@ def fast_bayesopt(
 
     _cleanup_stale_keys()
 
-    space_str = _search_space(args.model, model, min(args.max_covars, len(ranked_features)))
+    space_str = _search_space(
+        args.model, model, min(args.max_covars, len(ranked_features))
+    )
 
     # Convert args to a dictionary, excluding non-serializable items
     args_dict = {k: v for k, v in vars(args).items() if not callable(v)}
@@ -1849,6 +1867,7 @@ def fast_bayesopt(
 
     if args.model == "SOFTS" or (model is not None and not model.accept_missing_data()):
         from marten.data import impute
+
         df, _ = impute(df, args.random_seed, client)
 
     # split large iterations into smaller runs to avoid OOM / memory leak
@@ -1866,7 +1885,10 @@ def fast_bayesopt(
             covar_set_id,
             hps_id,
             ranked_features,
-            eval(space_str, {"uniform": uniform, "loguniform": loguniform, "dirichlet": dirichlet}),
+            eval(
+                space_str,
+                {"uniform": uniform, "loguniform": loguniform, "dirichlet": dirichlet},
+            ),
             args,
             args.mini_itr,
             domain_size,

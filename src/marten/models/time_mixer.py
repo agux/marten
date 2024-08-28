@@ -22,6 +22,7 @@ default_params = {
     "h": 20,
     "max_steps": 1000,
     "val_check_steps": 50,
+    "accelerator": "auto",
 }
 
 baseline_params = {
