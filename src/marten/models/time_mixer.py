@@ -138,13 +138,13 @@ class TimeMixerModel(BaseModel):
             eval_rmse = self._evaluate_cross_validation(forecast, rmse).iloc[0, 0]
 
         return {
-            "epoch": train_losses[-1][0],
-            "MAE_val": eval_mae_val,
-            "RMSE_val": eval_rmse_val,
-            "Loss_val": loss_val,
-            "MAE": eval_mae,
-            "RMSE": eval_rmse,
-            "Loss": loss,
+            "epoch": int(train_losses[-1][0]),
+            "MAE_val": float(eval_mae_val),
+            "RMSE_val": float(eval_rmse_val),
+            "Loss_val": float(loss_val),
+            "MAE": float(eval_mae),
+            "RMSE": float(eval_rmse),
+            "Loss": float(loss),
             # "device": self.device,
             # "machine": socket.gethostname(),
         }

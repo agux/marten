@@ -162,6 +162,7 @@ class BaseModel(ABC):
                 - device: e.g. GPU:0, CPU, etc.
                 - machine: which machine the model is trained on. Can be obtained from socket.gethostname()
         """
+        df = df.copy()
         self.model_args = kwargs
         accelerator = self._select_accelerator(kwargs["accelerator"])
         kwargs["accelerator"] = accelerator
