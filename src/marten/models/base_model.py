@@ -142,7 +142,7 @@ class BaseModel(ABC):
         """
         pass
 
-    def train(self, df: pd.DataFrame, **kwargs: Any) -> pd.DataFrame:
+    def train(self, df: pd.DataFrame, **kwargs: Any) -> dict:
         """
         Select the proper accelerator and train the model with the given data.
 
@@ -151,7 +151,7 @@ class BaseModel(ABC):
             **kwargs (Any): Additional context parameters.
 
         Returns:
-            pandas.DataFrame: The metrics of the training process. It must contain these columns
+            metrics (dict): The metrics of the training process. It must contain these fields
                 - epoch: 0-based;
                 - MAE_val: Mean Average Error for validation set;
                 - RMSE_val: Root Mean Squared Error for validation set;
@@ -188,7 +188,7 @@ class BaseModel(ABC):
                 raise e
 
         metrics["device"] = "CPU" if kwargs["accelerator"] == "cpu" else "GPU:auto"
-        metrics['machine'] = socket.gethostname()
+        metrics["machine"] = socket.gethostname()
 
         return metrics
 
@@ -214,7 +214,7 @@ class BaseModel(ABC):
         pass
 
     @abstractmethod
-    def _train(self, df: pd.DataFrame, **kwargs: Any) -> pd.DataFrame:
+    def _train(self, df: pd.DataFrame, **kwargs: Any) -> dict:
         """
         Train the model with the given data.
 
@@ -223,7 +223,7 @@ class BaseModel(ABC):
             **kwargs (Any): Additional context parameters.
 
         Returns:
-            pandas.DataFrame: The metrics of the training process. It must contain these columns
+            metrics (dict): The metrics of the training process. It must contain these fields
                 - epoch: 0-based;
                 - MAE_val: Mean Average Error for validation set;
                 - RMSE_val: Root Mean Squared Error for validation set;

@@ -107,7 +107,7 @@ class TimeMixerModel(BaseModel):
         evals["best_model"] = evals.idxmin(axis=1)
         return evals
 
-    def _get_metrics(self, **kwargs: Any) -> pd.DataFrame:
+    def _get_metrics(self, **kwargs: Any) -> dict:
         train_losses = self.nf.models[0].train_trajectories
         loss = min(train_losses, key=lambda x: x[1])[1]
         valid_losses = self.nf.models[0].valid_trajectories
@@ -137,19 +137,17 @@ class TimeMixerModel(BaseModel):
             eval_mae = self._evaluate_cross_validation(forecast, mae).iloc[0, 0]
             eval_rmse = self._evaluate_cross_validation(forecast, rmse).iloc[0, 0]
 
-        return pd.DataFrame(
-            {
-                "epoch": [train_losses[-1][0]],
-                "MAE_val": [eval_mae_val],
-                "RMSE_val": [eval_rmse_val],
-                "Loss_val": [loss_val],
-                "MAE": [eval_mae],
-                "RMSE": [eval_rmse],
-                "Loss": [loss],
-                # "device": self.device,
-                # "machine": socket.gethostname(),
-            }
-        )
+        return {
+            "epoch": train_losses[-1][0],
+            "MAE_val": eval_mae_val,
+            "RMSE_val": eval_rmse_val,
+            "Loss_val": loss_val,
+            "MAE": eval_mae,
+            "RMSE": eval_rmse,
+            "Loss": loss,
+            # "device": self.device,
+            # "machine": socket.gethostname(),
+        }
 
     def trainable_on_cpu(self, **kwargs: Any) ->bool:
         return True
@@ -157,7 +155,7 @@ class TimeMixerModel(BaseModel):
     def torch_cpu_ratio(self) -> float:
         return 0.35 if self.is_baseline(**self.model_args) else 0.9
 
-    def _train(self, df: pd.DataFrame, **kwargs: Any) -> pd.DataFrame:
+    def _train(self, df: pd.DataFrame, **kwargs: Any) -> dict:
         model_config = default_params.copy()
         model_config.update(kwargs)
         # prep the parameters and df
