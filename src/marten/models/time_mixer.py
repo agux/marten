@@ -13,6 +13,7 @@ from neuralforecast import NeuralForecast
 from neuralforecast.models import TimeMixer
 from neuralforecast.losses.pytorch import HuberLoss
 
+from utilsforecast.losses import mae, rmse
 from utilsforecast.evaluation import evaluate
 
 from marten.models.base_model import BaseModel
@@ -118,32 +119,32 @@ class TimeMixerModel(BaseModel):
 
         forecast = self.nf.predict_insample()
         forecast.reset_index(inplace=True)
-        mae = rmse = mae_val = rmse_val = np.nan
+        eval_mae = eval_rmse = eval_mae_val = eval_rmse_val = np.nan
         if kwargs["validate"]:
-            mae = self._evaluate_cross_validation(forecast[: -self.val_size], mae).iloc[
-                0, 0
-            ]
-            rmse = self._evaluate_cross_validation(
+            eval_mae = self._evaluate_cross_validation(
+                forecast[: -self.val_size], mae
+            ).iloc[0, 0]
+            eval_rmse = self._evaluate_cross_validation(
                 forecast[: -self.val_size], rmse
             ).iloc[0, 0]
-            mae_val = self._evaluate_cross_validation(
+            eval_mae_val = self._evaluate_cross_validation(
                 forecast[-self.val_size :], mae
             ).iloc[0, 0]
-            rmse_val = self._evaluate_cross_validation(
+            eval_rmse_val = self._evaluate_cross_validation(
                 forecast[-self.val_size :], rmse
             ).iloc[0, 0]
         else:
-            mae = self._evaluate_cross_validation(forecast, mae).iloc[0, 0]
-            rmse = self._evaluate_cross_validation(forecast, rmse).iloc[0, 0]
+            eval_mae = self._evaluate_cross_validation(forecast, mae).iloc[0, 0]
+            eval_rmse = self._evaluate_cross_validation(forecast, rmse).iloc[0, 0]
 
         return pd.DataFrame(
             {
                 "epochs": train_losses[-1][0],
-                "MAE_val": mae_val,
-                "RMSE_val": rmse_val,
+                "MAE_val": eval_mae_val,
+                "RMSE_val": eval_rmse_val,
                 "Loss_val": loss_val,
-                "MAE": mae,
-                "RMSE": rmse,
+                "MAE": eval_mae,
+                "RMSE": eval_rmse,
                 "Loss": loss,
                 # "device": self.device,
                 # "machine": socket.gethostname(),
