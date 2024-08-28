@@ -152,7 +152,7 @@ class BaseModel(ABC):
 
         Returns:
             pandas.DataFrame: The metrics of the training process. It must contain these columns
-                - epochs: 0-based;
+                - epoch: 0-based;
                 - MAE_val: Mean Average Error for validation set;
                 - RMSE_val: Root Mean Squared Error for validation set;
                 - Loss_val: indicative loss value for validation set;
@@ -224,7 +224,7 @@ class BaseModel(ABC):
 
         Returns:
             pandas.DataFrame: The metrics of the training process. It must contain these columns
-                - epochs: 0-based;
+                - epoch: 0-based;
                 - MAE_val: Mean Average Error for validation set;
                 - RMSE_val: Root Mean Squared Error for validation set;
                 - Loss_val: indicative loss value for validation set;
