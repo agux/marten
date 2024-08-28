@@ -8,7 +8,7 @@ import pandas as pd
 
 import torch
 
-from dask.distributed import get_worker, worker_client, Lock, get_client
+from dask.distributed import get_worker, Lock
 
 from marten.utils.logger import get_logger
 from marten.utils.trainer import optimize_torch, is_cuda_error

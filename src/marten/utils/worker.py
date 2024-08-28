@@ -367,8 +367,8 @@ def restart_worker(exception):
         client.restart_workers(workers=[worker.address], timeout=900)
 
 
-def release_lock(lock, after=10):
-    if lock is None:
+def release_lock(lock: Lock, after=10):
+    if lock is None or not lock.locked:
         return
 
     def _release():
