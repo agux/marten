@@ -139,13 +139,13 @@ class TimeMixerModel(BaseModel):
 
         return pd.DataFrame(
             {
-                "epochs": train_losses[-1][0],
-                "MAE_val": eval_mae_val,
-                "RMSE_val": eval_rmse_val,
-                "Loss_val": loss_val,
-                "MAE": eval_mae,
-                "RMSE": eval_rmse,
-                "Loss": loss,
+                "epochs": [train_losses[-1][0]],
+                "MAE_val": [eval_mae_val],
+                "RMSE_val": [eval_rmse_val],
+                "Loss_val": [loss_val],
+                "MAE": [eval_mae],
+                "RMSE": [eval_rmse],
+                "Loss": [loss],
                 # "device": self.device,
                 # "machine": socket.gethostname(),
             }
