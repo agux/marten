@@ -378,10 +378,12 @@ def release_lock(lock: Lock, after=10):
             lock.release()
             get_logger().debug("lock %s released", lock.name)
         except Exception as e:
-            if "lock is not yet acquired" not in str(e).lower():
-                get_logger().warning(
-                    "exception releasing lock %s: %s", lock.name, str(e)
-                )
+            msg = str(e).lower()
+            if "lock is not yet acquired" in msg or "released too often" in msg:
+                return
+            get_logger().warning(
+                "exception releasing lock %s: %s", lock.name, str(e)
+            )
 
     if after <= 0:
         _release()
