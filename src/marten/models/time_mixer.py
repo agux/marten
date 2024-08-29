@@ -23,7 +23,6 @@ default_params = {
     "max_steps": 1000,
     "val_check_steps": 50,
     "accelerator": "auto",
-    "channel_independence": 1,
 }
 
 baseline_params = {
@@ -35,7 +34,7 @@ baseline_params = {
     "top_k": 5,
     "decomp_method": "moving_avg",  # moving_avg, dft_decomp
     "moving_avg": 25,
-    # "channel_independence": 0,    # default value 0 makes multivariate irrelevant
+    "channel_independence": 1,    # default value 0
     "down_sampling_layers": 1,
     "down_sampling_window": 2,
     "down_sampling_method": "avg",  # max, avg, conv
@@ -263,6 +262,7 @@ class TimeMixerModel(BaseModel):
             top_k=range(2, 10),
             decomp_method=["moving_avg", "dft_decomp"],
             moving_avg=range(3, 60),
+            channel_independence=[0, 1],
             down_sampling_layers=range(1, 8),
             down_sampling_window=range(2, 20+1),
             down_sampling_method=["avg", "max", "conv"],
