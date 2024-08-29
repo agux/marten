@@ -26,7 +26,7 @@ default_params = {
 }
 
 baseline_params = {
-    "input_size": 100,
+    "input_size": 60,
     "d_model": 32,
     "d_ff": 32,
     "dropout": 0.1,
@@ -40,7 +40,7 @@ baseline_params = {
     "down_sampling_method": "avg",  # max, avg, conv
     "use_norm": True,
     # "decoder_input_size_multiplier":0.5,  #valid only when futr_exog_list is supported and available?
-    "learning_rate": 1e-4,
+    "learning_rate": 1e-3,
     # num_lr_decays = -1,
     "early_stop_patience_steps": 10,
     "batch_size": 32,
@@ -162,6 +162,11 @@ class TimeMixerModel(BaseModel):
         # prep the parameters and df
         df.insert(0, "unique_id", "0")
         optimizer, optim_args = self._select_optimizer(**model_config)
+
+        seed_logger = logging.getLogger("lightning_fabric.utilities.seed")
+        orig_seed_log_level = seed_logger.getEffectiveLevel()
+        seed_logger.setLevel(logging.FATAL)
+
         self.model = TimeMixer(
             h=model_config["h"],
             n_series=1,
@@ -220,18 +225,17 @@ class TimeMixerModel(BaseModel):
             local_scaler_type=model_config["local_scaler_type"],
         )
 
+        seed_logger.setLevel(orig_seed_log_level)
+
         self.val_size = min(300, int(len(df) * 0.9)) if model_config["validate"] else 0
+
         rank_zero_logger = logging.getLogger("lightning.pytorch.utilities.rank_zero")
-        seed_logger = logging.getLogger("lightning_fabric.utilities.seed")
         orig_log_level = rank_zero_logger.getEffectiveLevel()
-        orig_seed_log_level = seed_logger.getEffectiveLevel()
         rank_zero_logger.setLevel(logging.FATAL)
-        seed_logger.setLevel(logging.FATAL)
 
         self.nf.fit(df, val_size=self.val_size)
 
         rank_zero_logger.setLevel(orig_log_level)
-        seed_logger.setLevel(orig_seed_log_level)
 
         return self._get_metrics(**model_config)
 
