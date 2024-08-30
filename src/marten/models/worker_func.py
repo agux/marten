@@ -589,10 +589,12 @@ def log_metrics_for_hyper_params(
                 )
             params["h"] = args.future_steps
             params["max_steps"] = epochs
+            params["validate"] = True
+            params["random_seed"] = random_seed
             params["accelerator"] = (
                 "auto" if accelerator == True or accelerator is None else accelerator
             )
-            last_metric = model.train(df, validate=True, **params)
+            last_metric = model.train(df, **params)
 
     fit_time = time.time() - start_time
 
