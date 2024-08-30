@@ -13,7 +13,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from sqlalchemy import text
 from psycopg2.extras import execute_values
-from neuralprophet.hdays_utils import get_country_holidays
+from neuralprophet.event_utils import get_all_holidays
 from dask.distributed import get_worker, worker_client
 from types import SimpleNamespace
 from tenacity import (
@@ -1078,7 +1078,10 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, df, topk, nth_top
 
 # Function to check if a date is a holiday and return the holiday name
 def check_holiday(date, country_holidays):
-    return country_holidays.get(date) if date in country_holidays else None
+    for holiday_name, dates in country_holidays.items():
+        if date in dates:
+            return holiday_name
+    return None
 
 
 def trim_forecasts_by_dates(forecast):
@@ -1195,7 +1198,10 @@ def save_forecast_snapshot(
         forecast_params.rename(columns={"ds": "date"}, inplace=True)
         forecast_params.loc[:, "symbol"] = symbol
         forecast_params.loc[:, "snapshot_id"] = snapshot_id
-        country_holidays = get_country_holidays(region)
+        # country_holidays = get_country_holidays(region)
+        country_holidays = get_all_holidays(
+            years=forecast_params["date"].dt.year.unique(), country=region
+        )
         forecast_params.loc[:, "holiday"] = forecast_params["date"].apply(
             lambda x: check_holiday(x, country_holidays)
         )
@@ -1670,7 +1676,12 @@ def save_ensemble_snapshot(
     group_id,
 ):
     ens_df = None
-    country_holidays = get_country_holidays(region)
+    # extract unique years from top_forecasts (list of df with "ds" column of timestamp type)
+    years = list(set([df["ds"].dt.year.unique() for df in top_forecasts]))
+    country_holidays = get_all_holidays(
+        years=years, country=region
+    )
+    # country_holidays = get_country_holidays(region)
     hyper_params = json.dumps(
         [
             {"snapshot_id": sid, "weight": w, "avg_loss": loss}
