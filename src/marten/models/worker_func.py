@@ -1751,7 +1751,7 @@ def save_ensemble_snapshot(
         ens_df.to_sql("forecast_params", conn, if_exists="append", index=False)
 
 
-def init_hps(hps, symbol, args, client, alchemyEngine, logger):
+def init_hps(hps, model, symbol, args, client, alchemyEngine, logger):
     # worker = get_worker()
     # alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
@@ -1766,6 +1766,7 @@ def init_hps(hps, symbol, args, client, alchemyEngine, logger):
     hps.args = args
 
     hps.client = client
+    hps.model = model
 
     return args
 
@@ -2028,7 +2029,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     # worker = get_worker()
     # alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
 
-    args = init_hps(hps, symbol, args, client, alchemyEngine, logger)
+    args = init_hps(hps, model, symbol, args, client, alchemyEngine, logger)
     cutoff_date = _get_cutoff_date(args)
     anchor_df, anchor_table = load_anchor_ts(
         args.symbol, args.timestep_limit, alchemyEngine, cutoff_date
