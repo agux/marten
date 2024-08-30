@@ -40,6 +40,7 @@ class BaseModel(ABC):
 
     def release_accelerator_lock(self, delay=0) -> None:
         release_lock(self.accelerator_lock, delay)
+        self.accelerator_lock = None
 
     def _check_cpu(self) -> bool:
         match workload_stage():
