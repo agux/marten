@@ -274,8 +274,7 @@ class TimeMixerModel(BaseModel):
             topk_covar=list(range(0, {kwargs["max_covars"]}+1)),
             covar_dist=dirichlet([1.0]*{kwargs["max_covars"]}),
             optimizer=["Adam", "AdamW", "SGD"],
-        )
-        """
+        )"""
 
     def accept_missing_data(self) -> bool:
         return False
