@@ -27,7 +27,7 @@ from marten.utils.worker import await_futures
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
 from marten.utils.trainer import select_device
-from marten.utils.softs import SOFTSPredictor, baseline_config, impute
+from marten.utils.softs import SOFTSPredictor, baseline_config
 from marten.utils.neuralprophet import (
     select_topk_features,
     NPPredictor,
@@ -1882,8 +1882,6 @@ def fast_bayesopt(
         domain_size = base_ds
 
     if args.model == "SOFTS" or (model is not None and not model.accept_missing_data()):
-        from marten.data import impute
-
         df, _ = impute(df, args.random_seed, client)
 
     # split large iterations into smaller runs to avoid OOM / memory leak

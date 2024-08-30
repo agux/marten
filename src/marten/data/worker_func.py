@@ -3,6 +3,7 @@ import time
 import pandas as pd
 import numpy as np
 import warnings
+import logging
 
 import exchange_calendars as xcals
 
@@ -68,7 +69,6 @@ from marten.data.api.sina import SinaAPI
 from dask.distributed import worker_client, get_worker, Variable
 
 from functools import lru_cache
-
 
 
 @lru_cache()
@@ -1729,6 +1729,10 @@ def _neupro_impute(df, random_seed):
     na_col = df.columns[1]
     df.rename(columns={na_col: "y"}, inplace=True)
 
+    seed_logger = logging.getLogger("lightning_fabric.utilities.seed")
+    orig_seed_log_level = seed_logger.getEffectiveLevel()
+    seed_logger.setLevel(logging.FATAL)
+
     np_random_seed(random_seed)
     set_log_level("ERROR")
     # optimize_torch()
@@ -1767,6 +1771,8 @@ def _neupro_impute(df, random_seed):
         warnings.simplefilter("ignore", FutureWarning)
         warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
         forecast = m.predict(df)
+
+    seed_logger.setLevel(orig_seed_log_level)
 
     forecast = forecast[["ds", "yhat1"]]
     forecast["ds"] = forecast["ds"].dt.date
