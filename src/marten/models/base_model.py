@@ -178,6 +178,7 @@ class BaseModel(ABC):
         except Exception as e:
             self.release_accelerator_lock()
             if is_cuda_error(e):
+                get_logger().warning("encountered CUDA error with train params: %s", kwargs)
                 restart_worker(e)
             elif accelerator != "cpu":
                 # fallback to train on CPU
@@ -187,6 +188,9 @@ class BaseModel(ABC):
                 self.model_args = kwargs
                 metrics = self._train(df, **kwargs)
             else:
+                get_logger().warning(
+                    "encountered error with train params: %s", kwargs
+                )
                 raise e
 
         metrics["device"] = "CPU" if kwargs["accelerator"] == "cpu" else "GPU:auto"
