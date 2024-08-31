@@ -546,6 +546,9 @@ def calc_etf_metrics(symbol, end_date):
             )
             df = pd.read_sql(query, conn, parse_dates=["date"])
 
+            if df.empty:
+                return 0
+
             # get oldest df['date'] as state_date
             start_date = df["date"].iloc[-1]
             # get 2-years CN bond IR as risk-free IR from bond_metrics_em table. 1-year series (natural dates).
