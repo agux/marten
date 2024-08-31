@@ -766,7 +766,7 @@ def preload_warmstart_tuples(model_name, anchor_symbol, covar_set_id, hps_id, li
 
                     # logger.info("""param_dict: %s""", param_dict)
                 case _:
-                    param_dict = model.restore_params(param_dict, feat_size)
+                    param_dict = model.restore_params(params=param_dict, feat_size=feat_size)
 
             tuples.append((param_dict, row[1]))
 
