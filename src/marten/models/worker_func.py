@@ -1339,6 +1339,8 @@ def forecast(
 
     if "topk_covar" in hyperparams:
         hyperparams.pop("topk_covar")
+    if "random_seed" not in hyperparams:
+        hyperparams["random_seed"] = args.random_seed
 
     start_time = time.time()
     with worker_client() as client:
@@ -1351,7 +1353,6 @@ def forecast(
                 symbol=symbol,
                 df=new_df,
                 epochs=args.epochs,
-                random_seed=args.random_seed,
                 early_stopping=args.early_stopping,
                 weekly_seasonality=False,
                 daily_seasonality=False,

@@ -160,7 +160,6 @@ class TimeMixerModel(BaseModel):
         model_config = default_params.copy()
         model_config.update(kwargs)
         # prep the parameters and df
-        df.insert(0, "unique_id", "0")
         optimizer, optim_args = self._select_optimizer(**model_config)
 
         seed_logger = logging.getLogger("lightning_fabric.utilities.seed")

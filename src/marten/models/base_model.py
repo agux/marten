@@ -166,6 +166,7 @@ class BaseModel(ABC):
                 - machine: which machine the model is trained on. Can be obtained from socket.gethostname()
         """
         df = df.copy()
+        df.insert(0, "unique_id", "0")
         self.model_args = kwargs
         accelerator = self._select_accelerator(kwargs["accelerator"])
         kwargs["accelerator"] = accelerator
