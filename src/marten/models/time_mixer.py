@@ -30,10 +30,10 @@ baseline_params = {
     "d_model": 32,
     "d_ff": 32,
     "dropout": 0.1,
-    "e_layers": 4,
-    "top_k": 5,
+    "e_layers": 3,
+    "top_k": 3,
     "decomp_method": "moving_avg",  # moving_avg, dft_decomp
-    "moving_avg": 25,
+    "moving_avg": 10,
     "channel_independence": 1,    # default value 0
     "down_sampling_layers": 1,
     "down_sampling_window": 2,
@@ -253,8 +253,9 @@ class TimeMixerModel(BaseModel):
         return forecast
 
     def search_space(self, **kwargs: Any) -> str:
+        #TODO: add random_seed to search space?
         return f"""dict(
-            input_size=range(5, 1000+1),
+            input_size=range(60, 1000+1),
             d_model=[2**w for w in range(5, 10+1)],
             d_ff=[2**w for w in range(5, 10+1)],
             dropout=uniform(0, 0.5),

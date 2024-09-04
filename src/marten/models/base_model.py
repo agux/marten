@@ -61,7 +61,7 @@ class BaseModel(ABC):
 
         while True:
             lock_acquired = None
-            if accelerator == "gpu":
+            if accelerator in ("gpu", "auto"):
                 lock = Lock(gpu_lock_key)
                 if lock.acquire(timeout=f"{lock_wait_time}s"):
                     lock_acquired = lock
@@ -108,6 +108,8 @@ class BaseModel(ABC):
             task_key = worker.get_current_task()
             if worker.client.get_metadata([task_key, "CUDA error"], False):
                 accelerator = "cpu"
+
+        accelerator = "gpu" if accelerator == "auto" else accelerator
 
         self.release_accelerator_lock()
         lock = self._lock_accelerator(accelerator)
