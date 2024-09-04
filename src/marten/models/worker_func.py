@@ -1349,7 +1349,7 @@ def forecast(
         futures.append(
             client.submit(
                 train,
-                model=model,
+                model_name=model,
                 symbol=symbol,
                 df=new_df,
                 epochs=args.epochs,
@@ -1374,7 +1374,7 @@ def forecast(
                 df=new_df,
                 country=region,
                 epochs=args.epochs,
-                random_seed=args.random_seed,
+                # random_seed=args.random_seed,
                 early_stopping=args.early_stopping,
                 weekly_seasonality=False,
                 daily_seasonality=False,
