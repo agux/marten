@@ -1679,8 +1679,16 @@ def save_ensemble_snapshot(
     group_id,
 ):
     ens_df = None
-    # extract unique years from top_forecasts (list of df with "ds" column of timestamp type)
-    years = list(set([df["ds"].dt.year.unique() for df in top_forecasts]))
+    # extract unique years from top_forecasts
+    years = list(
+        set(
+            [
+                year
+                for df in top_forecasts
+                for year in df["ds"].dt.year.unique().tolist()
+            ]
+        )
+    )
     country_holidays = get_all_holidays(
         years=years, country=region
     )

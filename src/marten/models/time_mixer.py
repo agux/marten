@@ -54,7 +54,7 @@ baseline_params = {
     # NOTE: scaling will be set when instantiating `NeuralForecast`.
     # See https://nixtlaverse.nixtla.io/neuralforecast/docs/capabilities/time_series_scaling.html
     # scaler_type="identity",
-    "local_scaler_type": None,  # Can be ‘standard’, ‘robust’, ‘robust-iqr’, ‘minmax’ or ‘boxcox’
+    "local_scaler_type": None,  # Can be ‘standard’, ‘robust’, ‘robust-iqr’, ‘minmax’ or ‘boxcox’ (positive variables only)
 }
 
 class TimeMixerModel(BaseModel):
