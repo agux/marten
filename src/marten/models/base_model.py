@@ -297,6 +297,22 @@ class BaseModel(ABC):
         pass
 
     @abstractmethod
+    def _predict(self, df: pd.DataFrame, **kwargs: Any) -> pd.DataFrame:
+        """
+        Make predictions based on the given time series dataframe and parameters.
+
+        Args:
+            df (pandas.DataFrame): Time series dataframe of the dependent variable, optionally paired with covariate(s).
+            **kwargs (Any): Additional context parameters.
+
+        Returns:
+            pandas.DataFrame: The predictions dataframe. It must contain these columns
+                - ds: The date of the prediction
+                - y: The historical value. For future time horizons, it can be np.nan
+                - yhat_n: The predicted value
+        """
+        pass
+
     def predict(self, df: pd.DataFrame, **kwargs: Any) -> pd.DataFrame:
         """
         Make predictions based on the given time series dataframe and parameters.
@@ -311,7 +327,9 @@ class BaseModel(ABC):
                 - y: The historical value. For future time horizons, it can be np.nan
                 - yhat_n: The predicted value
         """
-        pass
+        df = df.copy()
+        df.insert(0, "unique_id", "0")
+        return self._predict(df, **kwargs)
 
     @abstractmethod
     def search_space(self, **kwargs: Any) -> str:

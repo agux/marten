@@ -244,7 +244,7 @@ class TimeMixerModel(BaseModel):
     def trim_forecast(self, forecast: pd.DataFrame) -> pd.DataFrame:
         return forecast[["ds", "yhat_n"]].copy()
 
-    def predict(self, df: pd.DataFrame, **kwargs: Any) -> pd.DataFrame:
+    def _predict(self, df: pd.DataFrame, **kwargs: Any) -> pd.DataFrame:
         forecast = self.nf.predict(df)
         forecast.reset_index(drop=True, inplace=True)
         forecast.insert(forecast.columns.get_loc("ds") + 1, "y", np.nan)
