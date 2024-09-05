@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from typing import Any, Tuple
 import time
 import socket
-
+import numpy as np
 import pandas as pd
 
 import torch
@@ -329,7 +329,12 @@ class BaseModel(ABC):
         """
         df = df.copy()
         df.insert(0, "unique_id", "0")
-        return self._predict(df, **kwargs)
+        forecast = self._predict(df, **kwargs)
+        # convert np.float32 type columns in forecast dataframe to native float,
+        # to avoid `psycopg2.ProgrammingError: can't adapt type 'numpy.float32'`
+        for col in forecast.select_dtypes(include=[np.float32]).columns:
+            forecast[col] = forecast[col].astype(float)
+        return forecast
 
     @abstractmethod
     def search_space(self, **kwargs: Any) -> str:
