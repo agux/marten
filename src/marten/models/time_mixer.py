@@ -252,7 +252,8 @@ class TimeMixerModel(BaseModel):
         return forecast
 
     def search_space(self, **kwargs: Any) -> str:
-        #TODO: add random_seed to search space?
+        # TODO: add random_seed to search space?
+        # "boxcox" local_scaler_type supports positive variables only
         return f"""dict(
             input_size=range(60, 1000+1),
             d_model=[2**w for w in range(5, 10+1)],
@@ -270,7 +271,7 @@ class TimeMixerModel(BaseModel):
             learning_rate=loguniform(0.0001, 0.002),
             early_stop_patience_steps=range(5, 16+1),
             batch_size=[2**w for w in range(5, 8+1)],
-            local_scaler_type=[None, "standard", "robust", "robust-iqr", "minmax", "boxcox"],
+            local_scaler_type=[None, "standard", "robust", "robust-iqr", "minmax"],
             topk_covar=list(range(0, {kwargs["max_covars"]}+1)),
             covar_dist=dirichlet([1.0]*{kwargs["max_covars"]}),
             optimizer=["Adam", "AdamW", "SGD"],
