@@ -29,7 +29,8 @@ def huber_loss(
     id_col: str = "unique_id",
     target_col: str = "y",
 ) -> DataFrame:
-    """Huber Loss
+    """
+    Huber Loss
 
     Huber Loss is a loss function used in robust regression that is less sensitive to outliers in data than the squared error loss.
     It is defined as:
