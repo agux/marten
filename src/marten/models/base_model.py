@@ -1,18 +1,73 @@
 from abc import ABC, abstractmethod
 from types import SimpleNamespace
-from typing import Any, Tuple
+from typing import Any, Tuple, List, Type
 import time
 import socket
 import numpy as np
 import pandas as pd
 
 import torch
+import torch.optim as optim
+from torch.optim.optimizer import Optimizer
+
+from utilsforecast.losses import _pl_agg_expr, _base_docstring, mae, rmse
+from utilsforecast.evaluation import evaluate
+from utilsforecast.compat import DataFrame, pl
 
 from dask.distributed import get_worker, Lock
 
 from marten.utils.logger import get_logger
 from marten.utils.trainer import optimize_torch, is_cuda_error
 from marten.utils.worker import release_lock, wait_gpu, wait_cpu, restart_worker, workload_stage
+
+
+@_base_docstring
+def huber_loss(
+    df: DataFrame,
+    models: List[str],
+    delta: float = 1.0,
+    id_col: str = "unique_id",
+    target_col: str = "y",
+) -> DataFrame:
+    """Huber Loss
+
+    Huber Loss is a loss function used in robust regression that is less sensitive to outliers in data than the squared error loss.
+    It is defined as:
+    L_{\delta}(a) =
+        0.5 * a^2                  if |a| <= delta
+        delta * (|a| - 0.5 * delta) otherwise
+    where a = y - y_hat and delta is a threshold parameter.
+    """
+    if isinstance(df, pd.DataFrame):
+
+        def huber(a):
+            return np.where(
+                np.abs(a) <= delta, 0.5 * a**2, delta * (np.abs(a) - 0.5 * delta)
+            )
+
+        res = (
+            df[models]
+            .sub(df[target_col], axis=0)
+            .apply(huber)
+            .groupby(df[id_col], observed=True)
+            .mean()
+        )
+        res.index.name = id_col
+        res = res.reset_index()
+    else:
+
+        def gen_expr(model):
+            a = pl.col(target_col).sub(pl.col(model))
+            return (
+                pl.when(a.abs() <= delta)
+                .then(0.5 * a.pow(2))
+                .otherwise(delta * (a.abs() - 0.5 * delta))
+                .alias(model)
+            )
+
+        res = _pl_agg_expr(df, models, id_col, gen_expr)
+    return res
+
 
 class BaseModel(ABC):
 
@@ -41,6 +96,21 @@ class BaseModel(ABC):
     def release_accelerator_lock(self, delay=0) -> None:
         release_lock(self.accelerator_lock, delay)
         self.accelerator_lock = None
+
+    def _select_optimizer(self, **kwargs: Any) -> Tuple[Type[Optimizer], dict]:
+        match kwargs["optimizer"]:
+            case "Adam":
+                model_optim = optim.Adam
+            case "AdamW":
+                model_optim = optim.AdamW
+            case "SGD":
+                model_optim = optim.SGD
+        optim_args = {
+            "lr": kwargs["learning_rate"],
+            "fused": kwargs["accelerator"] in ("gpu", "auto")
+            and torch.cuda.is_available(),
+        }
+        return model_optim, optim_args
 
     def _check_cpu(self) -> bool:
         match workload_stage():
@@ -117,6 +187,72 @@ class BaseModel(ABC):
         self.release_accelerator_lock(2 if self.is_baseline(**self.model_args) else 7)
         return accelerator
 
+    def _evaluate_cross_validation(self, df, metric):
+        models = df.drop(columns=["unique_id", "ds", "cutoff", "y"]).columns.tolist()
+        evals = []
+        # Calculate loss for every unique_id and cutoff.
+        for cutoff in df["cutoff"].unique():
+            eval_ = evaluate(
+                df[df["cutoff"] == cutoff], metrics=[metric], models=models
+            )
+            evals.append(eval_)
+        evals = pd.concat(evals)
+        evals = evals.groupby("unique_id").mean(
+            numeric_only=True
+        )  # Averages the error metrics for all cutoffs for every combination of model and unique_id
+        evals["best_model"] = evals.idxmin(axis=1)
+        return evals
+
+    def _get_metrics(self, **kwargs: Any) -> dict:
+        train_trajectories = self.nf.models[0].train_trajectories
+        # loss = min(train_losses, key=lambda x: x[1])[1]
+        # valid_losses = self.nf.models[0].valid_trajectories
+        # loss_val = (
+        #     min(valid_losses, key=lambda x: x[1])[1]
+        #     if len(valid_losses) > 0
+        #     else np.nan
+        # )
+
+        forecast = self.nf.predict_insample()
+        forecast.reset_index(inplace=True)
+        loss = loss_val = eval_mae = eval_rmse = eval_mae_val = eval_rmse_val = np.nan
+        if kwargs["validate"]:
+            loss = self._evaluate_cross_validation(
+                forecast[: -self.val_size], huber_loss
+            ).iloc[0, 0]
+            eval_mae = self._evaluate_cross_validation(
+                forecast[: -self.val_size], mae
+            ).iloc[0, 0]
+            eval_rmse = self._evaluate_cross_validation(
+                forecast[: -self.val_size], rmse
+            ).iloc[0, 0]
+
+            loss_val = self._evaluate_cross_validation(
+                forecast[-self.val_size :], huber_loss
+            ).iloc[0, 0]
+            eval_mae_val = self._evaluate_cross_validation(
+                forecast[-self.val_size :], mae
+            ).iloc[0, 0]
+            eval_rmse_val = self._evaluate_cross_validation(
+                forecast[-self.val_size :], rmse
+            ).iloc[0, 0]
+        else:
+            loss = self._evaluate_cross_validation(forecast, huber_loss).iloc[0, 0]
+            eval_mae = self._evaluate_cross_validation(forecast, mae).iloc[0, 0]
+            eval_rmse = self._evaluate_cross_validation(forecast, rmse).iloc[0, 0]
+
+        return {
+            "epoch": int(train_trajectories[-1][0]),
+            "MAE_val": float(eval_mae_val),
+            "RMSE_val": float(eval_rmse_val),
+            "Loss_val": float(loss_val),
+            "MAE": float(eval_mae),
+            "RMSE": float(eval_rmse),
+            "Loss": float(loss),
+            # "device": self.device,
+            # "machine": socket.gethostname(),
+        }
+
     @abstractmethod
     def restore_params(self, params: dict, **kwargs: Any) -> dict:
         """
@@ -177,7 +313,7 @@ class BaseModel(ABC):
             kwargs["devices"] = "auto"
         self.model_args = kwargs
         try:
-            metrics = self._train(df, **kwargs)
+            model_config = self._train(df, **kwargs)
         except Exception as e:
             self.release_accelerator_lock()
             if is_cuda_error(e):
@@ -189,13 +325,14 @@ class BaseModel(ABC):
                 optimize_torch(self.torch_cpu_ratio())
                 kwargs["devices"] = 1
                 self.model_args = kwargs
-                metrics = self._train(df, **kwargs)
+                model_config = self._train(df, **kwargs)
             else:
                 get_logger().warning(
                     "encountered error with train params: %s", kwargs
                 )
                 raise e
 
+        metrics = self._get_metrics(**model_config)
         metrics["device"] = "CPU" if kwargs["accelerator"] == "cpu" else "GPU:auto"
         metrics["machine"] = socket.gethostname()
 
@@ -232,14 +369,7 @@ class BaseModel(ABC):
             **kwargs (Any): Additional context parameters.
 
         Returns:
-            metrics (dict): The metrics of the training process. It must contain these fields
-                - epoch: 0-based;
-                - MAE_val: Mean Average Error for validation set;
-                - RMSE_val: Root Mean Squared Error for validation set;
-                - Loss_val: indicative loss value for validation set;
-                - MAE: Mean Average Error for training set;
-                - RMSE: Root Mean Squared Error for training set;
-                - Loss: indicative loss value for training set;
+            model_config (dict): the effective model config used for training the model.
         """
         pass
 

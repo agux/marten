@@ -68,6 +68,9 @@ def init(args):
         case "timemixer":
             from marten.models.time_mixer import TimeMixerModel
             model = TimeMixerModel()
+        case "tsmixerx":
+            from marten.models.nf_tstimerx import TSMixerxModel
+            model = TSMixerxModel()
         case _:
             model = None
 
@@ -554,8 +557,9 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
         )
 
     if covars_df.empty:
+        table = "neuralprophet_corel" if args.model.lower() == "neuralprophet" else "paired_correlation"
         raise Exception(
-            f"No qualified covariates can be found for {args.symbol}. Please check the data in table neuralprophet_corel"
+            f"No qualified covariates can be found for {args.symbol}. Please check the data in table {table}"
         )
 
     logger.info(
