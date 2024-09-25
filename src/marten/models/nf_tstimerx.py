@@ -21,6 +21,7 @@ default_params = {
     "h": 20,
     "max_steps": 1000,
     "val_check_steps": 50,
+    "num_lr_decays": -1,
     "early_stop_patience_steps": 10,
     "accelerator": "auto",
 }
@@ -32,7 +33,6 @@ baseline_params = {
     "dropout": 0.1,
     "revin": True,
     "learning_rate": 1e-3,
-    "num_lr_decays": -1,
     "batch_size": 32,
     # step_size = 1,
     "random_seed": 7,
