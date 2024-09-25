@@ -167,7 +167,7 @@ class TSMixerxModel(BaseModel):
         # "boxcox" local_scaler_type supports positive variables only
         return f"""dict(
             input_size=range(20, 1000+1),
-            n_block=[2**w for w in range(0, 10+1)],
+            n_block=range(2, 32),
             ff_dim=[2**w for w in range(4, 10+1)],
             dropout=uniform(0, 0.5),
             revin=[True, False],
