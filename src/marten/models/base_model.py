@@ -166,8 +166,8 @@ class BaseModel(ABC):
 
         return lock_acquired
 
-    def _select_accelerator(self, accelerator) -> str:
-        accelerator = accelerator.lower()
+    def _select_accelerator(self) -> str:
+        accelerator = self.model_args["accelerator"].lower()
         # if accelerator == "cpu":
         #     return accelerator
         if accelerator in ("gpu", "auto") and not torch.cuda.is_available():
@@ -305,7 +305,7 @@ class BaseModel(ABC):
         df = df.copy()
         df.insert(0, "unique_id", "0")
         self.model_args = kwargs
-        accelerator = self._select_accelerator(kwargs["accelerator"])
+        accelerator = self._select_accelerator()
         kwargs["accelerator"] = accelerator
         if accelerator == "cpu":
             optimize_torch(self.torch_cpu_ratio())
