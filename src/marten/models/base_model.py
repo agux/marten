@@ -114,13 +114,16 @@ class BaseModel(ABC):
         return model_optim, optim_args
 
     def _check_cpu(self) -> bool:
+        if not self.trainable_on_cpu(**self.model_args):
+            return False
+
         match workload_stage():
             case "finishing":
                 return False  # stick to GPU and avoid straggler last-task
-            case "starting":
-                return True
+            # case "starting":
+            #     return True
             case _:
-                return self.trainable_on_cpu(**self.model_args)
+                return True
 
     def _lock_accelerator(self, accelerator) -> Lock:
         gpu_lock_key = f"""{socket.gethostname()}::GPU-auto"""
@@ -184,7 +187,7 @@ class BaseModel(ABC):
 
         self.release_accelerator_lock()
         lock = self._lock_accelerator(accelerator)
-        accelerator = accelerator if "GPU" in lock.name else "cpu"
+        accelerator = accelerator if "::GPU" in lock.name else "cpu"
         self.release_accelerator_lock(2 if self.is_baseline(**self.model_args) else 7)
         return accelerator
 

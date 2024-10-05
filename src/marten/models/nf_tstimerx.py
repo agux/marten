@@ -35,7 +35,7 @@ baseline_params = {
     "learning_rate": 1e-3,
     "batch_size": 32,
     # step_size = 1,
-    "random_seed": 7,
+    # "random_seed": 7,
     "optimizer": "Adam",
     # num_workers_loader = 0,
     # drop_last_loader = False,
@@ -72,7 +72,7 @@ class TSMixerxModel(BaseModel):
         return True
 
     def torch_cpu_ratio(self) -> float:
-        return 0.35 if self.is_baseline(**self.model_args) else 0.9
+        return 0.35 if self.is_baseline(**self.model_args) else 0.85
 
     def _train(self, df: pd.DataFrame, **kwargs: Any) -> dict:
         model_config = default_params.copy()
@@ -150,7 +150,7 @@ class TSMixerxModel(BaseModel):
         return model_config
 
     def baseline_params(self) -> dict:
-        return baseline_params
+        return baseline_params.copy()
 
     def trim_forecast(self, forecast: pd.DataFrame) -> pd.DataFrame:
         return forecast[["ds", "yhat_n"]].copy()
