@@ -1126,9 +1126,9 @@ def save_forecast_snapshot(
     forecast = trim_forecasts_by_dates(forecast)
     future_df = forecast[forecast["ds"] > datetime.now()][["ds", "yhat_n"]].copy()
     avg_yhat = future_df["yhat_n"].mean()
-    future_df["plus_one"] = future_df["yhat_n"] + 1.0
+    future_df["plus_one"] = future_df["yhat_n"]/100. + 1.0
     future_df["accumulated_returns"] = future_df["plus_one"].cumprod()
-    cum_returns = future_df["accumulated_returns"].iloc[-1] - 1.0
+    cum_returns = (future_df["accumulated_returns"].iloc[-1] - 1.0)*100.
 
     with alchemyEngine.begin() as conn:
         result = conn.execute(
@@ -1721,9 +1721,9 @@ def save_ensemble_snapshot(
 
     ens_df.reset_index(inplace=True)
     avg_yhat = ens_df["yhat_n"].mean()
-    ens_df["plus_one"] = ens_df["yhat_n"] + 1.0
+    ens_df["plus_one"] = ens_df["yhat_n"]/100. + 1.0
     ens_df["accumulated_returns"] = ens_df["plus_one"].cumprod()
-    cum_returns = ens_df["accumulated_returns"].iloc[-1] - 1.0
+    cum_returns = (ens_df["accumulated_returns"].iloc[-1] - 1.0)*100.
     ens_df.drop(columns=["plus_one", "accumulated_returns"], inplace=True)
 
     with alchemyEngine.begin() as conn:
