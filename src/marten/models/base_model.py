@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from types import SimpleNamespace
 from typing import Any, Tuple, List, Type
+import os
 import time
 import socket
 import numpy as np
@@ -140,11 +141,27 @@ class BaseModel(ABC):
                 if lock.acquire(timeout=f"{lock_wait_time}s"):
                     lock_acquired = lock
                     get_logger().debug("lock acquired: %s", gpu_lock_key)
+
+            # TODO: debug code
+            get_logger.info(
+                "[%s][before] lock_acquired: %s check_cpu: %s",
+                os.getpid(),
+                lock_acquired,
+                self._check_cpu(),
+            )
+
             if lock_acquired is None and self._check_cpu():
                 lock = Lock(cpu_lock_key)
                 if lock.acquire(timeout=f"{lock_wait_time}s"):
                     lock_acquired = lock
                     get_logger().debug("lock acquired: %s", cpu_lock_key)
+            
+            # TODO: debug code
+            get_logger.info(
+                "[%s][after] lock_acquired: %s",
+                os.getpid(),
+                lock_acquired,
+            )
 
             if lock_acquired is None:
                 continue

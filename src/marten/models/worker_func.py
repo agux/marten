@@ -287,6 +287,15 @@ def save_covar_metrics(
 ):
     # Inserting DataFrame into the database table
     epochs = cov_metrics["epoch"] + 1
+
+    if "device" in cov_metrics or "machine" in cov_metrics:
+        device_info = json.dumps({
+            "device": cov_metrics["device"],
+            "machine": cov_metrics["machine"]
+        }, sort_keys=True)
+    else:
+        device_info = json.dumps({})
+
     params = {
         "symbol": anchor_symbol,
         "cov_table": cov_table,
@@ -303,6 +312,7 @@ def save_covar_metrics(
         "mae": cov_metrics["MAE"],
         "rmse": cov_metrics["RMSE"],
         "loss": cov_metrics["Loss"],
+        "device_info": device_info,
     }
     match model:
         case "NeuralProphet":
@@ -332,10 +342,10 @@ def save_covar_metrics(
                 INSERT INTO paired_correlation 
                 (model, symbol, cov_table, cov_symbol, feature, mae_val, 
                 rmse_val, loss_val, fit_time, timesteps, nan_count, 
-                ts_date, epochs, mae, rmse, loss) 
+                ts_date, epochs, mae, rmse, loss, device_info) 
                 VALUES (:model, :symbol, :cov_table, :cov_symbol, :feature, :mae_val, 
                 :rmse_val, :loss_val, :fit_time, :timesteps, :nan_count, 
-                :ts_date, :epochs, :mae, :rmse, :loss) 
+                :ts_date, :epochs, :mae, :rmse, :loss, :device_info) 
                 ON CONFLICT (symbol, cov_symbol, feature, cov_table, ts_date, model) 
                 DO UPDATE SET 
                     mae_val = EXCLUDED.mae_val, 
@@ -347,7 +357,8 @@ def save_covar_metrics(
                     epochs = EXCLUDED.epochs,
                     mae = EXCLUDED.mae, 
                     rmse = EXCLUDED.rmse, 
-                    loss = EXCLUDED.loss
+                    loss = EXCLUDED.loss,
+                    device_info = EXCLUDED.device_info
             """
             params["model"] = model
     conn.execute(
