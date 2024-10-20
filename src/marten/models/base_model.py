@@ -143,7 +143,7 @@ class BaseModel(ABC):
                     get_logger().debug("lock acquired: %s", gpu_lock_key)
 
             # TODO: debug code
-            get_logger.info(
+            get_logger().info(
                 "[%s][before] lock_acquired: %s check_cpu: %s",
                 os.getpid(),
                 lock_acquired,
@@ -157,7 +157,7 @@ class BaseModel(ABC):
                     get_logger().debug("lock acquired: %s", cpu_lock_key)
             
             # TODO: debug code
-            get_logger.info(
+            get_logger().info(
                 "[%s][after] lock_acquired: %s",
                 os.getpid(),
                 lock_acquired,
