@@ -8,7 +8,6 @@ import socket
 import random
 import numpy as np
 import pandas as pd
-import distributed
 
 import torch
 import torch.optim as optim
@@ -137,51 +136,43 @@ class BaseModel(ABC):
         gpu_ut, gpu_rt = self.gpu_threshold()
         cpu_ut, cpu_rt = self.cpu_threshold()
 
-        # detach from the scheduler
-        distributed.secede()
         gpu_tried = 0
-        try:
-            while True:
-                lock_acquired = None
-                if accelerator in ("gpu", "auto") and (
-                    not self._check_cpu() or random.randint(0, 100) > math.max(50, 10 * gpu_tried)
-                ):
-                    lock = Lock(gpu_lock_key)
-                    if lock.acquire(timeout=f"{lock_wait_time}s"):
-                        gpu_tried += 1
-                        lock_acquired = lock
-                        get_logger().debug("lock acquired: %s", gpu_lock_key)
+        while True:
+            lock_acquired = None
+            if accelerator in ("gpu", "auto") and (
+                not self._check_cpu() or random.randint(0, 100) > math.max(50, 10 * gpu_tried)
+            ):
+                lock = Lock(gpu_lock_key)
+                if lock.acquire(timeout=f"{lock_wait_time}s"):
+                    gpu_tried += 1
+                    lock_acquired = lock
+                    get_logger().debug("lock acquired: %s", gpu_lock_key)
 
-                if lock_acquired is None and self._check_cpu():
-                    lock = Lock(cpu_lock_key)
-                    if lock.acquire(timeout=f"{lock_wait_time}s"):
-                        lock_acquired = lock
-                        get_logger().debug("lock acquired: %s", cpu_lock_key)
+            if lock_acquired is None and self._check_cpu():
+                lock = Lock(cpu_lock_key)
+                if lock.acquire(timeout=f"{lock_wait_time}s"):
+                    lock_acquired = lock
+                    get_logger().debug("lock acquired: %s", cpu_lock_key)
 
-                if lock_acquired is None:
-                    continue
+            if lock_acquired is None:
+                continue
 
-                stop_at = time.time() + resource_wait_time
-                if lock_acquired.name == gpu_lock_key:
-                    while wait_gpu(gpu_ut, gpu_rt, stop_at):
-                        time.sleep(1)
-                elif self._check_cpu():  # CPU
-                    while wait_cpu(cpu_ut, cpu_rt, stop_at):
-                        time.sleep(1)
-                else:
-                    release_lock(lock_acquired, 0)
-                    continue
-
-                if time.time() <= stop_at:
-                    # rejoin to the pool of dask executor threads
-                    distributed.rejoin()
-                    break
-
+            stop_at = time.time() + resource_wait_time
+            if lock_acquired.name == gpu_lock_key:
+                while wait_gpu(gpu_ut, gpu_rt, stop_at):
+                    time.sleep(1)
+            elif self._check_cpu():  # CPU
+                while wait_cpu(cpu_ut, cpu_rt, stop_at):
+                    time.sleep(1)
+            else:
                 release_lock(lock_acquired, 0)
-        finally:
-            # in the case where something goes wrong you want to rejoin
-            # so that your client knows that this function call failed
-            distributed.rejoin()
+                continue
+
+            if time.time() <= stop_at:
+                # rejoin to the pool of dask executor threads
+                break
+
+            release_lock(lock_acquired, 0)
 
         self.accelerator_lock = lock_acquired
 
