@@ -1,9 +1,7 @@
 from abc import ABC, abstractmethod
 from types import SimpleNamespace
 from typing import Any, Tuple, List, Type
-import os
 import time
-import math
 import socket
 import random
 import numpy as np
@@ -140,7 +138,7 @@ class BaseModel(ABC):
         while True:
             lock_acquired = None
             if accelerator in ("gpu", "auto") and (
-                not self._check_cpu() or random.randint(0, 100) > math.max(50, 10 * gpu_tried)
+                not self._check_cpu() or random.randint(0, 100) > max(50, 10 * gpu_tried)
             ):
                 lock = Lock(gpu_lock_key)
                 if lock.acquire(timeout=f"{lock_wait_time}s"):
