@@ -3,7 +3,9 @@ from types import SimpleNamespace
 from typing import Any, Tuple, List, Type
 import os
 import time
+import math
 import socket
+import random
 import numpy as np
 import pandas as pd
 import distributed
@@ -137,12 +139,16 @@ class BaseModel(ABC):
 
         # detach from the scheduler
         distributed.secede()
+        gpu_tried = 0
         try:
             while True:
                 lock_acquired = None
-                if accelerator in ("gpu", "auto"):
+                if accelerator in ("gpu", "auto") and (
+                    not self._check_cpu() or random.randint(0, 100) > math.max(50, 10 * gpu_tried)
+                ):
                     lock = Lock(gpu_lock_key)
                     if lock.acquire(timeout=f"{lock_wait_time}s"):
+                        gpu_tried += 1
                         lock_acquired = lock
                         get_logger().debug("lock acquired: %s", gpu_lock_key)
 
