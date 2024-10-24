@@ -1525,6 +1525,7 @@ def ensemble_topk_prediction(
         random_seed,
         future_steps,
         group_id,
+        cutoff_date,
     )
 
 
@@ -1688,6 +1689,7 @@ def save_ensemble_snapshot(
     random_seed,
     future_steps,
     group_id,
+    cutoff_date,
 ):
     ens_df = None
     # extract unique years from top_forecasts
@@ -1747,12 +1749,12 @@ def save_ensemble_snapshot(
                     (
                         model,symbol,hyper_params,
                         region,random_seed,future_steps,
-                        group_id,avg_yhat,cum_returns
+                        group_id,cutoff_date,avg_yhat,cum_returns
                     )
                 values(
                     :model,:symbol,:hyper_params,
                     :region,:random_seed,:future_steps,
-                    :group_id,:avg_yhat,:cum_returns
+                    :group_id,:cutoff_date,:avg_yhat,:cum_returns
                 ) RETURNING id
                 """
             ),
@@ -1764,6 +1766,7 @@ def save_ensemble_snapshot(
                 "random_seed": random_seed,
                 "future_steps": future_steps,
                 "group_id": group_id,
+                "cutoff_date": cutoff_date,
                 "avg_yhat": avg_yhat,
                 "cum_returns": cum_returns,
             },
