@@ -20,8 +20,8 @@ if [ ! -z "$MAIN_PID" ]; then
     echo "Killing main process and its children: $MAIN_PID"
 
     # Kill the main process and its child processes
-    pkill -P $MAIN_PID
-    kill $MAIN_PID
+    pkill -9 -P $MAIN_PID
+    kill -9 $MAIN_PID
 
     echo "Processes killed."
 else
