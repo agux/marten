@@ -22,8 +22,11 @@ from marten.data.tabledef import (
     ta_volume_based,
 )
 
-def tofl(value):
-    return value if value is None else float(value)
+def tofl(value, mapping=None):
+    if mapping is not None:
+        return mapping[value]
+    else:
+        return value if value is None else float(value)
 
 def calc_ta():
     worker = get_worker()
@@ -294,11 +297,15 @@ def price_characteristics(quotes_list, symbol, table):
 def price_transforms(quotes_list, symbol, table):
     fisher_transform = indicators.get_fisher_transform(quotes_list)
     heikin_ashi = indicators.get_heikin_ashi(quotes_list)
-    # NOTE Unlike most indicators in this library, this indicator 
+    # NOTE Unlike most indicators in this library, this indicator
     # DOES NOT return the same number of elements as there are in the historical quotes
     # renko = indicators.get_renko(quotes_list, brick_size=2.5)
     renko_atr = indicators.get_renko_atr(quotes_list, atr_periods=14)
     zig_zag = indicators.get_zig_zag(quotes_list)
+    mapping = {
+        "H": 1.0,
+        "L": 0.0,
+    }
     columns = [
         "table",
         "symbol",
@@ -354,7 +361,7 @@ def price_transforms(quotes_list, symbol, table):
                 tofl(renko_atr[i].volume),
                 tofl(renko_atr[i].is_up),
                 tofl(zig_zag[i].zig_zag),
-                tofl(zig_zag[i].point_type),
+                tofl(zig_zag[i].point_type, mapping),
                 tofl(zig_zag[i].retrace_high),
                 tofl(zig_zag[i].retrace_low),
             ]
