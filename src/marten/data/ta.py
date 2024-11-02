@@ -113,7 +113,7 @@ def calc_ta_for(symbol, table):
 def save_ta(ta_table, df):
     worker = get_worker()
     alchemyEngine = worker.alchemyEngine
-    with alchemyEngine.connect() as conn:
+    with alchemyEngine.begin() as conn:
         update_on_conflict(
             ta_table, conn, df, primary_keys=["table", "symbol", "date"]
         )
