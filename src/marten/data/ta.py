@@ -294,7 +294,9 @@ def price_characteristics(quotes_list, symbol, table):
 def price_transforms(quotes_list, symbol, table):
     fisher_transform = indicators.get_fisher_transform(quotes_list)
     heikin_ashi = indicators.get_heikin_ashi(quotes_list)
-    renko = indicators.get_renko(quotes_list, brick_size=2.5)
+    # NOTE Unlike most indicators in this library, this indicator 
+    # DOES NOT return the same number of elements as there are in the historical quotes
+    # renko = indicators.get_renko(quotes_list, brick_size=2.5)
     renko_atr = indicators.get_renko_atr(quotes_list, atr_periods=14)
     zig_zag = indicators.get_zig_zag(quotes_list)
     columns = [
@@ -308,12 +310,12 @@ def price_transforms(quotes_list, symbol, table):
         "heikin_ashi_low",
         "heikin_ashi_close",
         "heikin_ashi_volume",
-        "renko_open",
-        "renko_high",
-        "renko_low",
-        "renko_close",
-        "renko_volume",
-        "renko_is_up",
+        # "renko_open",
+        # "renko_high",
+        # "renko_low",
+        # "renko_close",
+        # "renko_volume",
+        # "renko_is_up",
         "renko_atr_open",
         "renko_atr_high",
         "renko_atr_low",
@@ -339,12 +341,12 @@ def price_transforms(quotes_list, symbol, table):
                 tofl(heikin_ashi[i].low),
                 tofl(heikin_ashi[i].close),
                 tofl(heikin_ashi[i].volume),
-                tofl(renko[i].open),
-                tofl(renko[i].high),
-                tofl(renko[i].low),
-                tofl(renko[i].close),
-                tofl(renko[i].volume),
-                tofl(renko[i].is_up),
+                # tofl(renko[i].open),
+                # tofl(renko[i].high),
+                # tofl(renko[i].low),
+                # tofl(renko[i].close),
+                # tofl(renko[i].volume),
+                # tofl(renko[i].is_up),
                 tofl(renko_atr[i].open),
                 tofl(renko_atr[i].high),
                 tofl(renko_atr[i].low),
