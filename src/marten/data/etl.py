@@ -15,6 +15,8 @@ import yappi
 from marten.utils.logger import get_logger
 from marten.utils.database import get_database_engine
 from marten.utils.worker import await_futures, init_client
+from marten.data.const import us_index_list, cn_index_types
+from marten.data.ta import calc_ta
 from marten.data.worker_func import (
     etf_spot,
     etf_perf,
@@ -43,15 +45,6 @@ from marten.data.worker_func import (
 # if module_path is not None and module_path not in sys.path:
 # sys.path.insert(0, module_path)
 import akshare as ak  # noqa: E402
-
-cn_index_types = [
-    ("上证系列指数", "sh"),
-    ("深证系列指数", "sz"),
-    # ("指数成份", ""),
-    ("中证系列指数", "csi"),
-]
-
-us_index_list = [".IXIC", ".DJI", ".INX", ".NDX"]
 
 logger = get_logger(__name__)
 alchemyEngine = None
@@ -165,7 +158,16 @@ def main(_args):
     run(interbank_rate)
 
     await_futures(futures)
-    logger.info("Time taken: %s seconds", time.time() - t_start)
+    logger.info("ETL Time taken: %s seconds", time.time() - t_start)
+
+    t2_start = time.time()
+    logger.info("Starting to recalculate technical indicators...")
+
+    run(calc_ta)
+    
+    await_futures(futures)
+    logger.info("Technical indicators time taken: %s seconds", time.time() - t2_start)
+    logger.info("Total time taken: %s seconds", time.time() - t_start)
 
     if client is not None:
         # Remember to close the client if your program is done with all computations

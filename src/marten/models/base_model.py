@@ -129,7 +129,7 @@ class BaseModel(ABC):
     def _lock_accelerator(self, accelerator) -> Lock:
         gpu_lock_key = f"""{socket.gethostname()}::GPU-auto"""
         cpu_lock_key = f"""{socket.gethostname()}::CPU"""
-        resource_wait_time = 5  # seconds, waiting for compute resource
+        resource_wait_time = 3  # seconds, waiting for compute resource
         lock_wait_time = 2
         gpu_ut, gpu_rt = self.gpu_threshold()
         cpu_ut, cpu_rt = self.cpu_threshold()

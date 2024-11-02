@@ -19,11 +19,21 @@ from dask.distributed import get_worker
 from marten.models.base_model import BaseModel
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
-from marten.utils.worker import await_futures, init_client, num_workers, hps_task_callback
+from marten.utils.worker import (
+    await_futures,
+    init_client,
+    num_workers,
+    hps_task_callback,
+)
 from marten.utils.neuralprophet import select_topk_features
 from marten.utils.softs import is_large_model
 from marten.utils.trainer import select_device, select_randk_covars
-from marten.models.worker_func import fit_with_covar, log_metrics_for_hyper_params, validate_hyperparams, get_hpid
+from marten.models.worker_func import (
+    fit_with_covar,
+    log_metrics_for_hyper_params,
+    validate_hyperparams,
+    get_hpid,
+)
 
 from sqlalchemy import text
 
@@ -67,9 +77,11 @@ def init(args):
     match args.model.lower():
         case "timemixer":
             from marten.models.time_mixer import TimeMixerModel
+
             model = TimeMixerModel()
         case "tsmixerx":
             from marten.models.nf_tstimerx import TSMixerxModel
+
             model = TSMixerxModel()
         case _:
             model = None
@@ -89,15 +101,14 @@ def _init_local_resource():
         DB_PORT = os.getenv("DB_PORT")
         DB_NAME = os.getenv("DB_NAME")
 
-        db_url = (
-            f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-        )
+        db_url = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
         alchemyEngine = get_database_engine(db_url)
 
     if logger is None:
         logger = get_logger(__name__)
 
-def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None):
+
+def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None, anchor_table=None):
     ## support arbitrary types of symbol (could be from different tables, with different features available)
     tbl_cols_dict = {
         "index_daily_em_view": (
@@ -120,22 +131,30 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None):
             "avgcf_ytm_change_rate, avgmv_ytm_change_rate, avgbpv_change_rate, avgmaturity_change_rate, avgcouponrate_change_rate, "
             "indexprevdaymv_change_rate, spotsettlementvolume_change_rate"
         ),
+        "hk_index_daily_em_view": (
+            "date DS, change_rate y, open, close, high, low, open_preclose_rate, high_preclose_rate, low_preclose_rate"
+        ),
+        "bond_zh_hs_daily_view": (
+            "date DS, change_rate y, open, high, low, close, volume, open_preclose_rate, high_preclose_rate, low_preclose_rate, vol_change_rate"
+        ),
+        "stock_zh_a_hist_em_view": (
+            "date DS, change_rate y, open, close, high, low, volume, turnover, amplitude, change_amt, turnover_rate, turnover_change_rate, "
+            "open_preclose_rate, high_preclose_rate, low_preclose_rate, vol_change_rate, amt_change_rate"
+        ),
     }
-    # lookup which table the symbol's data is in
-    anchor_table = (
-        "index_daily_em_view"  # Default table, replace with actual logic if necessary
-    )
-    with alchemyEngine.connect() as conn:
-        results = conn.execute(
-            text("""SELECT "table" FROM symbol_dict WHERE symbol = :symbol"""),
-            {"symbol": symbol},
-        )
-        for row in results:
-            table_name = row[0]
-            if table_name in tbl_cols_dict:
-                anchor_table = table_name
-                break
-        
+    if anchor_table is None:
+        # lookup which table the symbol's data is in
+        anchor_table = "index_daily_em_view"  # Default table, replace with actual logic if necessary
+        with alchemyEngine.connect() as conn:
+            results = conn.execute(
+                text("""SELECT "table" FROM symbol_dict WHERE symbol = :symbol"""),
+                {"symbol": symbol},
+            )
+            for row in results:
+                table_name = row[0]
+                if table_name in tbl_cols_dict:
+                    anchor_table = table_name
+                    break
 
     # load anchor TS
     query = f"""
@@ -154,7 +173,7 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None):
     if limit > 0:
         query += " limit %(limit)s"
         params["limit"] = limit
-    
+
     # re-order the date in ascending order
     query = f"""
         with cte as ({query})
@@ -169,11 +188,13 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None):
         params=params,
         parse_dates=["ds"],
     )
-    
+
     return df, anchor_table
 
 
-def _covar_symbols_from_table(model, anchor_symbol, dates, table, feature, ts_date, min_count):
+def _covar_symbols_from_table(
+    model, anchor_symbol, dates, table, feature, ts_date, min_count
+):
     global alchemyEngine, logger, random_seed
     params = {
         "table": table,
@@ -226,11 +247,16 @@ def _covar_symbols_from_table(model, anchor_symbol, dates, table, feature, ts_da
         group by t.symbol
         having count(*) >= %(min_count)s
     """
-    
+
     cov_symbols = pd.read_sql(query, alchemyEngine, params=params)
     cov_symbols = cov_symbols[["symbol"]]
 
-    logger.info("Identified %s candidate feature (%s) from table %s", len(cov_symbols), feature, table)
+    logger.info(
+        "Identified %s candidate feature (%s) from table %s",
+        len(cov_symbols),
+        feature,
+        table,
+    )
 
     return cov_symbols
 
@@ -265,9 +291,11 @@ def _pair_endogenous_covar_metrics(
             anchor_df["ds"].min().strftime("%Y-%m-%d"),
             args.random_seed,
             feature,
-            select_device(args.accelerator, 
-                          getattr(args, "gpu_util_threshold", None), 
-                          getattr(args, "gpu_ram_threshold", None)),
+            select_device(
+                args.accelerator,
+                getattr(args, "gpu_util_threshold", None),
+                getattr(args, "gpu_ram_threshold", None),
+            ),
             args.early_stopping,
             args.infer_holiday,
         )
@@ -279,7 +307,7 @@ def _pair_covar_metrics(
     anchor_symbol, anchor_df_future, cov_table, cov_symbols, feature, min_date, args
 ):
     global client, futures
-    
+
     for symbol in cov_symbols["symbol"]:
         logger.debug(
             "submitting fit_with_covar:\nanchor_symbol:%s\ncov_table:%s\ncov_symbol:%s\nfeature:%s",
@@ -297,9 +325,11 @@ def _pair_covar_metrics(
             min_date,
             args.random_seed,
             feature,
-            select_device(args.accelerator, 
-                          getattr(args, "gpu_util_threshold", None), 
-                          getattr(args, "gpu_ram_threshold", None)),
+            select_device(
+                args.accelerator,
+                getattr(args, "gpu_util_threshold", None),
+                getattr(args, "gpu_ram_threshold", None),
+            ),
             args.early_stopping,
             args.infer_holiday,
         )
@@ -455,7 +485,7 @@ def _load_covars(
     # Note: SELECT DISTINCT ON expressions must match initial ORDER BY expressions
     query += " ORDER BY ts_date desc, loss_val, nan_count, cov_table, cov_symbol"
     query += limit_clause
-    logger.debug("loading topk covariates using sql:\n%s\nparams:%s",query,params)
+    logger.debug("loading topk covariates using sql:\n%s\nparams:%s", query, params)
     df = pd.read_sql(
         query,
         alchemyEngine,
@@ -463,11 +493,17 @@ def _load_covars(
     )
 
     if df.empty:
-        logger.warning("no covariates found for %s\nSQL: %s\nParameters:%s", 
-                       anchor_symbol, query, params)
+        logger.warning(
+            "no covariates found for %s\nSQL: %s\nParameters:%s",
+            anchor_symbol,
+            query,
+            params,
+        )
         return df, -1
 
-    with alchemyEngine.begin() as conn: # need to use transaction for inserting new covar_set records.
+    with (
+        alchemyEngine.begin() as conn
+    ):  # need to use transaction for inserting new covar_set records.
         # check if the same set of covar features exists in `covar_set` table. If so, reuse the same set_id.
         query = """
             select id, count(*) num
@@ -508,6 +544,7 @@ def _load_covars(
 
     return df, covar_set_id
 
+
 def _load_covar_feature(cov_table, feature, symbols):
     worker = get_worker()
     alchemyEngine = worker.alchemyEngine
@@ -541,6 +578,7 @@ def _load_covar_feature(cov_table, feature, symbols):
             )
     return table_feature_df
 
+
 def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
     global client
     # date_col = "ds" if args.model == "NeuralProphet" else "date"
@@ -550,14 +588,27 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
         covars_df = _load_covar_set(covar_set_id, args.model, alchemyEngine)
     else:
         nan_threshold = round(len(df) * args.nan_limit, 0)
-        logger.info("covar_set_id is not provided, selecting top %s covars with NaN threshold %s, cutoff date %s", 
-                    args.max_covars, nan_threshold, cutoff_date)
+        logger.info(
+            "covar_set_id is not provided, selecting top %s covars with NaN threshold %s, cutoff date %s",
+            args.max_covars,
+            nan_threshold,
+            cutoff_date,
+        )
         covars_df, covar_set_id = _load_covars(
-            alchemyEngine, args.max_covars, args.symbol, nan_threshold, cutoff_date=cutoff_date, model=args.model
+            alchemyEngine,
+            args.max_covars,
+            args.symbol,
+            nan_threshold,
+            cutoff_date=cutoff_date,
+            model=args.model,
         )
 
     if covars_df.empty:
-        table = "neuralprophet_corel" if args.model.lower() == "neuralprophet" else "paired_correlation"
+        table = (
+            "neuralprophet_corel"
+            if args.model.lower() == "neuralprophet"
+            else "paired_correlation"
+        )
         raise Exception(
             f"No qualified covariates can be found for {args.symbol}. Please check the data in table {table}"
         )
@@ -568,7 +619,10 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
         covar_set_id,
     )
 
-    ranked_features = [f"{r["feature"]}::{r["cov_table"]}::{r["cov_symbol"]}" for _, r in covars_df.iterrows()]
+    ranked_features = [
+        f"{r["feature"]}::{r["cov_table"]}::{r["cov_symbol"]}"
+        for _, r in covars_df.iterrows()
+    ]
 
     # covars_df contain these columns: cov_symbol, cov_table, feature
     by_table_feature = covars_df.groupby(["cov_table", "feature"])
@@ -577,8 +631,10 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
         ## load covariate time series from different tables and/or features
         cov_table = group1[0]
         feature = group1[1]
-        futures.append(client.submit(_load_covar_feature, cov_table, feature, sdf1["cov_symbol"]))
-    
+        futures.append(
+            client.submit(_load_covar_feature, cov_table, feature, sdf1["cov_symbol"])
+        )
+
     table_feature_dfs = client.gather(futures)
 
     for (group1, sdf1), table_feature_df in zip(by_table_feature, table_feature_dfs):
@@ -640,7 +696,7 @@ def _search_space(max_covars):
     # NOTE buggy HP in neuralprophet:
     # trend_reg_threshold=[True, False]
 
-    ss = f'''dict(
+    ss = f"""dict(
         growth=["linear", "discontinuous"],
         batch_size=[None, 100, 200, 300, 400, 500],
         n_lags=list(range(0, 60+1)),
@@ -655,7 +711,7 @@ def _search_space(max_covars):
         seasonality_reg=uniform(0, 100),
         seasonality_mode=["additive", "multiplicative"],
         normalize=["off", "standardize", "soft", "soft1"],
-    )'''
+    )"""
 
     return ss
 
@@ -701,15 +757,19 @@ def _cleanup_stale_keys():
             )
         )
 
+
 def hp_deserializer(dct):
-    tuple_props = ['ar_layer_spec', 'lagged_reg_layer_spec']
+    tuple_props = ["ar_layer_spec", "lagged_reg_layer_spec"]
 
     for key, value in dct.items():
         if key in tuple_props and isinstance(value, list):
             dct[key] = tuple(value)
     return dct
 
-def preload_warmstart_tuples(model_name, anchor_symbol, covar_set_id, hps_id, limit, feat_size):
+
+def preload_warmstart_tuples(
+    model_name, anchor_symbol, covar_set_id, hps_id, limit, feat_size
+):
     global alchemyEngine, logger, model
 
     with alchemyEngine.connect() as conn:
@@ -725,7 +785,7 @@ def preload_warmstart_tuples(model_name, anchor_symbol, covar_set_id, hps_id, li
                     and loss_val is not null
                 order by loss_val
             """
-            # limit :limit
+                # limit :limit
             ),
             {
                 "model": model_name,
@@ -763,18 +823,23 @@ def preload_warmstart_tuples(model_name, anchor_symbol, covar_set_id, hps_id, li
                 case "SOFTS":
                     # param_dict["covar_dist"] = 0.0
                     if "covar_dist" not in param_dict:
-                        #TODO can we use fabricated list instead of real dirichlet sample?
-                        param_dict["covar_dist"] = np.full(feat_size, 1./float(feat_size))
+                        # TODO can we use fabricated list instead of real dirichlet sample?
+                        param_dict["covar_dist"] = np.full(
+                            feat_size, 1.0 / float(feat_size)
+                        )
                     else:
                         param_dict["covar_dist"] = np.array(param_dict["covar_dist"])
 
                     # logger.info("""param_dict: %s""", param_dict)
                 case _:
-                    param_dict = model.restore_params(params=param_dict, feat_size=feat_size)
+                    param_dict = model.restore_params(
+                        params=param_dict, feat_size=feat_size
+                    )
 
             tuples.append((param_dict, row[1]))
 
         return tuples if len(tuples) > 0 else None
+
 
 def power_demand(args, params):
     global model
@@ -787,8 +852,20 @@ def power_demand(args, params):
             return model.power_demand(args, params)
 
 
-def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args, iteration, domain_size, resume):
+def _bayesopt_run(
+    df,
+    n_jobs,
+    covar_set_id,
+    hps_id,
+    ranked_features,
+    space,
+    args,
+    iteration,
+    domain_size,
+    resume,
+):
     global logger, client
+
     @scheduler.custom(n_jobs=n_jobs)
     def objective(params_batch):
         jobs = []
@@ -802,9 +879,13 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
             hpid, _ = get_hpid(params)
             if "topk_covar" in params:
                 if "covar_dist" in params:
-                    new_df = select_randk_covars(df, ranked_features, params["covar_dist"], params["topk_covar"])
+                    new_df = select_randk_covars(
+                        df, ranked_features, params["covar_dist"], params["topk_covar"]
+                    )
                 else:
-                    new_df = select_topk_features(df, ranked_features, params["topk_covar"])
+                    new_df = select_topk_features(
+                        df, ranked_features, params["topk_covar"]
+                    )
             future = client.submit(
                 validate_hyperparams,
                 args,
@@ -820,7 +901,7 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
             future.add_done_callback(hps_task_callback)
             jobs.append(future)
             if i < nworker:
-                interval = random.randint(5000, 15000) / 1000.
+                interval = random.randint(5000, 15000) / 1000.0
                 time.sleep(interval)
         results = client.gather(jobs, errors="skip")
         elapsed = round(time.time() - t1, 3)
@@ -828,7 +909,9 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
         # logger.info("gathered results: %s", results)
         results = [(p, l) for p, l in results if p is not None and l is not None]
         if len(results) == 0:
-            logger.warning("Results not available at this iteration. Elapsed: %s", elapsed)
+            logger.warning(
+                "Results not available at this iteration. Elapsed: %s", elapsed
+            )
             return [], []
         params, loss = zip(*results)
         params = list(params)
@@ -838,8 +921,8 @@ def _bayesopt_run(df, n_jobs, covar_set_id, hps_id, ranked_features, space, args
         if args.restart_workers:
             client.restart()
         return params, loss
-    
-    warmstart_tuples=None
+
+    warmstart_tuples = None
     if resume:
         warmstart_tuples = preload_warmstart_tuples(
             args.model,
@@ -881,7 +964,7 @@ def bayesopt(df, covar_set_id, hps_id, ranked_features):
     space_str = _search_space(args.max_covars)
 
     # Convert args to a dictionary, excluding non-serializable items
-    #FIXME: no need to update the table each time, especially in resume mode?
+    # FIXME: no need to update the table each time, especially in resume mode?
     args_dict = {k: v for k, v in vars(args).items() if not callable(v)}
     # space_json = json.dumps(space, sort_keys=True)
     args_json = json.dumps(args_dict, sort_keys=True)
@@ -890,19 +973,19 @@ def bayesopt(df, covar_set_id, hps_id, ranked_features):
     n_jobs = args.batch_size
 
     # split large iterations into smaller runs to avoid OOM / memory leak
-    mango_itr = min(2, int(1000./args.batch_size))
-    for i in range(0, math.ceil(args.iteration/mango_itr)):
-        itr = min(mango_itr, args.iteration - i*mango_itr)
+    mango_itr = min(2, int(1000.0 / args.batch_size))
+    for i in range(0, math.ceil(args.iteration / mango_itr)):
+        itr = min(mango_itr, args.iteration - i * mango_itr)
         _bayesopt_run(
-            df, 
-            n_jobs, 
-            covar_set_id, 
-            hps_id, 
-            ranked_features, 
+            df,
+            n_jobs,
+            covar_set_id,
+            hps_id,
+            ranked_features,
             eval(space_str, {"uniform": uniform}),
-            args, 
-            itr, 
-            i>0 or args.resume
+            args,
+            itr,
+            i > 0 or args.resume,
         )
 
 
@@ -925,9 +1008,11 @@ def grid_search(df, covar_set_id, hps_id, ranked_features):
             params,
             args.epochs,
             random_seed,
-            select_device(args.accelerator, 
-                          getattr(args, "gpu_util_threshold", None), 
-                          getattr(args, "gpu_ram_threshold", None)),
+            select_device(
+                args.accelerator,
+                getattr(args, "gpu_util_threshold", None),
+                getattr(args, "gpu_ram_threshold", None),
+            ),
             covar_set_id,
             hps_id,
             args.early_stopping,
@@ -1015,9 +1100,14 @@ def _covar_metric(
     )
 
     if len(features) == 0:
-        logger.info("no new features in %s need to be calculated for %s on cutoff date %s", cov_table, anchor_symbol, cutoff_date)
+        logger.info(
+            "no new features in %s need to be calculated for %s on cutoff date %s",
+            cov_table,
+            anchor_symbol,
+            cutoff_date,
+        )
         return None
-    
+
     for feature in features:
         match cov_table:
             case "bond_metrics_em" | "bond_metrics_em_view":
@@ -1027,7 +1117,13 @@ def _covar_metric(
                 cov_symbols = pd.DataFrame({"symbol": ["currency_exchange"]})
             case _:
                 cov_symbols = _covar_symbols_from_table(
-                    args.model, anchor_symbol, dates, cov_table, feature, cutoff_date, min_count
+                    args.model,
+                    anchor_symbol,
+                    dates,
+                    cov_table,
+                    feature,
+                    cutoff_date,
+                    min_count,
                 )
                 # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
                 cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
@@ -1048,10 +1144,10 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     global random_seed, client
 
     anchor_symbol = args.symbol
-    
+
     # min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
     cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
-    min_count = int(len(anchor_df)*(1-args.nan_limit))
+    min_count = int(len(anchor_df) * (1 - args.nan_limit))
     dates = tuple(anchor_df["ds"])
 
     # endogenous features of the anchor time series per se
@@ -1073,9 +1169,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "index_daily_em_view"
-    _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
-    )
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
 
     # prep ETF covariates fund_etf_daily_em_view
     features = [
@@ -1089,9 +1183,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "fund_etf_daily_em_view"
-    _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
-    )
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
 
     # prep bond covariates bond_metrics_em, cn_bond_indices_view
     features = [
@@ -1117,9 +1209,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "performance_benchmark_change_rate",
     ]
     cov_table = "bond_metrics_em_view"
-    _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
-    )
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
 
     features = [
         "wealthindex_change",
@@ -1138,9 +1228,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "spotsettlementvolume_change_rate",
     ]
     cov_table = "cn_bond_indices_view"
-    _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
-    )
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
 
     # prep US index covariates us_index_daily_sina
     features = [
@@ -1152,9 +1240,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "us_index_daily_sina_view"
-    _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
-    )
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
 
     # prep HK index covariates hk_index_daily_sina
     features = [
@@ -1164,9 +1250,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "hk_index_daily_em_view"
-    _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
-    )
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
 
     # prep CN bond: bond_zh_hs_daily_view
     features = [
@@ -1177,9 +1261,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "bond_zh_hs_daily_view"
-    _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
-    )
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
 
     # prep CN stock features. Sync table & view column names
     features = [
@@ -1193,9 +1275,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "amt_change_rate",
     ]
     cov_table = "stock_zh_a_hist_em_view"
-    _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
-    )
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
 
     # RMB exchange rate
     features = [
@@ -1226,9 +1306,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "mop_change_rate",
     ]
     cov_table = "currency_boc_safe_view"
-    _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
-    )
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
 
     # SGE spot
     features = [
@@ -1238,16 +1316,12 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "spot_hist_sge_view"
-    _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
-    )
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
 
     # Interbank interest rates
     features = ["change_rate"]
     cov_table = "interbank_rate_hist_view"
-    _covar_metric(
-        anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
-    )
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
 
     # TODO prep options
 
@@ -1271,9 +1345,11 @@ def univariate_baseline(anchor_df, hps_id, args):
         default_params,
         args.epochs,
         random_seed,
-        select_device(args.accelerator, 
-                      getattr(args, "gpu_util_threshold", None), 
-                    getattr(args, "gpu_ram_threshold", None)),
+        select_device(
+            args.accelerator,
+            getattr(args, "gpu_util_threshold", None),
+            getattr(args, "gpu_ram_threshold", None),
+        ),
         0,
         hps_id,
         args.early_stopping,
@@ -1287,12 +1363,16 @@ def _covar_cutoff_date(symbol):
     with alchemyEngine.connect() as conn:
         match args.model:
             case "NeuralProphet":
-                query = "SELECT max(ts_date) FROM neuralprophet_corel where symbol=:symbol"
+                query = (
+                    "SELECT max(ts_date) FROM neuralprophet_corel where symbol=:symbol"
+                )
                 result = conn.execute(text(query), {"symbol": symbol})
                 return result.fetchone()[0]
             case _:
                 query = "SELECT max(ts_date) FROM paired_correlation where symbol=:symbol and model=:model"
-                result = conn.execute(text(query), {"symbol": symbol, "model": args.model})
+                result = conn.execute(
+                    text(query), {"symbol": symbol, "model": args.model}
+                )
                 return result.fetchone()[0]
 
 
@@ -1399,7 +1479,7 @@ def get_hps_session(symbol, model, cutoff_date, resume, timesteps):
                 "symbol": symbol,
                 "model": model,
                 "ts_date": cutoff_date,
-                "timesteps": timesteps
+                "timesteps": timesteps,
             },
         )
         return result.fetchone()[0], None
@@ -1418,9 +1498,14 @@ def main(_args):
         )
         cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
 
-        #TODO: make use of the returned covar_set_id to resume?
+        # TODO: make use of the returned covar_set_id to resume?
         hps_id, _ = get_hps_session(args.symbol, args.model, cutoff_date, args.resume)
-        logger.info("HPS session ID: %s, Cutoff date: %s, CovarSet ID: %s", hps_id, cutoff_date, covar_set_id)
+        logger.info(
+            "HPS session ID: %s, Cutoff date: %s, CovarSet ID: %s",
+            hps_id,
+            cutoff_date,
+            covar_set_id,
+        )
 
         futures.append(univariate_baseline(anchor_df, hps_id, args))
 
