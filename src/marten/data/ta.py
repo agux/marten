@@ -23,10 +23,10 @@ from marten.data.tabledef import (
 )
 
 def tofl(value, mapping=None):
-    if mapping is not None:
-        return mapping[value]
+    if value is None:
+        return value
     else:
-        return value if value is None else float(value)
+        return float(value) if mapping is None else mapping[value]
 
 def calc_ta():
     worker = get_worker()
