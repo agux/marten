@@ -60,18 +60,23 @@ def calc_ta():
     with worker_client() as client:
         for symbol in etf_list["symbol"]:
             futures.append(client.submit(calc_ta_for, symbol, "fund_etf_daily_em_view"))
+            await_futures(futures, False)
         for symbol in cn_index_list["symbol"]:
             futures.append(client.submit(calc_ta_for, symbol, "index_daily_em_view"))
+            await_futures(futures, False)
         for symbol in us_index_list:
             futures.append(
                 client.submit(calc_ta_for, symbol, "us_index_daily_sina_view")
             )
+            await_futures(futures, False)
         for symbol in bond_list["symbol"]:
             futures.append(client.submit(calc_ta_for, symbol, "bond_zh_hs_daily_view"))
+            await_futures(futures, False)
         for symbol in stock_list["symbol"]:
             futures.append(
                 client.submit(calc_ta_for, symbol, "stock_zh_a_hist_em_view")
             )
+            await_futures(futures, False)
 
     await_futures(futures)
 
@@ -82,7 +87,7 @@ def calc_ta_for(symbol, table):
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
     # load historical data
-    df, table = load_historical(symbol, alchemyEngine, anchor_table=table)
+    df = load_historical(symbol, alchemyEngine, table)
     quotes_list = [
         Quote(d, o, h, l, c, v)
         for d, o, h, l, c, v in zip(
@@ -915,7 +920,7 @@ def price_trends(quotes_list, symbol, table):
     save_ta(ta_price_trends, df)
 
 
-def load_historical(symbol, alchemyEngine, anchor_table=None):
+def load_historical(symbol, alchemyEngine, anchor_table):
     query = f"""
         SELECT date DS, open, high, low, close, volume
         FROM {anchor_table}
