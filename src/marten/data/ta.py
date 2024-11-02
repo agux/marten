@@ -8,7 +8,6 @@ from stock_indicators.indicators.common.quote import Quote
 from stock_indicators.indicators.common.enums import PeriodSize
 
 from marten.utils.worker import await_futures
-from marten.models.hp_search import load_anchor_ts
 from marten.data.db import update_on_conflict
 from marten.data.tabledef import (
     ta_ma,
@@ -83,7 +82,7 @@ def calc_ta_for(symbol, table):
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
     # load historical data
-    df, table = load_anchor_ts(symbol, 0, alchemyEngine, anchor_table=table)
+    df, table = load_historical(symbol, alchemyEngine, anchor_table=table)
     quotes_list = [
         Quote(d, o, h, l, c, v)
         for d, o, h, l, c, v in zip(
@@ -914,3 +913,28 @@ def price_trends(quotes_list, symbol, table):
         )
     df = pd.DataFrame(data, columns=columns)
     save_ta(ta_price_trends, df)
+
+
+def load_historical(symbol, alchemyEngine, anchor_table=None):
+    query = f"""
+        SELECT date DS, open, high, low, close, volume
+        FROM {anchor_table}
+        where symbol = %(symbol)s
+        and open <> 'nan' and open is not null
+        and high <> 'nan' and high is not null
+        and low <> 'nan' and low is not null
+        and close <> 'nan' and close is not null
+        and volume <> 'nan' and volume is not null
+    """
+    params = {"symbol": symbol}
+
+    query += " order by DS"
+
+    df = pd.read_sql(
+        query,
+        alchemyEngine,
+        params=params,
+        parse_dates=["ds"],
+    )
+
+    return df
