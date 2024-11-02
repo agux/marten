@@ -300,7 +300,7 @@ def price_transforms(quotes_list, symbol, table):
     # NOTE Unlike most indicators in this library, this indicator
     # DOES NOT return the same number of elements as there are in the historical quotes
     # renko = indicators.get_renko(quotes_list, brick_size=2.5)
-    renko_atr = indicators.get_renko_atr(quotes_list, atr_periods=14)
+    # renko_atr = indicators.get_renko_atr(quotes_list, atr_periods=14)
     zig_zag = indicators.get_zig_zag(quotes_list)
     mapping = {
         "H": 1.0,
@@ -323,12 +323,12 @@ def price_transforms(quotes_list, symbol, table):
         # "renko_close",
         # "renko_volume",
         # "renko_is_up",
-        "renko_atr_open",
-        "renko_atr_high",
-        "renko_atr_low",
-        "renko_atr_close",
-        "renko_atr_volume",
-        "renko_atr_is_up",
+        # "renko_atr_open",
+        # "renko_atr_high",
+        # "renko_atr_low",
+        # "renko_atr_close",
+        # "renko_atr_volume",
+        # "renko_atr_is_up",
         "zig_zag_zig_zag",
         "zig_zag_point_type",
         "zig_zag_retrace_high",
@@ -354,12 +354,12 @@ def price_transforms(quotes_list, symbol, table):
                 # tofl(renko[i].close),
                 # tofl(renko[i].volume),
                 # tofl(renko[i].is_up),
-                tofl(renko_atr[i].open),
-                tofl(renko_atr[i].high),
-                tofl(renko_atr[i].low),
-                tofl(renko_atr[i].close),
-                tofl(renko_atr[i].volume),
-                tofl(renko_atr[i].is_up),
+                # tofl(renko_atr[i].open),
+                # tofl(renko_atr[i].high),
+                # tofl(renko_atr[i].low),
+                # tofl(renko_atr[i].close),
+                # tofl(renko_atr[i].volume),
+                # tofl(renko_atr[i].is_up),
                 tofl(zig_zag[i].zig_zag),
                 tofl(zig_zag[i].point_type, mapping),
                 tofl(zig_zag[i].retrace_high),
