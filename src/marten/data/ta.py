@@ -110,9 +110,10 @@ def calc_ta_for(symbol, table):
 def save_ta(ta_table, df):
     worker = get_worker()
     alchemyEngine = worker.alchemyEngine
-    update_on_conflict(
-        ta_table, alchemyEngine, df, primary_keys=["table", "symbol", "date"]
-    )
+    with alchemyEngine.connect() as conn:
+        update_on_conflict(
+            ta_table, conn, df, primary_keys=["table", "symbol", "date"]
+        )
 
 def numerical_analysis(quotes_list, symbol, table):
     slope10 = indicators.get_slope(quotes_list, lookback_periods=10)
