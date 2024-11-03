@@ -113,7 +113,7 @@ def calc_ta_for(symbol, table):
     ]
     # calculate all the TAs using common function, organized by TA genre
     price_trends(quotes_list, symbol, table)
-    price_channels(quotes_list, symbol, table)
+    price_channel(quotes_list, symbol, table)
     oscillators(quotes_list, symbol, table)
     stop_reverse(quotes_list, symbol, table)
     other_price_patterns(quotes_list, symbol, table)
@@ -781,8 +781,8 @@ def oscillators(quotes_list, symbol, table):
     df = pd.DataFrame(data, columns=columns)
     save_ta(ta_oscillators, df)
 
-def price_channels(quotes_list, symbol, table):
-    c = count_ta("ta_price_channels", table, symbol)
+def price_channel(quotes_list, symbol, table):
+    c = count_ta("ta_price_channel", table, symbol)
     if c == len(quotes_list):
         return
     bollinger = indicators.get_bollinger_bands(quotes_list)
