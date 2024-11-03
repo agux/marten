@@ -142,7 +142,7 @@ def count_ta(ta_table, table, symbol):
                     select count(*)
                     from {ta_table}
                     where 
-                        table = :table
+                        "table" = :table
                         and symbol = :symbol
                 """
             ),
