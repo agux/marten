@@ -1,6 +1,5 @@
 import pandas as pd
-from decimal import Decimal
-
+from sqlalchemy import text
 from dask.distributed import worker_client, get_worker
 
 from stock_indicators import indicators
@@ -62,24 +61,39 @@ def calc_ta():
     total += len(us_index_list)
     with worker_client() as client:
         for symbol in etf_list["symbol"]:
-            futures.append(client.submit(calc_ta_for, symbol, "fund_etf_daily_em_view"))
-            await_futures(futures, False)
+            futures.append(client.submit(calc_ta_for, symbol, "fund_etf_daily_em_view", 
+                                         key=f"{calc_ta_for.__name__}_ETF-{symbol}"))
+            await_futures(futures, False, multiplier=1.5)
         for symbol in cn_index_list["symbol"]:
-            futures.append(client.submit(calc_ta_for, symbol, "index_daily_em_view"))
-            await_futures(futures, False)
+            futures.append(client.submit(calc_ta_for, symbol, "index_daily_em_view",
+                                         key=f"{calc_ta_for.__name__}_index-{symbol}"))
+            await_futures(futures, False, multiplier=1.5)
         for symbol in us_index_list:
             futures.append(
-                client.submit(calc_ta_for, symbol, "us_index_daily_sina_view")
+                client.submit(
+                    calc_ta_for,
+                    symbol,
+                    "us_index_daily_sina_view",
+                    key=f"{calc_ta_for.__name__}_us_index-{symbol}",
+                )
             )
-            await_futures(futures, False)
+            await_futures(futures, False, multiplier=1.5)
         for symbol in bond_list["symbol"]:
-            futures.append(client.submit(calc_ta_for, symbol, "bond_zh_hs_daily_view"))
-            await_futures(futures, False)
+            futures.append(
+                client.submit(
+                    calc_ta_for,
+                    symbol,
+                    "bond_zh_hs_daily_view",
+                    key=f"{calc_ta_for.__name__}_bond-{symbol}",
+                )
+            )
+            await_futures(futures, False, multiplier=1.5)
         for symbol in stock_list["symbol"]:
             futures.append(
-                client.submit(calc_ta_for, symbol, "stock_zh_a_hist_em_view")
+                client.submit(calc_ta_for, symbol, "stock_zh_a_hist_em_view",
+                              key=f"{calc_ta_for.__name__}_stock-{symbol}")
             )
-            await_futures(futures, False)
+            await_futures(futures, False, multiplier=1.5)
 
     await_futures(futures)
 
@@ -118,7 +132,31 @@ def save_ta(ta_table, df):
             ta_table, conn, df, primary_keys=["table", "symbol", "date"]
         )
 
+def count_ta(ta_table, table, symbol):
+    worker = get_worker()
+    alchemyEngine = worker.alchemyEngine
+    with alchemyEngine.connect() as conn:
+        result = conn.execute(
+            text(
+                f"""
+                    select count(*)
+                    from {ta_table}
+                    where 
+                        table = :table
+                        and symbol = :symbol
+                """
+            ),
+            {
+                "table": table,
+                "symbol": symbol,
+            },
+        )
+        return result.fetchone()[0]
+
 def numerical_analysis(quotes_list, symbol, table):
+    c = count_ta("ta_numerical_analysis", table, symbol)
+    if c == len(quotes_list):
+        return
     slope10 = indicators.get_slope(quotes_list, lookback_periods=10)
     slope30 = indicators.get_slope(quotes_list, lookback_periods=30)
     slope100 = indicators.get_slope(quotes_list, lookback_periods=100)
@@ -170,6 +208,9 @@ def numerical_analysis(quotes_list, symbol, table):
     save_ta(ta_numerical_analysis, df)
 
 def price_characteristics(quotes_list, symbol, table):
+    c = count_ta("ta_price_characteristics", table, symbol)
+    if c == len(quotes_list):
+        return
     atr = indicators.get_atr(quotes_list)
     bop = indicators.get_bop(quotes_list)
     chop = indicators.get_chop(quotes_list)
@@ -295,6 +336,9 @@ def price_characteristics(quotes_list, symbol, table):
     save_ta(ta_price_characteristics, df)
 
 def price_transforms(quotes_list, symbol, table):
+    c = count_ta("ta_price_transforms", table, symbol)
+    if c == len(quotes_list):
+        return
     fisher_transform = indicators.get_fisher_transform(quotes_list)
     heikin_ashi = indicators.get_heikin_ashi(quotes_list)
     # NOTE Unlike most indicators in this library, this indicator
@@ -370,6 +414,9 @@ def price_transforms(quotes_list, symbol, table):
     save_ta(ta_price_transforms, df)
 
 def ma(quotes_list, symbol, table):
+    c = count_ta("ta_ma", table, symbol)
+    if c == len(quotes_list):
+        return
     alma = indicators.get_alma(quotes_list)
     dema9 = indicators.get_dema(quotes_list, lookback_periods=9)
     dema20 = indicators.get_dema(quotes_list, lookback_periods=20)
@@ -504,6 +551,9 @@ def ma(quotes_list, symbol, table):
     save_ta(ta_ma, df)
 
 def volume_based(quotes_list, symbol, table):
+    c = count_ta("ta_volume_based", table, symbol)
+    if c == len(quotes_list):
+        return
     adl = indicators.get_adl(quotes_list, sma_periods=5)
     cmf = indicators.get_cmf(quotes_list)
     chaikin_osc = indicators.get_chaikin_osc(quotes_list)
@@ -570,6 +620,9 @@ def volume_based(quotes_list, symbol, table):
     save_ta(ta_volume_based, df)
 
 def other_price_patterns(quotes_list, symbol, table):
+    c = count_ta("ta_other_price_patterns", table, symbol)
+    if c == len(quotes_list):
+        return
     pivots = indicators.get_pivots(quotes_list)
     fractal = indicators.get_fractal(quotes_list)
     columns = [
@@ -606,6 +659,9 @@ def other_price_patterns(quotes_list, symbol, table):
     save_ta(ta_other_price_patterns, df)
 
 def stop_reverse(quotes_list, symbol, table):
+    c = count_ta("ta_stop_reverse", table, symbol)
+    if c == len(quotes_list):
+        return
     chandelier = indicators.get_chandelier(quotes_list)
     parabolic_sar = indicators.get_parabolic_sar(quotes_list)
     volatility_stop = indicators.get_volatility_stop(quotes_list)
@@ -642,6 +698,9 @@ def stop_reverse(quotes_list, symbol, table):
 
 
 def oscillators(quotes_list, symbol, table):
+    c = count_ta("ta_oscillators", table, symbol)
+    if c == len(quotes_list):
+        return
     ao = indicators.get_awesome(quotes_list)
     cmo = indicators.get_cmo(quotes_list, lookback_periods=14)
     cci = indicators.get_cci(quotes_list)
@@ -723,6 +782,9 @@ def oscillators(quotes_list, symbol, table):
     save_ta(ta_oscillators, df)
 
 def price_channels(quotes_list, symbol, table):
+    c = count_ta("ta_price_channels", table, symbol)
+    if c == len(quotes_list):
+        return
     bollinger = indicators.get_bollinger_bands(quotes_list)
     donchian = indicators.get_donchian(quotes_list)
     fcb = indicators.get_fcb(quotes_list)
@@ -833,6 +895,9 @@ def price_channels(quotes_list, symbol, table):
 
 
 def price_trends(quotes_list, symbol, table):
+    c = count_ta("ta_price_trends", table, symbol)
+    if c == len(quotes_list):
+        return
     aroon = indicators.get_aroon(quotes_list)
     adx = indicators.get_adx(quotes_list)
     elder = indicators.get_elder_ray(quotes_list)
@@ -935,6 +1000,7 @@ def load_historical(symbol, alchemyEngine, anchor_table):
         SELECT date DS, open, high, low, close, volume
         FROM {anchor_table}
         where symbol = %(symbol)s
+        and date is not null
         and open <> 'nan' and open is not null
         and high <> 'nan' and high is not null
         and low <> 'nan' and low is not null
