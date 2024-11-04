@@ -62,7 +62,7 @@ def calc_ta():
     with worker_client() as client:
         for symbol in etf_list["symbol"]:
             futures.append(client.submit(calc_ta_for, symbol, "fund_etf_daily_em", 
-                                         key=f"{calc_ta_for.__name__}_ETF-{symbol.lower()}"))
+                                         key=f"{calc_ta_for.__name__}_ETF--{symbol.lower()}"))
             await_futures(futures, False, multiplier=1.5)
         for symbol in cn_index_list["symbol"]:
             futures.append(
@@ -70,7 +70,7 @@ def calc_ta():
                     calc_ta_for,
                     symbol,
                     "index_daily_em",
-                    key=f"{calc_ta_for.__name__}_INDEX-{symbol.lower()}",
+                    key=f"{calc_ta_for.__name__}_INDEX--{symbol.lower()}",
                 )
             )
             await_futures(futures, False, multiplier=1.5)
@@ -80,7 +80,7 @@ def calc_ta():
                     calc_ta_for,
                     symbol,
                     "us_index_daily_sina",
-                    key=f"{calc_ta_for.__name__}_US_INDEX-{symbol.lower()}",
+                    key=f"{calc_ta_for.__name__}_US_INDEX--{symbol.lower()}",
                 )
             )
             await_futures(futures, False, multiplier=1.5)
@@ -90,18 +90,18 @@ def calc_ta():
                     calc_ta_for,
                     symbol,
                     "bond_zh_hs_daily",
-                    key=f"{calc_ta_for.__name__}_BOND-{symbol.lower()}",
+                    key=f"{calc_ta_for.__name__}_BOND--{symbol.lower()}",
                 )
             )
             await_futures(futures, False, multiplier=1.5)
         for symbol in stock_list["symbol"]:
             futures.append(
                 client.submit(calc_ta_for, symbol, "stock_zh_a_hist_em",
-                              key=f"{calc_ta_for.__name__}_STOCK-{symbol.lower()}")
+                              key=f"{calc_ta_for.__name__}_STOCK--{symbol.lower()}")
             )
             await_futures(futures, False, multiplier=1.5)
 
-    await_futures(futures)
+        await_futures(futures)
 
     return total
 
