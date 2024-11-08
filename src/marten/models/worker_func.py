@@ -41,7 +41,7 @@ def merge_covar_df(
     anchor_symbol, anchor_df, cov_table, cov_symbol, feature, min_date, alchemyEngine
 ):
 
-    if anchor_symbol == cov_symbol:
+    if anchor_symbol == cov_symbol and not cov_table.startswith("ta_"):
         if feature == "y":
             # no covariate is needed. this is a baseline metric
             merged_df = anchor_df[["ds", "y"]]
@@ -74,6 +74,34 @@ def merge_covar_df(
                 "min_date": min_date,
                 "cutoff_date": cutoff_date,
             }
+        case _ if cov_table.startswith("ta_"): # handle technical indicators table
+            # query list of related column names for the indicator
+            with alchemyEngine.connect() as conn:
+                result = conn.execute(
+                    text(
+                        f"""
+                            SELECT column_name
+                            FROM information_schema.columns
+                            WHERE table_name = '{cov_table}'
+                            AND column_name LIKE '{feature}_%'
+                        """
+                    ),
+                )
+                column_names = [row[0] for row in result.fetchall()]
+            columns = ", ".join([f'{c} "{c}_{cov_symbol}"' for c in column_names])
+            query = f"""
+                select date ds, {columns}"
+                from {cov_table}
+                where symbol = %(cov_symbol)s
+                and date >= %(min_date)s
+                and date <= %(cutoff_date)s
+                order by date
+            """
+            params = {
+                "cov_symbol": cov_symbol,
+                "min_date": min_date,
+                "cutoff_date": cutoff_date,
+            }
         case _:
             query = f"""
                 select date ds, {feature} "{cov_symbol_sanitized}"
@@ -97,7 +125,7 @@ def merge_covar_df(
     if cov_symbol_df.empty:
         return None
 
-    merged_df = anchor_df[["ds", "y"]]
+    merged_df = anchor_df[["ds", "y"]].copy()
     merged_df = pd.merge(merged_df, cov_symbol_df, on="ds", how="left")
 
     return merged_df
@@ -130,7 +158,9 @@ def fit_with_covar(
             min_date,
             alchemyEngine,
         )
-
+        
+        #TODO: merged_df may contain more than one columns for the same feature (TA)
+        
         if merged_df is None:
             # FIXME: sometimes merged_df is None even if there's data in table
             logger.info(

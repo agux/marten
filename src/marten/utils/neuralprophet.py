@@ -34,7 +34,13 @@ def select_topk_features(df, ranked_features, k):
     in top k elements in the ranked_features list.
     """
     top_k_features = ranked_features[:int(k)]
-    columns_to_keep = ['ds', 'y'] + top_k_features
+    columns_to_keep = ['ds', 'y']
+    for f in top_k_features:
+        if "::ta_" in f:
+            # Technical indicators involved
+            columns_to_keep += [c for c in df.columns if c.startswith(f+"_")]
+        else:
+            columns_to_keep.append(f)
     return df[columns_to_keep]
 
 def set_yhat_n(df):

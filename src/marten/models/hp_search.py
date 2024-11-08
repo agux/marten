@@ -232,6 +232,7 @@ def _covar_symbols_from_table(
             """
             params["model"] = model
     # get a list of symbols from the given table, of which metrics are not recorded yet
+    exclude = "" if table.startswith("ta_") else "and t.symbol <> %(anchor_symbol)s"
     query = f"""
         select
             t.symbol symbol, count(*) num
@@ -240,7 +241,7 @@ def _covar_symbols_from_table(
         where
             t.date in %(dates)s
             and {feature} is not null
-            and t.symbol <> %(anchor_symbol)s
+            {exclude}
             and t.symbol not in (
                 {sub_query}
             )
@@ -563,6 +564,34 @@ def _load_covar_feature(cov_table, feature, symbols):
                 order by DS asc
             """
             table_feature_df = pd.read_sql(query, alchemyEngine, parse_dates=["ds"])
+        case _ if cov_table.startswith("ta_"): # handle technical indicators table
+            # query list of related column names for the indicator
+            with alchemyEngine.connect() as conn:
+                # table_name = cov_table[:-5] if cov_table.endswith('_view') else cov_table
+                result = conn.execute(
+                    text(
+                        f"""
+                            SELECT column_name
+                            FROM information_schema.columns
+                            WHERE table_name = '{cov_table}'
+                            AND column_name LIKE '{feature}_%'
+                        """
+                    ),
+                )
+                column_names = [row[0] for row in result.fetchall()]
+            # query rows from the TA table
+            query = f"""
+                SELECT symbol ID, date DS, {', '.join(column_names)}
+                FROM {cov_table}
+                where symbol in %(symbols)s
+                order by ID, DS asc
+            """
+            params = {
+                "symbols": tuple(symbols),
+            }
+            table_feature_df = pd.read_sql(
+                query, alchemyEngine, params=params, parse_dates=["ds"]
+            )
         case _:
             query = f"""
                 SELECT symbol ID, date DS, {feature} y
@@ -647,14 +676,21 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
         # split table_feature_df by symbol column
         grouped = table_feature_df.groupby("id")
         for group2, sdf2 in grouped:
-            col_name = f"{feature}::{cov_table}::{group2}"
-            sdf2.rename(
-                columns={
-                    "y": col_name,
-                },
-                inplace=True,
-            )
-            sdf2 = sdf2[["ds", col_name]]
+            if "y" in sdf2.columns:
+                col_name = f"{feature}::{cov_table}::{group2}"
+                sdf2.rename(
+                    columns={
+                        "y": col_name,
+                    },
+                    inplace=True,
+                )
+                sdf2 = sdf2[["ds", col_name]]
+            else:
+                col_names = {}
+                for col in [c for c in df.columns if c.startswith(f"{feature}_")]:
+                    col_names[col] = f"{col}::{cov_table}::{group2}"
+                sdf2.rename(columns=col_names, inplace=True)
+                sdf2 = sdf2[["ds"] + list(col_names.values())]
             merged_df = pd.merge(merged_df, sdf2, on="ds", how="left")
 
     missing_values = merged_df.isna().sum()
@@ -1323,8 +1359,123 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     cov_table = "interbank_rate_hist_view"
     _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
 
-    # TODO Technical indicators
-    
+    # Technical indicators
+    features = [
+        "alma",
+        "dema",
+        "epma",
+        "ema",
+        "ht_trendline",
+        "hma",
+        "kama",
+        "mama",
+        "dynamic",
+        "smma",
+        "sma",
+        "t3",
+        "tema",
+        "vwma",
+        "wma",
+        "vwap",
+    ]
+    cov_table = "ta_ma_view"
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    features = [
+        "slope",
+    ]
+    cov_table = "ta_numerical_analysis_view"
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    features = [
+        "ao",
+        "cmo",
+        "cci",
+        "connors_rsi",
+        "dpo",
+        "stoch",
+        "rsi",
+        "stc",
+        "smi",
+        "stoch_rsi",
+        "trix",
+        "ultimate",
+        "williams_r",
+    ]
+    cov_table = "ta_oscillators_view"
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    features = [
+        "pivots",
+        "fractal",
+    ]
+    cov_table = "ta_other_price_patterns_view"
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    features = [
+        "bollinger",
+        "donchian",
+        "fcb",
+        "keltner",
+        "ma_envelopes",
+        "pivot_points",
+        "rolling_pivots",
+        "starc_bands",
+        "stdev_channels",
+    ]
+    cov_table = "ta_price_channel_view"
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    features = [
+        "atr",
+        "bop",
+        "chop",
+        "stdev",
+        "roc",
+        "roc2",
+        "pmo",
+        "tsi",
+        "ulcer_index",
+    ]
+    cov_table = "ta_price_characteristics_view"
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    features = [
+        "fisher_transform",
+        "heikin_ashi",
+        "zig_zag",
+    ]
+    cov_table = "ta_price_transforms_view"
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    features = [
+        "atr",
+        "aroon",
+        "adx",
+        "elder_ray",
+        "gator",
+        "hurst",
+        "ichimoku",
+        "macd",
+        "super_trend",
+        "vortex",
+        "alligator",
+    ]
+    cov_table = "ta_price_trends_view"
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    features = [
+        "chandelier",
+        "parabolic_sar",
+        "volatility_stop",
+    ]
+    cov_table = "ta_stop_reverse_view"
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    features = [
+        "adl",
+        "cmf",
+        "chaikin_osc",
+        "force_index",
+        "kvo",
+        "mfi",
+        "obv",
+        "pvo",
+    ]
+    cov_table = "ta_volume_based_view"
+    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+
     # TODO prep options
 
     # TODO CPI, PPI
