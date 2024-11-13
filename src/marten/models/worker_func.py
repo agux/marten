@@ -28,6 +28,7 @@ from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
 from marten.utils.trainer import select_device
 from marten.utils.softs import SOFTSPredictor, baseline_config
+from marten.utils.database import columns_with_prefix
 from marten.utils.neuralprophet import (
     select_topk_features,
     NPPredictor,
@@ -75,19 +76,7 @@ def merge_covar_df(
                 "cutoff_date": cutoff_date,
             }
         case _ if cov_table.startswith("ta_"): # handle technical indicators table
-            # query list of related column names for the indicator
-            with alchemyEngine.connect() as conn:
-                result = conn.execute(
-                    text(
-                        f"""
-                            SELECT column_name
-                            FROM information_schema.columns
-                            WHERE table_name = '{cov_table}'
-                            AND column_name LIKE '{feature}_%'
-                        """
-                    ),
-                )
-                column_names = [row[0] for row in result.fetchall()]
+            column_names = columns_with_prefix(alchemyEngine, cov_table, feature)
             columns = ", ".join([f'{c} "{c}_{cov_symbol}"' for c in column_names])
             query = f"""
                 select date ds, {columns}"
@@ -159,8 +148,6 @@ def fit_with_covar(
             alchemyEngine,
         )
         
-        #TODO: merged_df may contain more than one columns for the same feature (TA)
-        
         if merged_df is None:
             # FIXME: sometimes merged_df is None even if there's data in table
             logger.info(
@@ -172,11 +159,14 @@ def fit_with_covar(
             )
             return None
 
-        covar_col = (
-            feature if feature in merged_df.columns else f"{feature}_{cov_symbol}"
-        )
-        nan_count = int(merged_df[covar_col].isna().sum())
-        if nan_count >= len(merged_df) * 0.5:
+        if cov_table.startswith("ta_"):
+            covar_col = [col for col in merged_df.columns if col.startswith(f"{feature}_")]
+        else:
+            covar_col = (
+                feature if feature in merged_df.columns else f"{feature}_{cov_symbol}"
+            )
+        nan_count = merged_df[covar_col].isna().sum().sum()
+        if nan_count >= merged_df.shape[0] * merged_df.shape[1] * 0.5:
             logger.info(
                 "too much missing values in %s: %s, skipping", covar_col, nan_count
             )
@@ -250,10 +240,9 @@ def fit_with_covar(
                 conn,
             )
         if impute_df is not None:
-            with alchemyEngine.begin() as conn:
-                save_impute_data(
-                    impute_df, cov_table, cov_symbol, feature, conn, logger
-                )
+            save_impute_data(
+                impute_df, cov_table, cov_symbol, feature, alchemyEngine, logger
+            )
         return metrics
 
     try:
@@ -263,41 +252,65 @@ def fit_with_covar(
         raise e
 
 
-def save_impute_data(impute_df, cov_table, cov_symbol, feature, conn, logger):
+def save_impute_data(impute_df, cov_table, cov_symbol, feature, alchemyEngine, logger):
     cov_table = cov_table[:-5] if cov_table.endswith("_view") else cov_table
-    last_col = impute_df.columns[-1]
-    impute_df = impute_df[["ds", last_col]]
-    match cov_table:
-        case "currency_boc_safe" | "bond_metrics_em":
-            sql = f"""
-                INSERT INTO {cov_table}_impute (date, {feature}) 
+    if cov_table.startswith("ta_"):
+        # saving imputation for technical indicators, where multiple columns could be infolved
+        df_cols = [col for col in impute_df.columns if col.startswith(f"{feature}_")]
+        column_names = columns_with_prefix(alchemyEngine, cov_table, feature)
+        cols = []
+        exclude = []
+        for df_col in df_cols:
+            for tbl_col in column_names:
+                if df_col.startswith(tbl_col + "_"):
+                    cols.append(tbl_col)
+                    exclude.append(f"{tbl_col} = EXCLUDED.{tbl_col}")
+                    break
+        sql = f"""
+                INSERT INTO {cov_table}_impute (symbol, table, date, {", ".join(cols)}) 
                 VALUES %s 
-                ON CONFLICT (date) 
+                ON CONFLICT (symbol, table, date) 
                 DO UPDATE SET 
-                    {feature} = EXCLUDED.{feature}
-            """
-        case _:
-            sql = f"""
-                INSERT INTO {cov_table}_impute (symbol, date, {feature}) 
-                VALUES %s 
-                ON CONFLICT (symbol, date) 
-                DO UPDATE SET 
-                    {feature} = EXCLUDED.{feature}
-            """
-            impute_df.insert(0, "symbol", cov_symbol)
+                    {", ".join(exclude)}
+              """
+        impute_df.insert(0, "symbol", cov_symbol)
+        impute_df.insert(1, "table", cov_table)
+    else:
+        last_col = impute_df.columns[-1]
+        impute_df = impute_df[["ds", last_col]]
+        match cov_table:
+            case "currency_boc_safe" | "bond_metrics_em":
+                sql = f"""
+                    INSERT INTO {cov_table}_impute (date, {feature}) 
+                    VALUES %s 
+                    ON CONFLICT (date) 
+                    DO UPDATE SET 
+                        {feature} = EXCLUDED.{feature}
+                """
+            case _:
+                sql = f"""
+                    INSERT INTO {cov_table}_impute (symbol, date, {feature}) 
+                    VALUES %s 
+                    ON CONFLICT (symbol, date) 
+                    DO UPDATE SET 
+                        {feature} = EXCLUDED.{feature}
+                """
+                impute_df.insert(0, "symbol", cov_symbol)
 
-    impute_df.rename(
-        columns={"ds": "date", last_col: f"{feature}"},
-        inplace=True,
-    )
-    cursor = conn.connection.cursor()  # Create a cursor from the connection
-    try:
-        execute_values(cursor, sql, list(impute_df.to_records(index=False)))
-    except Exception as e:
-        logger.warning(
-            "%s imputation not persisted:%s\n%s", last_col, str(e), impute_df
+        impute_df.rename(
+            columns={"ds": "date", last_col: f"{feature}"},
+            inplace=True,
         )
-        raise e
+
+    with alchemyEngine.begin() as conn:
+        cursor = conn.connection.cursor()  # Create a cursor from the connection
+        try:
+            execute_values(cursor, sql, list(impute_df.to_records(index=False)))
+        except Exception as e:
+            logger.warning(
+                "%s imputation not persisted:%s\n%s", feature, str(e), impute_df
+            )
+            raise e
     # conn.commit()  # Commit the transaction
     # cursor.close()  # Close the cursor
 
@@ -462,7 +475,7 @@ def reg_search_params(params):
         params["trend_reg"] = round(params["trend_reg"], 5)
 
 
-def validate_hyperparams(args, df, ranked_features, covar_set_id, hps_id, params):
+def validate_hyperparams(args, df, covar_set_id, hps_id, params):
     reg_params = params.copy()
     if args.model == "NeuralProphet":
         reg_search_params(reg_params)
@@ -483,7 +496,6 @@ def validate_hyperparams(args, df, ranked_features, covar_set_id, hps_id, params
             hps_id,
             args.early_stopping,
             args.infer_holiday,
-            ranked_features,
         )
     except Exception as e:
         get_logger().error("encountered error with train params: %s\n%s", reg_params, traceback.format_exc())
@@ -513,7 +525,6 @@ def log_metrics_for_hyper_params(
     hps_id,
     early_stopping,
     infer_holiday,
-    ranked_features,
 ):
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
@@ -916,7 +927,7 @@ def get_topk_prediction_settings(alchemyEngine, model, symbol, hps_id, topk):
             SELECT 
                 hyper_params, mae, rmse, loss, mae_val, 
                 rmse_val, loss_val, hpid, epochs, sub_topk,
-                covar_set_id
+                covar_set_id, covars
             FROM hps_metrics
             WHERE 
                 model = %(model)s
@@ -930,7 +941,7 @@ def get_topk_prediction_settings(alchemyEngine, model, symbol, hps_id, topk):
             SELECT 
                 hyper_params, mae, rmse, loss, mae_val, 
                 rmse_val, loss_val, hpid, epochs, sub_topk,
-                covar_set_id
+                covar_set_id, covars
             FROM hps_metrics
             WHERE 
                 model = %(model)s
@@ -1370,9 +1381,11 @@ def forecast(
         if hps_metric["sub_topk"] is None:
             new_df = df
         else:
-            new_df = select_topk_features(
-                df, ranked_features, int(hps_metric["sub_topk"])
-            )
+            cols = ['ds', 'y'] + [covar.strip() for covar in hps_metric["covars"].split(',')]
+            new_df = df[cols]
+            # new_df = select_topk_features(
+            #     df, ranked_features, int(hps_metric["sub_topk"])
+            # )
 
     logger.info(
         "dataframe augmented with covar_set_id %s: %s", covar_set_id, new_df.shape
@@ -1457,7 +1470,7 @@ def forecast(
         group_id,
         hps_metric["hpid"],
         avg_loss,
-        covar_columns[0] if n_covars == 1 else None,
+        ",".join(covar_columns),
     )
 
     logger.info(
@@ -2026,7 +2039,6 @@ def _univariate_default_hp(model, client, anchor_df, args, hps_id):
         hps_id,
         args.early_stopping,
         args.infer_holiday,
-        None,
     ).result()
 
 

@@ -7,6 +7,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy import (
     create_engine,
     Engine,
+    text,
 )
 
 def get_database_engine(url=None, pool_size=None) -> Engine:
@@ -30,3 +31,17 @@ def get_database_engine(url=None, pool_size=None) -> Engine:
             pool_recycle=3600,
             pool_size=pool_size,
         )
+
+def columns_with_prefix(conn, table, prefix):
+    with conn.connect() as conn:
+        result = conn.execute(
+            text(
+                f"""
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_name = '{table}'
+                    AND column_name LIKE '{prefix}_%'
+                """
+            ),
+        )
+        return [row[0] for row in result.fetchall()]

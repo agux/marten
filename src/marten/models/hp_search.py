@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from dask.distributed import get_worker
 
 from marten.models.base_model import BaseModel
-from marten.utils.database import get_database_engine
+from marten.utils.database import get_database_engine, columns_with_prefix
 from marten.utils.logger import get_logger
 from marten.utils.worker import (
     await_futures,
@@ -565,20 +565,7 @@ def _load_covar_feature(cov_table, feature, symbols):
             """
             table_feature_df = pd.read_sql(query, alchemyEngine, parse_dates=["ds"])
         case _ if cov_table.startswith("ta_"): # handle technical indicators table
-            # query list of related column names for the indicator
-            with alchemyEngine.connect() as conn:
-                # table_name = cov_table[:-5] if cov_table.endswith('_view') else cov_table
-                result = conn.execute(
-                    text(
-                        f"""
-                            SELECT column_name
-                            FROM information_schema.columns
-                            WHERE table_name = '{cov_table}'
-                            AND column_name LIKE '{feature}_%'
-                        """
-                    ),
-                )
-                column_names = [row[0] for row in result.fetchall()]
+            column_names = columns_with_prefix(alchemyEngine, cov_table, feature)
             # query rows from the TA table
             query = f"""
                 SELECT symbol ID, date DS, {', '.join(column_names)}
@@ -926,7 +913,6 @@ def _bayesopt_run(
                 validate_hyperparams,
                 args,
                 new_df,
-                ranked_features,
                 covar_set_id,
                 hps_id,
                 params,
@@ -1053,7 +1039,6 @@ def grid_search(df, covar_set_id, hps_id, ranked_features):
             hps_id,
             args.early_stopping,
             args.infer_holiday,
-            ranked_features,
         )
         futures.append(future)
         # if too much pending task, then slow down for the tasks to be digested.
@@ -1507,7 +1492,6 @@ def univariate_baseline(anchor_df, hps_id, args):
         hps_id,
         args.early_stopping,
         args.infer_holiday,
-        None,
     )
 
 

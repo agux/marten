@@ -65,7 +65,12 @@ def select_randk_covars(df, ranked_features, covar_dist, k):
     sorted_pairs = sorted(enumerate(covar_dist), key=lambda x: x[1], reverse=True)
     top_k_indices = [index for index, _ in sorted_pairs[:k]]
     top_k_features = [ranked_features[i] for i in top_k_indices]
-    columns_to_keep = ["ds", "y"] + top_k_features
+    for f in top_k_features:
+        if "::ta_" in f:
+            # Technical indicators involved
+            columns_to_keep += [c for c in df.columns if c.startswith(f + "_")]
+        else:
+            columns_to_keep.append(f)
     return df[columns_to_keep]
 
 
