@@ -80,10 +80,10 @@ class BaseModel(ABC):
         self.device = None
         self.model_args = None
         self.accelerator_lock = None
-        
+
         load_dotenv()
-        self.device_lock_release_delay = os.getenv("DEVICE_LOCK_RELEASE_DELAY", 2)
-        self.device_lock_release_delay_large = os.getenv("DEVICE_LOCK_RELEASE_DELAY_LARGE", 5)
+        self.device_lock_release_delay = float(os.getenv("DEVICE_LOCK_RELEASE_DELAY", 2))
+        self.device_lock_release_delay_large = float(os.getenv("DEVICE_LOCK_RELEASE_DELAY_LARGE", 5))
 
     def is_baseline(self, **kwargs: Any) -> bool:
         """
