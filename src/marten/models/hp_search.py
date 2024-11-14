@@ -1116,9 +1116,9 @@ def _covar_metric(
     min_date = min(dates).strftime("%Y-%m-%d")
     cutoff_date = max(dates).strftime("%Y-%m-%d")
 
-    features = _remove_measured_features(
-        args.model, anchor_symbol, cov_table, features, cutoff_date
-    )
+    # features = _remove_measured_features(
+    #     args.model, anchor_symbol, cov_table, features, cutoff_date
+    # )
 
     if len(features) == 0:
         logger.info(

@@ -139,7 +139,7 @@ class BaseModel(ABC):
             lock_acquired = None
             if accelerator in ("gpu", "auto") and (
                 not self._check_cpu()
-                or random.randint(0, 100) >  30 + 10 * gpu_tried
+                or random.randint(0, 100) >  50 + 10 * gpu_tried
             ):
                 lock = Lock(gpu_lock_key)
                 gpu_tried += 1
@@ -197,7 +197,7 @@ class BaseModel(ABC):
         self.release_accelerator_lock()
         lock = self._lock_accelerator(accelerator)
         accelerator = accelerator if "::GPU" in lock.name else "cpu"
-        self.release_accelerator_lock(1 if self.is_baseline(**self.model_args) else 3)
+        self.release_accelerator_lock(2 if self.is_baseline(**self.model_args) else 3)
         return accelerator
 
     def _evaluate_cross_validation(self, df, metric):
