@@ -156,14 +156,14 @@ class BaseModel(ABC):
                 gpu_tried += 1
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
                     lock_acquired = lock
-                    get_logger().info("lock acquired: %s", lock_acquired.name)
+                    get_logger().debug("lock acquired: %s", lock_acquired.name)
 
             if lock_acquired is None and self._check_cpu():
                 lock = Lock(cpu_lock_key)
                 gpu_tried = max(0, gpu_tried - 0.8)
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
                     lock_acquired = lock
-                    get_logger().info("lock acquired: %s", lock_acquired.name)
+                    get_logger().debug("lock acquired: %s", lock_acquired.name)
 
             if lock_acquired is None:
                 continue
@@ -341,7 +341,7 @@ class BaseModel(ABC):
             kwargs["devices"] = "auto"
         self.model_args = kwargs
         try:
-            get_logger().info("training with kwargs: %s", kwargs)
+            get_logger().debug("training with kwargs: %s", kwargs)
             model_config = self._train(df, **kwargs)
         except Exception as e:
             self.release_accelerator_lock()
