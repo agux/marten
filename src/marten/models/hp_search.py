@@ -237,7 +237,7 @@ def _covar_symbols_from_table(
         select
             t.symbol symbol, count(*) num
         from
-            {table} t
+            {table[:-5] if table.endswith("_view") else table} t
         where
             t.date in %(dates)s
             and {feature} is not null

@@ -399,7 +399,7 @@ def wait_gpu(util_threshold=80, vram_threshold=80, stop_at=None):
     util = torch.cuda.utilization()
     mu = torch.cuda.memory_usage()
     keep_waiting = util > 0 and (util >= util_threshold or mu >= vram_threshold)
-    get_logger().info("gpu: %s/%s, vram: %s/%s, keep_waiting: %s", util, util_threshold, mu, vram_threshold, keep_waiting)
+    get_logger().debug("gpu: %s/%s, vram: %s/%s, keep_waiting: %s", util, util_threshold, mu, vram_threshold, keep_waiting)
     return keep_waiting
 
 
@@ -409,7 +409,7 @@ def wait_cpu(util_threshold=80, mem_threshold=80, stop_at=None):
     cpu_util = psutil.cpu_percent(1)
     mem_util = psutil.virtual_memory().percent
     keep_waiting = cpu_util >= util_threshold or mem_util >= mem_threshold
-    get_logger().info(
+    get_logger().debug(
         "cpu: %s/%s, mem: %s/%s, keep_waiting: %s",
         cpu_util,
         util_threshold,

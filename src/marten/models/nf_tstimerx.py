@@ -64,13 +64,13 @@ class TSMixerxModel(BaseModel):
 
     def gpu_threshold(self) -> Tuple[float, float]:
         if self.is_baseline(**self.model_args):
-            return 70, 50
+            return 60, 50
         else:
             return 35, 35
 
     def cpu_threshold(self) -> Tuple[float, float]:
         if self.is_baseline(**self.model_args):
-            return 75, 75
+            return 70, 70
         else:
             return 50, 50
 
