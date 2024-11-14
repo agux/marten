@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from types import SimpleNamespace
 from typing import Any, Tuple, List, Type
+from dotenv import load_dotenv
+import os
 import time
 import socket
 import random
@@ -78,6 +80,10 @@ class BaseModel(ABC):
         self.device = None
         self.model_args = None
         self.accelerator_lock = None
+        
+        load_dotenv()
+        self.device_lock_release_delay = os.getenv("DEVICE_LOCK_RELEASE_DELAY", 2)
+        self.device_lock_release_delay_large = os.getenv("DEVICE_LOCK_RELEASE_DELAY_LARGE", 5)
 
     def is_baseline(self, **kwargs: Any) -> bool:
         """
@@ -197,7 +203,11 @@ class BaseModel(ABC):
         self.release_accelerator_lock()
         lock = self._lock_accelerator(accelerator)
         accelerator = accelerator if "::GPU" in lock.name else "cpu"
-        self.release_accelerator_lock(2 if self.is_baseline(**self.model_args) else 3)
+        self.release_accelerator_lock(
+            self.device_lock_release_delay
+            if self.is_baseline(**self.model_args)
+            else self.device_lock_release_delay_large
+        )
         return accelerator
 
     def _evaluate_cross_validation(self, df, metric):
