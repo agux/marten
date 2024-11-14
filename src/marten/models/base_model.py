@@ -145,7 +145,7 @@ class BaseModel(ABC):
             lock_acquired = None
             if accelerator in ("gpu", "auto") and (
                 not self._check_cpu()
-                or random.randint(0, 100) >  50 + 10 * gpu_tried
+                or random.randint(0, 100) >  50 + 15 * gpu_tried
             ):
                 lock = Lock(gpu_lock_key)
                 gpu_tried += 1
@@ -155,7 +155,7 @@ class BaseModel(ABC):
 
             if lock_acquired is None and self._check_cpu():
                 lock = Lock(cpu_lock_key)
-                gpu_tried = max(0, gpu_tried - 1)
+                gpu_tried = max(0, gpu_tried - 0.8)
                 if lock.acquire(timeout=f"{lock_wait_time}s"):
                     lock_acquired = lock
                     get_logger().debug("lock acquired: %s", cpu_lock_key)
