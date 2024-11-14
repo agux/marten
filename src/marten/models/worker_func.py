@@ -165,7 +165,7 @@ def fit_with_covar(
             covar_col = (
                 feature if feature in merged_df.columns else f"{feature}_{cov_symbol}"
             )
-        nan_count = merged_df[covar_col].isna().sum().sum()
+        nan_count = int(merged_df[covar_col].isna().sum().sum())
         if nan_count >= merged_df.shape[0] * merged_df.shape[1] * 0.5:
             logger.info(
                 "too much missing values in %s: %s, skipping", covar_col, nan_count
