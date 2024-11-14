@@ -156,14 +156,14 @@ class BaseModel(ABC):
                 gpu_tried += 1
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
                     lock_acquired = lock
-                    get_logger().info("lock acquired: %s", gpu_lock_key)
+                    get_logger().info("lock acquired: %s", lock_acquired.name)
 
             if lock_acquired is None and self._check_cpu():
                 lock = Lock(cpu_lock_key)
                 gpu_tried = max(0, gpu_tried - 0.8)
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
                     lock_acquired = lock
-                    get_logger().info("lock acquired: %s", cpu_lock_key)
+                    get_logger().info("lock acquired: %s", lock_acquired.name)
 
             if lock_acquired is None:
                 continue
@@ -206,7 +206,7 @@ class BaseModel(ABC):
 
         self.release_accelerator_lock()
         lock = self._lock_accelerator(accelerator)
-        accelerator = accelerator if "::GPU" in lock.name else "cpu"
+        accelerator = "gpu" if "::GPU" in lock.name else "cpu"
         self.release_accelerator_lock(
             self.device_lock_release_delay
             if self.is_baseline(**self.model_args)
@@ -335,11 +335,12 @@ class BaseModel(ABC):
         kwargs["accelerator"] = accelerator
         if accelerator == "cpu":
             optimize_torch(self.torch_cpu_ratio())
-            kwargs["devices"] = 1
+            kwargs["devices"] = -1
         else:
             kwargs["devices"] = "auto"
         self.model_args = kwargs
         try:
+            get_logger().info("training with kwargs: %s", kwargs)
             model_config = self._train(df, **kwargs)
         except Exception as e:
             self.release_accelerator_lock()
