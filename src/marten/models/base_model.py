@@ -141,11 +141,9 @@ class BaseModel(ABC):
     def _lock_accelerator(self, accelerator) -> Lock:
         gpu_lock_key = f"""{socket.gethostname()}::GPU-auto"""
         cpu_lock_key = f"""{socket.gethostname()}::CPU"""
-        resource_wait_time = 3  # seconds, waiting for compute resource
-        lock_wait_time = 2
         gpu_ut, gpu_rt = self.gpu_threshold()
         cpu_ut, cpu_rt = self.cpu_threshold()
-        cpu_ratio_incr = 20 if self.is_baseline(**self.model_args) else 15
+        cpu_ratio_incr = 25 if self.is_baseline(**self.model_args) else 15
 
         gpu_tried = 0
         while True:
@@ -156,21 +154,21 @@ class BaseModel(ABC):
             ):
                 lock = Lock(gpu_lock_key)
                 gpu_tried += 1
-                if lock.acquire(timeout=f"{lock_wait_time}s"):
+                if lock.acquire(timeout=f"{self.lock_wait_time}s"):
                     lock_acquired = lock
                     get_logger().debug("lock acquired: %s", gpu_lock_key)
 
             if lock_acquired is None and self._check_cpu():
                 lock = Lock(cpu_lock_key)
                 gpu_tried = max(0, gpu_tried - 0.8)
-                if lock.acquire(timeout=f"{lock_wait_time}s"):
+                if lock.acquire(timeout=f"{self.lock_wait_time}s"):
                     lock_acquired = lock
                     get_logger().debug("lock acquired: %s", cpu_lock_key)
 
             if lock_acquired is None:
                 continue
 
-            stop_at = time.time() + resource_wait_time
+            stop_at = time.time() + self.resource_wait_time
             if lock_acquired.name == gpu_lock_key:
                 while wait_gpu(gpu_ut, gpu_rt, stop_at):
                     time.sleep(1)
