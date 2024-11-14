@@ -154,7 +154,7 @@ class BaseModel(ABC):
             ):
                 lock = Lock(gpu_lock_key)
                 gpu_tried += 1
-                if lock.acquire(timeout=f"{self.lock_wait_time}s"):
+                if lock.acquire(timeout=f"{self.lock_wait_time}"):
                     lock_acquired = lock
                     get_logger().debug("lock acquired: %s", gpu_lock_key)
 
