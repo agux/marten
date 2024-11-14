@@ -335,7 +335,8 @@ class BaseModel(ABC):
         kwargs["accelerator"] = accelerator
         if accelerator == "cpu":
             optimize_torch(self.torch_cpu_ratio())
-            kwargs["devices"] = -1
+            # NOTE: `devices` selected with `CPUAccelerator` should be an int > 0.
+            kwargs["devices"] = 1
         else:
             kwargs["devices"] = "auto"
         self.model_args = kwargs
