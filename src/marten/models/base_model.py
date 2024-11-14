@@ -197,7 +197,7 @@ class BaseModel(ABC):
         self.release_accelerator_lock()
         lock = self._lock_accelerator(accelerator)
         accelerator = accelerator if "::GPU" in lock.name else "cpu"
-        self.release_accelerator_lock(2 if self.is_baseline(**self.model_args) else 7)
+        self.release_accelerator_lock(1 if self.is_baseline(**self.model_args) else 3)
         return accelerator
 
     def _evaluate_cross_validation(self, df, metric):
