@@ -139,7 +139,7 @@ class BaseModel(ABC):
             lock_acquired = None
             if accelerator in ("gpu", "auto") and (
                 not self._check_cpu()
-                or random.randint(0, 100) > min(50, 10 * gpu_tried)
+                or random.randint(0, 100) >  30 + 10 * gpu_tried
             ):
                 lock = Lock(gpu_lock_key)
                 gpu_tried += 1
