@@ -156,14 +156,14 @@ class BaseModel(ABC):
                 gpu_tried += 1
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
                     lock_acquired = lock
-                    get_logger().debug("lock acquired: %s", gpu_lock_key)
+                    get_logger().info("lock acquired: %s", gpu_lock_key)
 
             if lock_acquired is None and self._check_cpu():
                 lock = Lock(cpu_lock_key)
                 gpu_tried = max(0, gpu_tried - 0.8)
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
                     lock_acquired = lock
-                    get_logger().debug("lock acquired: %s", cpu_lock_key)
+                    get_logger().info("lock acquired: %s", cpu_lock_key)
 
             if lock_acquired is None:
                 continue
@@ -180,7 +180,6 @@ class BaseModel(ABC):
                 continue
 
             if time.time() <= stop_at:
-                # rejoin to the pool of dask executor threads
                 break
 
             release_lock(lock_acquired, 0)
