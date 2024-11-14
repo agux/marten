@@ -84,6 +84,12 @@ class BaseModel(ABC):
         load_dotenv()
         self.device_lock_release_delay = float(os.getenv("DEVICE_LOCK_RELEASE_DELAY", 2))
         self.device_lock_release_delay_large = float(os.getenv("DEVICE_LOCK_RELEASE_DELAY_LARGE", 5))
+        self.resource_wait_time = float(
+            os.getenv("RESOURCE_WAIT_TIME", 3)
+        )  # seconds, waiting for compute resource
+        self.lock_wait_time = (
+            os.getenv("LOCK_WAIT_TIME", "2s")
+        )
 
     def is_baseline(self, **kwargs: Any) -> bool:
         """
@@ -139,13 +145,14 @@ class BaseModel(ABC):
         lock_wait_time = 2
         gpu_ut, gpu_rt = self.gpu_threshold()
         cpu_ut, cpu_rt = self.cpu_threshold()
+        cpu_ratio_incr = 20 if self.is_baseline(**self.model_args) else 15
 
         gpu_tried = 0
         while True:
             lock_acquired = None
             if accelerator in ("gpu", "auto") and (
                 not self._check_cpu()
-                or random.randint(0, 100) >  50 + 15 * gpu_tried
+                or random.randint(0, 100) > 50 + cpu_ratio_incr * gpu_tried
             ):
                 lock = Lock(gpu_lock_key)
                 gpu_tried += 1
