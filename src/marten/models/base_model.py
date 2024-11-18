@@ -160,7 +160,7 @@ class BaseModel(ABC):
 
             if lock_acquired is None and self._check_cpu():
                 lock = Lock(cpu_lock_key)
-                gpu_tried = gpu_tried - 0.8
+                gpu_tried -= 0.8
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
                     lock_acquired = lock
                     get_logger().debug("lock acquired: %s", lock_acquired.name)
