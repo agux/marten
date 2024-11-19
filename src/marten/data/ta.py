@@ -1,3 +1,4 @@
+import time
 import pandas as pd
 from sqlalchemy import text
 from dask.distributed import worker_client, get_worker
@@ -28,6 +29,13 @@ def tofl(value, mapping=None):
         return float(value) if mapping is None else mapping[value]
 
 def calc_ta():
+    t_start = time.time()
+    logger.info("Starting to recalculate technical indicators...")
+
+    with worker_client() as client:
+        n_workers = len(client.scheduler_info()["workers"])
+        client.cluster.scale(max(1, n_workers / 2))
+
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
@@ -102,6 +110,8 @@ def calc_ta():
             await_futures(futures, False, multiplier=1.5)
 
         await_futures(futures)
+
+    logger.info("Technical indicators time taken: %s seconds", time.time() - t_start)
 
     return total
 

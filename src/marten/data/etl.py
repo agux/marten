@@ -160,16 +160,10 @@ def main(_args):
     await_futures(futures)
     logger.info("ETL Time taken: %s seconds", time.time() - t_start)
 
-    t2_start = time.time()
-    logger.info("Starting to recalculate technical indicators...")
-    
-    n_workers = len(client.scheduler_info()["workers"])
-    client.cluster.scale(max(1, n_workers/2))
-
     run(calc_ta)
 
     await_futures(futures)
-    logger.info("Technical indicators time taken: %s seconds", time.time() - t2_start)
+    
     logger.info("Total time taken: %s seconds", time.time() - t_start)
 
     if client is not None:

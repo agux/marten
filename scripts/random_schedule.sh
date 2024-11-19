@@ -14,4 +14,11 @@ MINUTE=$((RANDOM % 60))
 TIME=$(printf "%02d:%02d" $HOUR $MINUTE)
 
 # Schedule the task using at
-echo "cd $SCRIPT_DIR; bash $ACTUAL_SCRIPT >> $SCRIPT_DIR/random_schedule.log 2>&1" | at $TIME
+at $TIME <<EOT
+cd $SCRIPT_DIR
+if [ \$(date +\%u) -eq 6 ]; then
+    bash $ACTUAL_SCRIPT >> $SCRIPT_DIR/random_schedule.log 2>&1
+else
+    bash $ACTUAL_SCRIPT --exclude=calc_ta >> $SCRIPT_DIR/random_schedule.log 2>&1
+fi
+EOT
