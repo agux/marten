@@ -167,7 +167,7 @@ class BaseModel(ABC):
             cu, _ = cpu_util()
             gu, _ = gpu_util()
 
-            if cu > gu:
+            if cu >= gu:
                 lock_gpu()
                 lock_cpu()
             else:

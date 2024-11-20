@@ -414,13 +414,13 @@ def cpu_util():
 def wait_cpu(util_threshold=80, mem_threshold=80, stop_at=None):
     if stop_at is not None and time.time() > stop_at:
         return False
-    cpu_util, mem_util = cpu_util()
-    keep_waiting = cpu_util >= util_threshold or mem_util >= mem_threshold
+    util, mem = cpu_util()
+    keep_waiting = util >= util_threshold or mem >= mem_threshold
     get_logger().debug(
         "cpu: %s/%s, mem: %s/%s, keep_waiting: %s",
-        cpu_util,
+        util,
         util_threshold,
-        mem_util,
+        mem,
         mem_threshold,
         keep_waiting,
     )
