@@ -85,8 +85,8 @@ class BaseModel(ABC):
         self.device_lock_release_delay = float(os.getenv("DEVICE_LOCK_RELEASE_DELAY", 2))
         self.device_lock_release_delay_large = float(os.getenv("DEVICE_LOCK_RELEASE_DELAY_LARGE", 5))
         self.resource_wait_time = float(
-            os.getenv("RESOURCE_WAIT_TIME", 3)
-        )  # seconds, waiting for compute resource
+            os.getenv("RESOURCE_WAIT_TIME", 5)
+        )  # seconds, waiting for compute resource. For CPU it's not recommended to be less than 5s
         self.lock_wait_time = (
             os.getenv("LOCK_WAIT_TIME", "2s")
         )
