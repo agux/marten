@@ -21,7 +21,7 @@ from dask.distributed import get_worker, Lock
 
 from marten.utils.logger import get_logger
 from marten.utils.trainer import optimize_torch, is_cuda_error
-from marten.utils.worker import release_lock, wait_gpu, wait_cpu, restart_worker, workload_stage
+from marten.utils.worker import release_lock, wait_gpu, wait_cpu, restart_worker, workload_stage, cpu_util, gpu_util
 
 
 @_base_docstring
@@ -143,27 +143,34 @@ class BaseModel(ABC):
         cpu_lock_key = f"""{socket.gethostname()}::CPU"""
         gpu_ut, gpu_rt = self.gpu_threshold()
         cpu_ut, cpu_rt = self.cpu_threshold()
-        cpu_ratio_incr = 25 if self.is_baseline(**self.model_args) else 15
+        lock_acquired = None
 
-        gpu_tried = 0
-        while True:
-            lock_acquired = None
-            if accelerator in ("gpu", "auto") and (
-                not self._check_cpu()
-                or random.randint(0, 100) > 50 + cpu_ratio_incr * gpu_tried
-            ):
-                lock = Lock(gpu_lock_key)
-                gpu_tried += 1
-                if lock.acquire(timeout=f"{self.lock_wait_time}"):
-                    lock_acquired = lock
-                    get_logger().debug("lock acquired: %s", lock_acquired.name)
-
+        def lock_cpu():
             if lock_acquired is None and self._check_cpu():
                 lock = Lock(cpu_lock_key)
-                gpu_tried -= 0.8
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
                     lock_acquired = lock
                     get_logger().debug("lock acquired: %s", lock_acquired.name)
+
+        def lock_gpu():
+            if accelerator in ("gpu", "auto"):
+                lock = Lock(gpu_lock_key)
+                if lock.acquire(timeout=f"{self.lock_wait_time}"):
+                    lock_acquired = lock
+                    get_logger().debug("lock acquired: %s", lock_acquired.name)
+
+        while True:
+            lock_acquired = None
+
+            cpu_util, _ = cpu_util()
+            gpu_util, _ = gpu_util()
+
+            if cpu_util > gpu_util:
+                lock_gpu()
+                lock_cpu()
+            else:
+                lock_cpu()
+                lock_gpu()
 
             if lock_acquired is None:
                 continue

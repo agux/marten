@@ -393,21 +393,28 @@ def release_lock(lock: Lock, after=10):
     else:
         threading.Timer(after, _release).start()
 
+def gpu_util():
+    util = torch.cuda.utilization()
+    mu = torch.cuda.memory_usage()
+    return util, mu
+
 def wait_gpu(util_threshold=80, vram_threshold=80, stop_at=None):
     if stop_at is not None and time.time() > stop_at:
         return False
-    util = torch.cuda.utilization()
-    mu = torch.cuda.memory_usage()
+    util, mu = gpu_util()
     keep_waiting = util > 0 and (util >= util_threshold or mu >= vram_threshold)
     get_logger().debug("gpu: %s/%s, vram: %s/%s, keep_waiting: %s", util, util_threshold, mu, vram_threshold, keep_waiting)
     return keep_waiting
 
+def cpu_util():
+    cpu_util = psutil.cpu_percent(1)
+    mem_util = psutil.virtual_memory().percent
+    return cpu_util, mem_util
 
 def wait_cpu(util_threshold=80, mem_threshold=80, stop_at=None):
     if stop_at is not None and time.time() > stop_at:
         return False
-    cpu_util = psutil.cpu_percent(1)
-    mem_util = psutil.virtual_memory().percent
+    cpu_util, mem_util = cpu_util()
     keep_waiting = cpu_util >= util_threshold or mem_util >= mem_threshold
     get_logger().debug(
         "cpu: %s/%s, mem: %s/%s, keep_waiting: %s",
