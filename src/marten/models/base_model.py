@@ -162,10 +162,10 @@ class BaseModel(ABC):
         while True:
             lock_acquired = None
 
-            cpu_util, _ = cpu_util()
-            gpu_util, _ = gpu_util()
+            cu, _ = cpu_util()
+            gu, _ = gpu_util()
 
-            if cpu_util > gpu_util:
+            if cu > gu:
                 lock_gpu()
                 lock_cpu()
             else:
