@@ -146,6 +146,7 @@ class BaseModel(ABC):
         lock_acquired = None
 
         def lock_cpu():
+            nonlocal lock_acquired
             if lock_acquired is None and self._check_cpu():
                 lock = Lock(cpu_lock_key)
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
@@ -153,7 +154,8 @@ class BaseModel(ABC):
                     get_logger().debug("lock acquired: %s", lock_acquired.name)
 
         def lock_gpu():
-            if accelerator in ("gpu", "auto"):
+            nonlocal lock_acquired
+            if lock_acquired is None and accelerator in ("gpu", "auto"):
                 lock = Lock(gpu_lock_key)
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
                     lock_acquired = lock
