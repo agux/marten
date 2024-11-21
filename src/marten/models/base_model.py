@@ -21,7 +21,15 @@ from dask.distributed import get_worker, Lock
 
 from marten.utils.logger import get_logger
 from marten.utils.trainer import optimize_torch, is_cuda_error
-from marten.utils.worker import release_lock, wait_gpu, wait_cpu, restart_worker, workload_stage, cpu_util, gpu_util
+from marten.utils.worker import (
+    release_lock,
+    wait_gpu,
+    wait_cpu,
+    restart_worker,
+    workload_stage,
+    cpu_util,
+    gpu_util,
+)
 
 
 @_base_docstring
@@ -82,14 +90,16 @@ class BaseModel(ABC):
         self.accelerator_lock = None
 
         load_dotenv()
-        self.device_lock_release_delay = float(os.getenv("DEVICE_LOCK_RELEASE_DELAY", 2))
-        self.device_lock_release_delay_large = float(os.getenv("DEVICE_LOCK_RELEASE_DELAY_LARGE", 5))
+        self.device_lock_release_delay = float(
+            os.getenv("DEVICE_LOCK_RELEASE_DELAY", 2)
+        )
+        self.device_lock_release_delay_large = float(
+            os.getenv("DEVICE_LOCK_RELEASE_DELAY_LARGE", 5)
+        )
         self.resource_wait_time = float(
             os.getenv("RESOURCE_WAIT_TIME", 5)
-        )  # seconds, waiting for compute resource. For CPU it's not recommended to be less than 5s
-        self.lock_wait_time = (
-            os.getenv("LOCK_WAIT_TIME", "2s")
-        )
+        )  # seconds, waiting for compute resource.
+        self.lock_wait_time = os.getenv("LOCK_WAIT_TIME", "2s")
 
     def is_baseline(self, **kwargs: Any) -> bool:
         """
@@ -168,9 +178,11 @@ class BaseModel(ABC):
             gu, _ = gpu_util()
 
             if cu >= gu:
+                get_logger().info("%s >= %s, trying GPU lock first")
                 lock_gpu()
                 lock_cpu()
             else:
+                get_logger().info("%s < %s, trying CPU lock first")
                 lock_cpu()
                 lock_gpu()
 
@@ -188,9 +200,17 @@ class BaseModel(ABC):
                 release_lock(lock_acquired, 0)
                 continue
 
-            if time.time() <= stop_at:
+            now = time.time()
+            if now <= stop_at:
                 break
 
+            get_logger().warning(
+                "resource wait timeout (%ss): %s > %s, %s",
+                self.resource_wait_time,
+                now,
+                stop_at,
+                lock_acquired.name,
+            )
             release_lock(lock_acquired, 0)
 
         self.accelerator_lock = lock_acquired
@@ -355,7 +375,9 @@ class BaseModel(ABC):
         except Exception as e:
             self.release_accelerator_lock()
             if is_cuda_error(e):
-                get_logger().warning("encountered CUDA error with train params: %s", kwargs)
+                get_logger().warning(
+                    "encountered CUDA error with train params: %s", kwargs
+                )
                 restart_worker(e)
             elif accelerator != "cpu":
                 # fallback to train on CPU
@@ -365,9 +387,7 @@ class BaseModel(ABC):
                 self.model_args = kwargs
                 model_config = self._train(df, **kwargs)
             else:
-                get_logger().warning(
-                    "encountered error with train params: %s", kwargs
-                )
+                get_logger().warning("encountered error with train params: %s", kwargs)
                 raise e
 
         metrics = self._get_metrics(**model_config)
@@ -377,7 +397,7 @@ class BaseModel(ABC):
         return metrics
 
     @abstractmethod
-    def trainable_on_cpu(self, **kwargs: Any) ->bool:
+    def trainable_on_cpu(self, **kwargs: Any) -> bool:
         """
         Indicates whether the model with the given parameter can be trained on CPU if the accelerator is busy.
         """
@@ -445,7 +465,7 @@ class BaseModel(ABC):
     def baseline_params(self) -> dict:
         """
         Get the baseline parameters for the model.
-        
+
         Returns:
             dict: A dictionary containing the baseline parameters for the model.
         """
@@ -458,7 +478,7 @@ class BaseModel(ABC):
 
         Args:
             forecast (pandas.DataFrame): The forecast dataframe to be trimmed.
-        
+
         Returns:
             pandas.DataFrame: The trimmed forecast dataframe.
         """
@@ -484,11 +504,11 @@ class BaseModel(ABC):
     def predict(self, df: pd.DataFrame, **kwargs: Any) -> pd.DataFrame:
         """
         Make predictions based on the given time series dataframe and parameters.
-        
+
         Args:
             df (pandas.DataFrame): Time series dataframe of the dependent variable, optionally paired with covariate(s).
             **kwargs (Any): Additional context parameters.
-        
+
         Returns:
             pandas.DataFrame: The predictions dataframe. It must contain these columns
                 - ds: The date of the prediction
@@ -511,7 +531,7 @@ class BaseModel(ABC):
 
         Args:
             **kwargs (Any): Additional context parameters.
-        
+
         Returns:
             str: The hyper-parameter search space in a format suitable for the optimization library and executable by eval().
         """
@@ -521,7 +541,7 @@ class BaseModel(ABC):
     def accept_missing_data(self) -> bool:
         """
         Check if the model can handle missing data in the input.
-        
+
         Returns:
             bool: True if the model can handle missing data, False otherwise.
         """
