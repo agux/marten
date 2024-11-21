@@ -178,11 +178,11 @@ class BaseModel(ABC):
             gu, _ = gpu_util()
 
             if cu >= gu:
-                get_logger().info("%s >= %s, trying GPU lock first", cu, gu)
+                get_logger().debug("%s >= %s, trying GPU lock first", cu, gu)
                 lock_gpu()
                 lock_cpu()
             else:
-                get_logger().info("%s < %s, trying CPU lock first", cu, gu)
+                get_logger().debug("%s < %s, trying CPU lock first", cu, gu)
                 lock_cpu()
                 lock_gpu()
 
@@ -204,7 +204,7 @@ class BaseModel(ABC):
             if now <= stop_at:
                 break
 
-            get_logger().warning(
+            get_logger().debug(
                 "resource wait timeout (%ss): %s > %s, %s",
                 self.resource_wait_time,
                 now,
