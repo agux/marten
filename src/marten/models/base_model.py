@@ -178,11 +178,11 @@ class BaseModel(ABC):
             gu, _ = gpu_util()
 
             if cu >= gu:
-                get_logger().info("%s >= %s, trying GPU lock first")
+                get_logger().info("%s >= %s, trying GPU lock first", cu, gu)
                 lock_gpu()
                 lock_cpu()
             else:
-                get_logger().info("%s < %s, trying CPU lock first")
+                get_logger().info("%s < %s, trying CPU lock first", cu, gu)
                 lock_cpu()
                 lock_gpu()
 
@@ -192,10 +192,10 @@ class BaseModel(ABC):
             stop_at = time.time() + self.resource_wait_time
             if lock_acquired.name == gpu_lock_key:
                 while wait_gpu(gpu_ut, gpu_rt, stop_at):
-                    time.sleep(1)
+                    time.sleep(0.2)
             elif self._check_cpu():  # CPU
                 while wait_cpu(cpu_ut, cpu_rt, stop_at):
-                    time.sleep(1)
+                    time.sleep(0.2)
             else:
                 release_lock(lock_acquired, 0)
                 continue

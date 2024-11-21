@@ -407,7 +407,7 @@ def wait_gpu(util_threshold=80, vram_threshold=80, stop_at=None):
     return keep_waiting
 
 def cpu_util():
-    cpu_util = psutil.cpu_percent(1)
+    cpu_util = psutil.cpu_percent(0.1)
     mem_util = psutil.virtual_memory().percent
     return cpu_util, mem_util
 
