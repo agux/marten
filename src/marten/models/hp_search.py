@@ -231,8 +231,16 @@ def _covar_symbols_from_table(
                     and ts_date = %(ts_date)s
             """
             params["model"] = model
+
     # get a list of symbols from the given table, of which metrics are not recorded yet
-    exclude = "" if table.startswith("ta_") else "and t.symbol <> %(anchor_symbol)s"
+    if table.startswith("ta_"):
+        exclude = ""
+        column_names = columns_with_prefix(alchemyEngine, table, feature)
+        notnull = "and (" + "or ".join([f'{c} is not null' for c in column_names]) + ")"
+    else:
+        exclude = "and t.symbol <> %(anchor_symbol)s"
+        notnull= f"and {feature} is not null"
+
     query = f"""
         select
             t.symbol symbol, count(*) num
@@ -240,7 +248,7 @@ def _covar_symbols_from_table(
             {table} t
         where
             t.date in %(dates)s
-            and {feature} is not null
+            {notnull}
             {exclude}
             and t.symbol not in (
                 {sub_query}
