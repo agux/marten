@@ -79,7 +79,7 @@ def merge_covar_df(
             column_names = columns_with_prefix(alchemyEngine, cov_table, feature)
             columns = ", ".join([f'{c} "{c}_{cov_symbol}"' for c in column_names])
             query = f"""
-                select date ds, {columns}"
+                select date ds, {columns}
                 from {cov_table}
                 where symbol = %(cov_symbol)s
                 and date >= %(min_date)s
