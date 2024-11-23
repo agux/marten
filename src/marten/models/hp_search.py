@@ -195,7 +195,9 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None, anchor_table=
 def _covar_symbols_from_table(
     model, anchor_symbol, dates, table, feature, ts_date, min_count
 ):
-    global alchemyEngine, logger, random_seed
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+
     params = {
         "table": table,
         "anchor_symbol": anchor_symbol,
@@ -236,7 +238,7 @@ def _covar_symbols_from_table(
     if table.startswith("ta_"):
         exclude = ""
         column_names = columns_with_prefix(alchemyEngine, table, feature)
-        notnull = "and (" + "or ".join([f'{c} is not null' for c in column_names]) + ")"
+        notnull = "and (" + " or ".join([f'{c} is not null' for c in column_names]) + ")"
     else:
         exclude = "and t.symbol <> %(anchor_symbol)s"
         notnull= f"and {feature} is not null"
@@ -259,6 +261,7 @@ def _covar_symbols_from_table(
 
     cov_symbols = pd.read_sql(query, alchemyEngine, params=params)
     cov_symbols = cov_symbols[["symbol"]]
+    cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
 
     logger.info(
         "Identified %s candidate feature (%s) from table %s",
@@ -267,7 +270,7 @@ def _covar_symbols_from_table(
         table,
     )
 
-    return cov_symbols
+    return cov_symbols, feature
 
 
 def _pair_endogenous_covar_metrics(
@@ -317,7 +320,7 @@ def _pair_covar_metrics(
 ):
     global client, futures
 
-    for symbol in cov_symbols["symbol"]:
+    for symbol in cov_symbols:
         logger.debug(
             "submitting fit_with_covar:\nanchor_symbol:%s\ncov_table:%s\ncov_symbol:%s\nfeature:%s",
             anchor_symbol,
@@ -1121,6 +1124,8 @@ def _remove_measured_features(model, anchor_symbol, cov_table, features, ts_date
 def _covar_metric(
     anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
 ):
+    global client
+
     min_date = min(dates).strftime("%Y-%m-%d")
     cutoff_date = max(dates).strftime("%Y-%m-%d")
 
@@ -1137,15 +1142,34 @@ def _covar_metric(
         )
         return None
 
+    cov_symbols_fut = []
+
     for feature in features:
         match cov_table:
             case "bond_metrics_em" | "bond_metrics_em_view":
                 # construct a dummy cov_symbols dataframe with `symbol` column and the value 'bond'.
-                cov_symbols = pd.DataFrame({"symbol": ["bond"]})
+                _pair_covar_metrics(
+                    anchor_symbol,
+                    anchor_df,
+                    cov_table,
+                    ["bond"],
+                    feature,
+                    min_date,
+                    args,
+                )
             case "currency_boc_safe_view":
-                cov_symbols = pd.DataFrame({"symbol": ["currency_exchange"]})
+                _pair_covar_metrics(
+                    anchor_symbol,
+                    anchor_df,
+                    cov_table,
+                    ["currency_exchange"],
+                    feature,
+                    min_date,
+                    args,
+                )
             case _:
-                cov_symbols = _covar_symbols_from_table(
+                cov_symbols_fut.append(client.submit(
+                    _covar_symbols_from_table,
                     args.model,
                     anchor_symbol,
                     dates,
@@ -1153,11 +1177,24 @@ def _covar_metric(
                     feature,
                     cutoff_date,
                     min_count,
-                )
+                ))
+                # cov_symbols = _covar_symbols_from_table(
+                #     args.model,
+                #     anchor_symbol,
+                #     dates,
+                #     cov_table,
+                #     feature,
+                #     cutoff_date,
+                #     min_count,
+                # )
                 # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
-                cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
+                # cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
 
-        if not cov_symbols.empty:
+    # if `results` list is not empty
+    
+    if not cov_symbols_fut:
+        results = client.gather(cov_symbols_fut)
+        for cov_symbols, feature in results:
             _pair_covar_metrics(
                 anchor_symbol,
                 anchor_df,
