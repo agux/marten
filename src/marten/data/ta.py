@@ -29,15 +29,15 @@ def tofl(value, mapping=None):
         return float(value) if mapping is None else mapping[value]
 
 def calc_ta():
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+    
     t_start = time.time()
     logger.info("Starting to recalculate technical indicators...")
 
     with worker_client() as client:
         n_workers = len(client.scheduler_info()["workers"])
         client.cluster.scale(max(1, n_workers / 2))
-
-    worker = get_worker()
-    alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
     total = 0
     futures = []
