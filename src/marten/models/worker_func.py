@@ -2152,8 +2152,8 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     logger.info("Starting covariate loss calculation")
     t1_start = time.time()
     prep_covar_baseline_metrics(anchor_df, anchor_table, args)
-    logger.debug("waiting dask futures: %s", len(hps.futures))
-    await_futures(hps.futures, hard_wait=True)
+    logger.info("waiting dask futures: %s", len(hps.futures))
+    await_futures(hps.futures, True)
 
     logger.info(
         "%s covariate baseline metric computation completed. Time taken: %s seconds",
