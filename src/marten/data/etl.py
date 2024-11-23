@@ -106,7 +106,12 @@ def run(task, *args, **kwargs):
         future = client.submit(task, *args, **kwargs)
         futures.append(future)
         return future
-    elif name in prog_args.include and name in prog_args.exclude:
+    elif (
+        prog_args.include is not None
+        and prog_args.exclude is not None
+        and name in prog_args.include
+        and name in prog_args.exclude
+    ):
         raise ValueError(
             f"Conflicting options: {name} is given in both --include and --exclude arguments."
         )
@@ -163,7 +168,7 @@ def main(_args):
     run(calc_ta)
 
     await_futures(futures)
-    
+
     logger.info("Total time taken: %s seconds", time.time() - t_start)
 
     if client is not None:
