@@ -1191,8 +1191,6 @@ def _covar_metric(
                 # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
                 # cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
 
-    # if `results` list is not empty
-    
     if not cov_symbols_fut:
         results = client.gather(cov_symbols_fut)
         for cov_symbols, feature in results:
