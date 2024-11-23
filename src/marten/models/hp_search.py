@@ -238,10 +238,12 @@ def _covar_symbols_from_table(
     if table.startswith("ta_"):
         exclude = ""
         column_names = columns_with_prefix(alchemyEngine, table, feature)
-        notnull = "and (" + " or ".join([f'{c} is not null' for c in column_names]) + ")"
+        notnull = (
+            "and (" + " or ".join([f"{c} is not null" for c in column_names]) + ")"
+        )
     else:
         exclude = "and t.symbol <> %(anchor_symbol)s"
-        notnull= f"and {feature} is not null"
+        notnull = f"and {feature} is not null"
 
     query = f"""
         select
@@ -576,7 +578,7 @@ def _load_covar_feature(cov_table, feature, symbols):
                 order by DS asc
             """
             table_feature_df = pd.read_sql(query, alchemyEngine, parse_dates=["ds"])
-        case _ if cov_table.startswith("ta_"): # handle technical indicators table
+        case _ if cov_table.startswith("ta_"):  # handle technical indicators table
             column_names = columns_with_prefix(alchemyEngine, cov_table, feature)
             # query rows from the TA table
             query = f"""
@@ -1125,7 +1127,7 @@ def _remove_measured_features(model, anchor_symbol, cov_table, features, ts_date
 def _covar_metric(
     anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
 ):
-    global client
+    global client, logger
 
     min_date = min(dates).strftime("%Y-%m-%d")
     cutoff_date = max(dates).strftime("%Y-%m-%d")
@@ -1142,6 +1144,10 @@ def _covar_metric(
             cutoff_date,
         )
         return None
+
+    logger.info(
+        "looking for covariate symbols for %s features in %s", len(features), cov_table
+    )
 
     cov_symbols_fut = []
 
@@ -1169,16 +1175,18 @@ def _covar_metric(
                     args,
                 )
             case _:
-                cov_symbols_fut.append(client.submit(
-                    _covar_symbols_from_table,
-                    args.model,
-                    anchor_symbol,
-                    dates,
-                    cov_table,
-                    feature,
-                    cutoff_date,
-                    min_count,
-                ))
+                cov_symbols_fut.append(
+                    client.submit(
+                        _covar_symbols_from_table,
+                        args.model,
+                        anchor_symbol,
+                        dates,
+                        cov_table,
+                        feature,
+                        cutoff_date,
+                        min_count,
+                    )
+                )
                 # cov_symbols = _covar_symbols_from_table(
                 #     args.model,
                 #     anchor_symbol,
