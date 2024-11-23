@@ -94,18 +94,12 @@ def init():
     )
     # client.cluster.scale(workers if workers > 0 else multiprocessing.cpu_count())
 
-
-def run(task, *args, **kwargs):
-    global prog_args, client, futures
-
+def runnable(task):
     name = task.__name__
-
     if (prog_args.include is None or name in prog_args.include) and (
         prog_args.exclude is None or name not in prog_args.exclude
     ):
-        future = client.submit(task, *args, **kwargs)
-        futures.append(future)
-        return future
+        return True
     elif (
         prog_args.include is not None
         and prog_args.exclude is not None
@@ -115,6 +109,16 @@ def run(task, *args, **kwargs):
         raise ValueError(
             f"Conflicting options: {name} is given in both --include and --exclude arguments."
         )
+    else:
+        return False
+
+
+def run(task, *args, **kwargs):
+    global client, futures
+    if runnable(task):
+        future = client.submit(task, *args, **kwargs)
+        futures.append(future)
+        return future
     else:
         return None
 
@@ -165,9 +169,11 @@ def main(_args):
     await_futures(futures)
     logger.info("ETL Time taken: %s seconds", time.time() - t_start)
 
-    run(calc_ta)
-
-    await_futures(futures)
+    if runnable(calc_ta):
+        n_workers = len(client.scheduler_info()["workers"])
+        client.cluster.scale(max(1, n_workers / 2))
+        run(calc_ta)
+        await_futures(futures)
 
     logger.info("Total time taken: %s seconds", time.time() - t_start)
 
