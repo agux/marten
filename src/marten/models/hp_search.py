@@ -264,7 +264,7 @@ def covar_symbols_from_table(
     cov_symbols = pd.read_sql(query, alchemyEngine, params=params)
     cov_symbols = cov_symbols[["symbol"]]
     cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
-    cov_symbols = cov_symbols.tolist()
+    cov_symbols = cov_symbols["symbol"].tolist()
 
     logger.info(
         "Identified %s candidate feature (%s) from table %s",
