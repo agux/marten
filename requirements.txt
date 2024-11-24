@@ -1,4 +1,5 @@
 akshare>=1.13.10
+ipykernel
 exchange_calendars>=4.5.3
 numpy>=1.26.4
 pandas>=2.2.1

@@ -29,18 +29,19 @@ class WorkerMessageFilter(logging.Filter):
 
 
 def get_logger(name=None, role: Literal["client", "worker"] = "client") -> Logger:
-    global logger
+    # global logger
 
-    if logger is not None:
-        return logger
-
-    load_dotenv()
-
-    level = os.getenv("LOG_LEVEL")
-    level = level.upper() if level else None
+    # if logger is not None:
+    #     return logger
 
     logger = logging.getLogger(name if name is not None else __name__)
+
     if not logger.handlers:  # Check if the logger already has handlers
+        load_dotenv()
+
+        level = os.getenv("LOG_LEVEL")
+        level = level.upper() if level else None
+        
         logger.setLevel(logging.INFO if level is None else level)
 
         formatter = None
