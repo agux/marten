@@ -192,7 +192,7 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None, anchor_table=
     return df, anchor_table
 
 
-def _covar_symbols_from_table(
+def covar_symbols_from_table(
     model, anchor_symbol, dates, table, feature, ts_date, min_count
 ):
     worker = get_worker()
@@ -347,6 +347,7 @@ def _pair_covar_metrics(
             ),
             args.early_stopping,
             args.infer_holiday,
+            key=f"{fit_with_covar.__name__}-{cov_table}.{feature}",
         )
         futures.append(future)
         # if too much pending task, then slow down for the tasks to be digested
@@ -1177,7 +1178,7 @@ def _covar_metric(
             case _:
                 cov_symbols_fut.append(
                     client.submit(
-                        _covar_symbols_from_table,
+                        covar_symbols_from_table,
                         args.model,
                         anchor_symbol,
                         dates,
@@ -1185,6 +1186,7 @@ def _covar_metric(
                         feature,
                         cutoff_date,
                         min_count,
+                        key=f"{covar_symbols_from_table.__name__}-{cov_table}.{feature}",
                     )
                 )
                 # cov_symbols = _covar_symbols_from_table(
@@ -1202,6 +1204,12 @@ def _covar_metric(
     if not cov_symbols_fut:
         results = client.gather(cov_symbols_fut)
         for cov_symbols, feature in results:
+            logger.info(
+                "identified %s symbols for %s.%s",
+                len(cov_symbols),
+                cov_table,
+                feature
+            )
             _pair_covar_metrics(
                 anchor_symbol,
                 anchor_df,

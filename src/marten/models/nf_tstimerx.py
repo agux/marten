@@ -72,7 +72,7 @@ class TSMixerxModel(BaseModel):
         if self.is_baseline(**self.model_args):
             return 70, 70
         else:
-            return 50, 50
+            return 50, 60
 
     def trainable_on_cpu(self, **kwargs: Any) -> bool:
         return True
