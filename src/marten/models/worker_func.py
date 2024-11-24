@@ -286,7 +286,7 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, alchemyEngine, l
         sql = f"""
                 INSERT INTO {cov_table}_impute (symbol, "table", date, {", ".join(cols)}) 
                 VALUES %s 
-                ON CONFLICT (symbol, table, date) 
+                ON CONFLICT (symbol, "table", date) 
                 DO UPDATE SET 
                     {", ".join(exclude)}
               """
