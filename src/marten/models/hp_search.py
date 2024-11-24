@@ -1201,15 +1201,16 @@ def _covar_metric(
                 # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
                 # cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
 
-    if not cov_symbols_fut:
+    # logger.info("[DEBUG] len(futures): %s in %s", len(cov_symbols_fut), cov_table)
+    if cov_symbols_fut:
         results = client.gather(cov_symbols_fut)
         for cov_symbols, feature in results:
-            logger.info(
-                "identified %s symbols for %s.%s",
-                len(cov_symbols),
-                cov_table,
-                feature
-            )
+            # logger.info(
+            #     "identified %s symbols for %s.%s",
+            #     len(cov_symbols),
+            #     cov_table,
+            #     feature
+            # )
             _pair_covar_metrics(
                 anchor_symbol,
                 anchor_df,

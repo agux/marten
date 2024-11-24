@@ -75,7 +75,7 @@ def merge_covar_df(
                 "min_date": min_date,
                 "cutoff_date": cutoff_date,
             }
-        case _ if cov_table.startswith("ta_"): # handle technical indicators table
+        case _ if cov_table.startswith("ta_"):  # handle technical indicators table
             column_names = columns_with_prefix(alchemyEngine, cov_table, feature)
             columns = ", ".join([f'{c} "{c}_{cov_symbol}"' for c in column_names])
             query = f"""
@@ -147,7 +147,7 @@ def fit_with_covar(
             min_date,
             alchemyEngine,
         )
-        
+
         if merged_df is None:
             # FIXME: sometimes merged_df is None even if there's data in table
             logger.info(
@@ -160,7 +160,9 @@ def fit_with_covar(
             return None
 
         if cov_table.startswith("ta_"):
-            covar_col = [col for col in merged_df.columns if col.startswith(f"{feature}_")]
+            covar_col = [
+                col for col in merged_df.columns if col.startswith(f"{feature}_")
+            ]
         else:
             covar_col = (
                 feature if feature in merged_df.columns else f"{feature}_{cov_symbol}"
@@ -207,6 +209,14 @@ def fit_with_covar(
                 m.cleanup()
             case _:
                 if not model.accept_missing_data():
+                    df_na = merged_df.iloc[:, 1:].isna()
+                    if df_na.any().any():
+                        logger.info(
+                            "running imputation for %s @ %s.%s",
+                            cov_symbol,
+                            cov_table,
+                            feature,
+                        )
                     merged_df, impute_df = impute(merged_df, random_seed)
                 config = model.baseline_params()
                 config["h"] = args.future_steps
@@ -240,6 +250,13 @@ def fit_with_covar(
                 conn,
             )
         if impute_df is not None:
+            logger.info(
+                "saving imputated data points for %s, %s.%s: %s",
+                cov_symbol,
+                cov_table,
+                feature,
+                impute_df.shape,
+            )
             save_impute_data(
                 impute_df, cov_table, cov_symbol, feature, alchemyEngine, logger
             )
@@ -332,10 +349,10 @@ def save_covar_metrics(
     epochs = cov_metrics["epoch"] + 1
 
     if "device" in cov_metrics or "machine" in cov_metrics:
-        device_info = json.dumps({
-            "device": cov_metrics["device"],
-            "machine": cov_metrics["machine"]
-        }, sort_keys=True)
+        device_info = json.dumps(
+            {"device": cov_metrics["device"], "machine": cov_metrics["machine"]},
+            sort_keys=True,
+        )
     else:
         device_info = json.dumps({})
 
@@ -498,7 +515,11 @@ def validate_hyperparams(args, df, covar_set_id, hps_id, params):
             args.infer_holiday,
         )
     except Exception as e:
-        get_logger().error("encountered error with train params: %s\n%s", reg_params, traceback.format_exc())
+        get_logger().error(
+            "encountered error with train params: %s\n%s",
+            reg_params,
+            traceback.format_exc(),
+        )
         raise e
     return (params, loss_val)
 
@@ -1178,9 +1199,9 @@ def save_forecast_snapshot(
     forecast = trim_forecasts_by_dates(forecast)
     future_df = forecast[forecast["ds"] > datetime.now()][["ds", "yhat_n"]].copy()
     avg_yhat = future_df["yhat_n"].mean()
-    future_df["plus_one"] = future_df["yhat_n"]/100. + 1.0
+    future_df["plus_one"] = future_df["yhat_n"] / 100.0 + 1.0
     future_df["accumulated_returns"] = future_df["plus_one"].cumprod()
-    cum_returns = (future_df["accumulated_returns"].iloc[-1] - 1.0)*100.
+    cum_returns = (future_df["accumulated_returns"].iloc[-1] - 1.0) * 100.0
 
     with alchemyEngine.begin() as conn:
         result = conn.execute(
@@ -1381,7 +1402,9 @@ def forecast(
         if hps_metric["sub_topk"] is None:
             new_df = df
         else:
-            cols = ['ds', 'y'] + [covar.strip() for covar in hps_metric["covars"].split(',')]
+            cols = ["ds", "y"] + [
+                covar.strip() for covar in hps_metric["covars"].split(",")
+            ]
             new_df = df[cols]
             # new_df = select_topk_features(
             #     df, ranked_features, int(hps_metric["sub_topk"])
@@ -1745,9 +1768,7 @@ def save_ensemble_snapshot(
             ]
         )
     )
-    country_holidays = get_all_holidays(
-        years=years, country=region
-    )
+    country_holidays = get_all_holidays(years=years, country=region)
     # country_holidays = get_country_holidays(region)
     hyper_params = json.dumps(
         [
@@ -1777,9 +1798,9 @@ def save_ensemble_snapshot(
 
     ens_df.reset_index(inplace=True)
     avg_yhat = ens_df["yhat_n"].mean()
-    ens_df["plus_one"] = ens_df["yhat_n"]/100. + 1.0
+    ens_df["plus_one"] = ens_df["yhat_n"] / 100.0 + 1.0
     ens_df["accumulated_returns"] = ens_df["plus_one"].cumprod()
-    cum_returns = (ens_df["accumulated_returns"].iloc[-1] - 1.0)*100.
+    cum_returns = (ens_df["accumulated_returns"].iloc[-1] - 1.0) * 100.0
     ens_df.drop(columns=["plus_one", "accumulated_returns"], inplace=True)
 
     with alchemyEngine.begin() as conn:
@@ -2152,8 +2173,8 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     logger.info("Starting covariate loss calculation")
     t1_start = time.time()
     prep_covar_baseline_metrics(anchor_df, anchor_table, args)
-    logger.info("waiting dask futures: %s", len(hps.futures))
-    await_futures(hps.futures, True)
+    # logger.info("waiting dask futures: %s", len(hps.futures))
+    await_futures(hps.futures, hard_wait=True)
 
     logger.info(
         "%s covariate baseline metric computation completed. Time taken: %s seconds",
