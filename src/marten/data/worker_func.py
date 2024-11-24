@@ -147,7 +147,9 @@ def update_hk_indices(symbol):
 
         return len(shide)
     except KeyError as e:
-        logger.warning("ak.stock_hk_index_daily_em(symbol=%s) could be empty: %s", symbol, str(e))
+        logger.warning(
+            "ak.stock_hk_index_daily_em(symbol=%s) could be empty: %s", symbol, str(e)
+        )
         return 0
     except Exception as e:
         logger.error(f"failed to update hk_index_daily_em for {symbol}", exc_info=True)
@@ -375,7 +377,10 @@ def cn_index_daily(future_cn_index_list):
     cn_index_fulllist = pd.read_sql(
         "SELECT symbol, src FROM index_spot_em", alchemyEngine
     )
-    logger.info("starting tasks on function stock_zh_index_daily_em(), length: %s", len(cn_index_fulllist))
+    logger.info(
+        "starting tasks on function stock_zh_index_daily_em(), length: %s",
+        len(cn_index_fulllist),
+    )
 
     futures = []
     with worker_client() as client:
@@ -405,7 +410,9 @@ def stock_zh_index_daily_em(symbol, src):
 
         end_date = datetime.now().strftime("%Y%m%d")
 
-        logger.debug(f"calling ak.stock_zh_index_daily_em({src}{symbol}, {start_date}, {end_date})")
+        logger.debug(
+            f"calling ak.stock_zh_index_daily_em({src}{symbol}, {start_date}, {end_date})"
+        )
         szide = ak.stock_zh_index_daily_em(f"{src}{symbol}", start_date, end_date)
 
         # if shide is empty, return immediately
@@ -622,7 +629,7 @@ def bond_ir():
         if latest_date is not None:
             start_date = (latest_date - timedelta(days=20)).strftime("%Y%m%d")
         bzur = ak.bond_zh_us_rate(start_date)
-        bzur = bzur.rename(
+        bzur.rename(
             columns={
                 "日期": "date",
                 "中国国债收益率2年": "china_yield_2y",
@@ -637,8 +644,11 @@ def bond_ir():
                 "美国国债收益率30年": "us_yield_30y",
                 "美国国债收益率10年-2年": "us_yield_spread_10y_2y",
                 "美国GDP年增率": "us_gdp_growth",
-            }
+            },
+            inplace=True,
         )
+        # Convert NaN to None
+        bzur.replace({np.nan: None}, inplace=True)
         with alchemyEngine.begin() as conn:
             update_on_conflict(table_def_bond_metrics_em(), conn, bzur, ["date"])
         return len(bzur)
@@ -748,9 +758,7 @@ def etf_list():
         ## get historical data and holdings for each ETF
         futures = []
         with worker_client() as client:
-            logger.info(
-                "starting sub-tasks for each ETF. Length: %s", len(df)
-            )
+            logger.info("starting sub-tasks for each ETF. Length: %s", len(df))
             for symbol, exch in zip(df["symbol"], df["exch"]):
                 futures.append(client.submit(get_etf_daily, symbol, priority=1))
                 futures.append(client.submit(fund_holding, symbol, priority=1))
@@ -1230,9 +1238,7 @@ def get_interbank_rate(symbol, market, symbol_type, indicator):
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
     try:
-        df = ak.rate_interbank(
-            market=market, symbol=symbol_type, indicator=indicator
-        )
+        df = ak.rate_interbank(market=market, symbol=symbol_type, indicator=indicator)
     except TypeError as e:
         if "'NoneType' object is not subscriptable" in str(e):
             logger.warning(
@@ -1271,6 +1277,7 @@ def get_interbank_rate(symbol, market, symbol_type, indicator):
         update_on_conflict(interbank_rate_hist, conn, df, ["symbol", "date"])
 
     return len(df)
+
 
 def interbank_rate():
     worker = get_worker()
@@ -1456,7 +1463,7 @@ def get_fund_dividend_events():
     if max_reg_date is not None:
         df = df[df["rights_registration_date"] >= (max_reg_date - timedelta(days=30))]
 
-    df = df.drop_duplicates(subset=['symbol', 'rights_registration_date'])
+    df = df.drop_duplicates(subset=["symbol", "rights_registration_date"])
     df.reset_index(drop=True, inplace=True)
 
     with alchemyEngine.begin() as conn:
@@ -1565,19 +1572,25 @@ def fund_holding(symbol):
 
     return len(df)
 
+
 def _get_market(alchemyEngine, symbol, asset_type):
 
     with alchemyEngine.connect() as conn:
         if asset_type.lower() == "etf":
-            results = conn.execute(text("""
+            results = conn.execute(
+                text(
+                    """
                 select exch 
                 from fund_etf_list_sina 
                 where symbol = :symbol
-            """),{
-                "symbol": symbol,
-            })
+            """
+                ),
+                {
+                    "symbol": symbol,
+                },
+            )
             row = results.fetchone()
-        
+
     return row[0] if row is not None else None
 
 
@@ -1623,20 +1636,18 @@ def cash_inflow(symbol, exch):
     df.insert(0, "symbol", symbol)
 
     # check the data type of df["date"]. If its not a date, convert it to date
-    if not df['date'].apply(lambda x: isinstance(x, date)).all():
+    if not df["date"].apply(lambda x: isinstance(x, date)).all():
         df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
 
     with alchemyEngine.connect() as conn:
-        latest_date = get_max_for_column(
-            conn, symbol=symbol, table="etf_cash_inflow"
-        )
+        latest_date = get_max_for_column(conn, symbol=symbol, table="etf_cash_inflow")
 
     if latest_date is not None:
         start_date = latest_date - timedelta(days=20)
         df = df[df["date"] >= start_date]
 
     with alchemyEngine.begin() as conn:
-        update_on_conflict(etf_cash_inflow, conn, df, ["symbol","date"])
+        update_on_conflict(etf_cash_inflow, conn, df, ["symbol", "date"])
 
     return len(df)
 
