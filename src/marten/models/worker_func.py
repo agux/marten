@@ -265,7 +265,13 @@ def fit_with_covar(
     try:
         return _func()
     except Exception as e:
-        logger.error(traceback.format_exc())
+        logger.error(
+            "failed to fit covar %s @ %s.%s:\n%s",
+            cov_symbol,
+            cov_table,
+            feature,
+            traceback.format_exc(),
+        )
         raise e
 
 
