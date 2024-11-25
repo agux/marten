@@ -190,11 +190,12 @@ class BaseModel(ABC):
                 continue
 
             stop_at = time.time() + self.resource_wait_time
+            interval = 0.1 if self.is_baseline(**self.model_args) else 1
             if lock_acquired.name == gpu_lock_key:
                 while wait_gpu(gpu_ut, gpu_rt, stop_at):
                     time.sleep(0.2)
             elif self._check_cpu():  # CPU
-                while wait_cpu(cpu_ut, cpu_rt, stop_at):
+                while wait_cpu(cpu_ut, cpu_rt, stop_at, interval):
                     time.sleep(0.2)
             else:
                 release_lock(lock_acquired, 0)
