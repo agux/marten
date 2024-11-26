@@ -285,9 +285,8 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, alchemyEngine, l
     if cov_table.startswith("ta_"):
         # saving imputation for technical indicators, where multiple columns could be infolved
         df_cols = [col for col in impute_df.columns if col.startswith(f"{feature}_")]
-        column_names = columns_with_prefix(alchemyEngine, cov_table, feature).sort(
-            key=len, reverse=True
-        )
+        column_names = columns_with_prefix(alchemyEngine, cov_table, feature)
+        column_names.sort(key=len, reverse=True)
         cols = []
         exclude = []
         table, symbol = cov_symbol.split("::")
