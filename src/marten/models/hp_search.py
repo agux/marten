@@ -236,28 +236,35 @@ def covar_symbols_from_table(
 
     # get a list of symbols from the given table, of which metrics are not recorded yet
     if table.startswith("ta_"):
-        exclude = ""
+        symbol_col = '''t."table" || '::' || t.symbol symbol'''
+        exclude = f"""and t."table" || '::' || t.symbol not in (
+                {sub_query}
+            )"""
         column_names = columns_with_prefix(alchemyEngine, table, feature)
         notnull = (
             "and (" + " or ".join([f"{c} is not null" for c in column_names]) + ")"
         )
+        group_by = 'group by t."table", t.symbol'
     else:
-        exclude = "and t.symbol <> %(anchor_symbol)s"
+        symbol_col = "t.symbol symbol"
+        exclude = f"""
+            and t.symbol <> %(anchor_symbol)s 
+            and t.symbol not in (
+                {sub_query}
+            )"""
         notnull = f"and {feature} is not null"
+        group_by = "group by t.symbol"
 
     query = f"""
         select
-            t.symbol symbol, count(*) num
+            {symbol_col}, count(*) num
         from
             {table} t
         where
             t.date in %(dates)s
             {notnull}
             {exclude}
-            and t.symbol not in (
-                {sub_query}
-            )
-        group by t.symbol
+        {group_by}
         having count(*) >= %(min_count)s
     """
 
