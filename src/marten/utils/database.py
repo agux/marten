@@ -73,4 +73,4 @@ def columns_with_prefix(conn, table, prefix):
             },
         )
         # Fetch and return the column names
-        return [row["column_name"] for row in result.fetchall()]
+        return [row[0] for row in result.fetchall()]
