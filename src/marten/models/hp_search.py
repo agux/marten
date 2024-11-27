@@ -274,10 +274,10 @@ def covar_symbols_from_table(
     cov_symbols = cov_symbols["symbol"].tolist()
 
     logger.info(
-        "Identified %s candidate feature (%s) from table %s",
+        "Identified %s candidate covariate symbols for feature %s.%s",
         len(cov_symbols),
-        feature,
         table,
+        feature,
     )
 
     return cov_symbols, feature
@@ -330,7 +330,7 @@ def _pair_covar_metrics(
 ):
     covar_fut = []
     args = get_worker().args
-    with worker_client as client:
+    with worker_client() as client:
         for symbol in cov_symbols:
             logger.debug(
                 "submitting fit_with_covar:\nanchor_symbol:%s\ncov_table:%s\ncov_symbol:%s\nfeature:%s",
