@@ -40,7 +40,7 @@ def columns_with_prefix(conn, table, prefix):
                     SELECT column_name
                     FROM information_schema.columns
                     WHERE table_name = '{table}'
-                    AND column_name LIKE '{prefix}_%'
+                    AND column_name LIKE '{prefix}\_%' ESCAPE '\'
                 """
             ),
         )

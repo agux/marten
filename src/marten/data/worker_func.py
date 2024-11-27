@@ -1115,6 +1115,7 @@ def rmb_exchange_rates():
         },
         inplace=True,
     )
+    currency_boc_safe_df.replace({np.nan: None}, inplace=True)
 
     with alchemyEngine.begin() as conn:
         update_on_conflict(currency_boc_safe, conn, currency_boc_safe_df, ["date"])

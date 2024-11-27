@@ -725,7 +725,7 @@ def oscillators(quotes_list, symbol, table):
     stoch_rsi = indicators.get_stoch_rsi(
         quotes_list, rsi_periods=14, stoch_periods=14, signal_periods=5
     )
-    trix = indicators.get_trix(quotes_list, lookback_periods=14)
+    trix = indicators.get_trix(quotes_list, lookback_periods=14, signal_periods=9)
     ultimate = indicators.get_ultimate(quotes_list)
     williams_r = indicators.get_williams_r(quotes_list)
     columns = [
