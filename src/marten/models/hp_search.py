@@ -363,6 +363,7 @@ def _pair_covar_metrics(
             args.early_stopping,
             args.infer_holiday,
             key=f"{fit_with_covar.__name__}-{cov_table}.{feature}",
+            priority=3,
         )
         covar_fut.append(future)
         # if too much pending task, then slow down for the tasks to be digested
@@ -1203,6 +1204,7 @@ def covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count
                             cutoff_date,
                             min_count,
                             key=f"{covar_symbols_from_table.__name__}-{cov_table}.{feature}",
+                            priority=2,
                         )
                     )
                     # cov_symbols = _covar_symbols_from_table(
