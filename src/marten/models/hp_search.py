@@ -14,7 +14,7 @@ import pandas as pd
 import numpy as np
 from dotenv import load_dotenv
 
-from dask.distributed import get_worker, worker_client
+from dask.distributed import get_worker, worker_client, as_completed, get_client
 
 from marten.models.base_model import BaseModel
 from marten.utils.database import get_database_engine, columns_with_prefix
@@ -330,38 +330,38 @@ def _pair_covar_metrics(
 ):
     covar_fut = []
     args = get_worker().args
-    with worker_client() as client:
-        for symbol in cov_symbols:
-            logger.debug(
-                "submitting fit_with_covar:\nanchor_symbol:%s\ncov_table:%s\ncov_symbol:%s\nfeature:%s",
-                anchor_symbol,
-                cov_table,
-                symbol,
-                feature,
-            )
-            future = client.submit(
-                fit_with_covar,
-                anchor_symbol,
-                anchor_df_future,
-                cov_table,
-                symbol,
-                min_date,
-                args.random_seed,
-                feature,
-                select_device(
-                    args.accelerator,
-                    getattr(args, "gpu_util_threshold", None),
-                    getattr(args, "gpu_ram_threshold", None),
-                ),
-                args.early_stopping,
-                args.infer_holiday,
-                key=f"{fit_with_covar.__name__}-{cov_table}.{feature}",
-            )
-            covar_fut.append(future)
-            # if too much pending task, then slow down for the tasks to be digested
-            await_futures(covar_fut, False)
-        
-        await_futures(covar_fut, hard_wait=True)
+    client = get_client()
+    for symbol in cov_symbols:
+        logger.debug(
+            "submitting fit_with_covar:\nanchor_symbol:%s\ncov_table:%s\ncov_symbol:%s\nfeature:%s",
+            anchor_symbol,
+            cov_table,
+            symbol,
+            feature,
+        )
+        future = client.submit(
+            fit_with_covar,
+            anchor_symbol,
+            anchor_df_future,
+            cov_table,
+            symbol,
+            min_date,
+            args.random_seed,
+            feature,
+            select_device(
+                args.accelerator,
+                getattr(args, "gpu_util_threshold", None),
+                getattr(args, "gpu_ram_threshold", None),
+            ),
+            args.early_stopping,
+            args.infer_holiday,
+            key=f"{fit_with_covar.__name__}-{cov_table}.{feature}",
+        )
+        covar_fut.append(future)
+        # if too much pending task, then slow down for the tasks to be digested
+        await_futures(covar_fut, False)
+    
+    await_futures(covar_fut, hard_wait=True)
 
 
 def _load_covar_set(covar_set_id, model, alchemyEngine):
@@ -1208,11 +1208,10 @@ def covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count
                     # )
                     # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
                     # cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
-
         # logger.info("[DEBUG] len(futures): %s in %s", len(cov_symbols_fut), cov_table)
         if cov_symbols_fut:
-            results = client.gather(cov_symbols_fut)
-            for cov_symbols, feature in results:
+            for future in as_completed(cov_symbols_fut):
+                cov_symbols, feature = future.result()
                 # logger.info(
                 #     "identified %s symbols for %s.%s",
                 #     len(cov_symbols),
