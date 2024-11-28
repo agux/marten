@@ -1228,6 +1228,7 @@ def covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count
                     feature,
                     min_date,
                 )
+    return True
 
 
 def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
