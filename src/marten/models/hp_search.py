@@ -326,11 +326,16 @@ def _pair_endogenous_covar_metrics(
 
 
 def _pair_covar_metrics(
-    anchor_symbol, anchor_df_future, cov_table, cov_symbols, feature, min_date
+    anchor_symbol,
+    anchor_df_future,
+    cov_table,
+    cov_symbols,
+    feature,
+    min_date,
+    args,
 ):
     covar_fut = []
     worker = get_worker()
-    args = worker.args
     logger = worker.logger
     client = get_client()
     for symbol in cov_symbols:
@@ -362,7 +367,7 @@ def _pair_covar_metrics(
         covar_fut.append(future)
         # if too much pending task, then slow down for the tasks to be digested
         await_futures(covar_fut, False)
-    
+
     await_futures(covar_fut, hard_wait=True)
 
 
@@ -1137,10 +1142,9 @@ def _remove_measured_features(model, anchor_symbol, cov_table, features, ts_date
     return features
 
 
-def covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count):
+def covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args):
     worker = get_worker()
     logger = worker.logger
-    args = worker.args
     min_date = min(dates).strftime("%Y-%m-%d")
     cutoff_date = max(dates).strftime("%Y-%m-%d")
 
@@ -1175,6 +1179,7 @@ def covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count
                         ["bond"],
                         feature,
                         min_date,
+                        args,
                     )
                 case "currency_boc_safe_view":
                     _pair_covar_metrics(
@@ -1184,6 +1189,7 @@ def covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count
                         ["currency_exchange"],
                         feature,
                         min_date,
+                        args,
                     )
                 case _:
                     cov_symbols_fut.append(
@@ -1227,6 +1233,7 @@ def covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count
                     cov_symbols,
                     feature,
                     min_date,
+                    args,
                 )
     return True
 
@@ -1269,6 +1276,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1294,6 +1302,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1331,6 +1340,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1361,6 +1371,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1384,6 +1395,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1405,6 +1417,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1427,6 +1440,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1452,6 +1466,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1494,6 +1509,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1515,6 +1531,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1531,6 +1548,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1564,6 +1582,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1580,6 +1599,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1608,6 +1628,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1625,6 +1646,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1649,6 +1671,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1673,6 +1696,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1691,6 +1715,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1717,6 +1742,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1735,6 +1761,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
@@ -1758,6 +1785,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             features,
             dates,
             min_count,
+            args,
             key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
         )
     )
