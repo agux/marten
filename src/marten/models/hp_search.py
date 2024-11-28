@@ -329,7 +329,9 @@ def _pair_covar_metrics(
     anchor_symbol, anchor_df_future, cov_table, cov_symbols, feature, min_date
 ):
     covar_fut = []
-    args = get_worker().args
+    worker = get_worker()
+    args = worker.args
+    logger = worker.logger
     client = get_client()
     for symbol in cov_symbols:
         logger.debug(
