@@ -14,7 +14,7 @@ import pandas as pd
 import numpy as np
 from dotenv import load_dotenv
 
-from dask.distributed import get_worker
+from dask.distributed import get_worker, worker_client, as_completed, get_client
 
 from marten.models.base_model import BaseModel
 from marten.utils.database import get_database_engine, columns_with_prefix
@@ -236,28 +236,35 @@ def covar_symbols_from_table(
 
     # get a list of symbols from the given table, of which metrics are not recorded yet
     if table.startswith("ta_"):
-        exclude = ""
+        symbol_col = """t."table" || '::' || t.symbol symbol"""
+        exclude = f"""and t."table" || '::' || t.symbol not in (
+                {sub_query}
+            )"""
         column_names = columns_with_prefix(alchemyEngine, table, feature)
         notnull = (
             "and (" + " or ".join([f"{c} is not null" for c in column_names]) + ")"
         )
+        group_by = 'group by t."table", t.symbol'
     else:
-        exclude = "and t.symbol <> %(anchor_symbol)s"
+        symbol_col = "t.symbol symbol"
+        exclude = f"""
+            and t.symbol <> %(anchor_symbol)s 
+            and t.symbol not in (
+                {sub_query}
+            )"""
         notnull = f"and {feature} is not null"
+        group_by = "group by t.symbol"
 
     query = f"""
         select
-            t.symbol symbol, count(*) num
+            {symbol_col}, count(*) num
         from
             {table} t
         where
             t.date in %(dates)s
             {notnull}
             {exclude}
-            and t.symbol not in (
-                {sub_query}
-            )
-        group by t.symbol
+        {group_by}
         having count(*) >= %(min_count)s
     """
 
@@ -267,10 +274,10 @@ def covar_symbols_from_table(
     cov_symbols = cov_symbols["symbol"].tolist()
 
     logger.info(
-        "Identified %s candidate feature (%s) from table %s",
+        "Identified %s candidate covariate symbols for feature %s.%s",
         len(cov_symbols),
-        feature,
         table,
+        feature,
     )
 
     return cov_symbols, feature
@@ -319,10 +326,18 @@ def _pair_endogenous_covar_metrics(
 
 
 def _pair_covar_metrics(
-    anchor_symbol, anchor_df_future, cov_table, cov_symbols, feature, min_date, args
+    anchor_symbol,
+    anchor_df_future,
+    cov_table,
+    cov_symbols,
+    feature,
+    min_date,
+    args,
 ):
-    global client, futures
-
+    covar_fut = []
+    worker = get_worker()
+    logger = worker.logger
+    client = get_client()
     for symbol in cov_symbols:
         logger.debug(
             "submitting fit_with_covar:\nanchor_symbol:%s\ncov_table:%s\ncov_symbol:%s\nfeature:%s",
@@ -348,10 +363,13 @@ def _pair_covar_metrics(
             args.early_stopping,
             args.infer_holiday,
             key=f"{fit_with_covar.__name__}-{cov_table}.{feature}",
+            priority=3,
         )
-        futures.append(future)
+        covar_fut.append(future)
         # if too much pending task, then slow down for the tasks to be digested
-        await_futures(futures, False)
+        await_futures(covar_fut, False)
+
+    await_futures(covar_fut, hard_wait=True)
 
 
 def _load_covar_set(covar_set_id, model, alchemyEngine):
@@ -1125,11 +1143,9 @@ def _remove_measured_features(model, anchor_symbol, cov_table, features, ts_date
     return features
 
 
-def _covar_metric(
-    anchor_symbol, anchor_df, cov_table, features, dates, min_count, args
-):
-    global client, logger
-
+def covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args):
+    worker = get_worker()
+    logger = worker.logger
     min_date = min(dates).strftime("%Y-%m-%d")
     cutoff_date = max(dates).strftime("%Y-%m-%d")
 
@@ -1152,78 +1168,80 @@ def _covar_metric(
 
     cov_symbols_fut = []
 
-    for feature in features:
-        match cov_table:
-            case "bond_metrics_em" | "bond_metrics_em_view":
-                # construct a dummy cov_symbols dataframe with `symbol` column and the value 'bond'.
-                _pair_covar_metrics(
-                    anchor_symbol,
-                    anchor_df,
-                    cov_table,
-                    ["bond"],
-                    feature,
-                    min_date,
-                    args,
-                )
-            case "currency_boc_safe_view":
-                _pair_covar_metrics(
-                    anchor_symbol,
-                    anchor_df,
-                    cov_table,
-                    ["currency_exchange"],
-                    feature,
-                    min_date,
-                    args,
-                )
-            case _:
-                cov_symbols_fut.append(
-                    client.submit(
-                        covar_symbols_from_table,
-                        args.model,
+    with worker_client() as client:
+        for feature in features:
+            match cov_table:
+                case "bond_metrics_em" | "bond_metrics_em_view":
+                    # construct a dummy cov_symbols dataframe with `symbol` column and the value 'bond'.
+                    _pair_covar_metrics(
                         anchor_symbol,
-                        dates,
+                        anchor_df,
                         cov_table,
+                        ["bond"],
                         feature,
-                        cutoff_date,
-                        min_count,
-                        key=f"{covar_symbols_from_table.__name__}-{cov_table}.{feature}",
+                        min_date,
+                        args,
                     )
-                )
-                # cov_symbols = _covar_symbols_from_table(
-                #     args.model,
-                #     anchor_symbol,
-                #     dates,
+                case "currency_boc_safe_view":
+                    _pair_covar_metrics(
+                        anchor_symbol,
+                        anchor_df,
+                        cov_table,
+                        ["currency_exchange"],
+                        feature,
+                        min_date,
+                        args,
+                    )
+                case _:
+                    cov_symbols_fut.append(
+                        client.submit(
+                            covar_symbols_from_table,
+                            args.model,
+                            anchor_symbol,
+                            dates,
+                            cov_table,
+                            feature,
+                            cutoff_date,
+                            min_count,
+                            key=f"{covar_symbols_from_table.__name__}-{cov_table}.{feature}",
+                            priority=2,
+                        )
+                    )
+                    # cov_symbols = _covar_symbols_from_table(
+                    #     args.model,
+                    #     anchor_symbol,
+                    #     dates,
+                    #     cov_table,
+                    #     feature,
+                    #     cutoff_date,
+                    #     min_count,
+                    # )
+                    # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
+                    # cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
+        # logger.info("[DEBUG] len(futures): %s in %s", len(cov_symbols_fut), cov_table)
+        if cov_symbols_fut:
+            for future in as_completed(cov_symbols_fut):
+                cov_symbols, feature = future.result()
+                # logger.info(
+                #     "identified %s symbols for %s.%s",
+                #     len(cov_symbols),
                 #     cov_table,
-                #     feature,
-                #     cutoff_date,
-                #     min_count,
+                #     feature
                 # )
-                # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
-                # cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
-
-    # logger.info("[DEBUG] len(futures): %s in %s", len(cov_symbols_fut), cov_table)
-    if cov_symbols_fut:
-        results = client.gather(cov_symbols_fut)
-        for cov_symbols, feature in results:
-            # logger.info(
-            #     "identified %s symbols for %s.%s",
-            #     len(cov_symbols),
-            #     cov_table,
-            #     feature
-            # )
-            _pair_covar_metrics(
-                anchor_symbol,
-                anchor_df,
-                cov_table,
-                cov_symbols,
-                feature,
-                min_date,
-                args,
-            )
+                _pair_covar_metrics(
+                    anchor_symbol,
+                    anchor_df,
+                    cov_table,
+                    cov_symbols,
+                    feature,
+                    min_date,
+                    args,
+                )
+    return True
 
 
 def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
-    global random_seed, client
+    global random_seed, client, futures
 
     anchor_symbol = args.symbol
 
@@ -1251,7 +1269,19 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "index_daily_em_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
 
     # prep ETF covariates fund_etf_daily_em_view
     features = [
@@ -1265,7 +1295,19 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "fund_etf_daily_em_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
 
     # prep bond covariates bond_metrics_em, cn_bond_indices_view
     features = [
@@ -1291,7 +1333,19 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "performance_benchmark_change_rate",
     ]
     cov_table = "bond_metrics_em_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
 
     features = [
         "wealthindex_change",
@@ -1310,7 +1364,19 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "spotsettlementvolume_change_rate",
     ]
     cov_table = "cn_bond_indices_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
 
     # prep US index covariates us_index_daily_sina
     features = [
@@ -1322,7 +1388,19 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "us_index_daily_sina_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
 
     # prep HK index covariates hk_index_daily_sina
     features = [
@@ -1332,7 +1410,19 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "hk_index_daily_em_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
 
     # prep CN bond: bond_zh_hs_daily_view
     features = [
@@ -1343,7 +1433,19 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "bond_zh_hs_daily_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
 
     # prep CN stock features. Sync table & view column names
     features = [
@@ -1357,7 +1459,19 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "amt_change_rate",
     ]
     cov_table = "stock_zh_a_hist_em_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
 
     # RMB exchange rate
     features = [
@@ -1388,7 +1502,19 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "mop_change_rate",
     ]
     cov_table = "currency_boc_safe_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
 
     # SGE spot
     features = [
@@ -1398,12 +1524,36 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "low_preclose_rate",
     ]
     cov_table = "spot_hist_sge_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
 
     # Interbank interest rates
     features = ["change_rate"]
     cov_table = "interbank_rate_hist_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
 
     # Technical indicators
     features = [
@@ -1425,12 +1575,36 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "vwap",
     ]
     cov_table = "ta_ma_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
     features = [
         "slope",
     ]
     cov_table = "ta_numerical_analysis_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
     features = [
         "ao",
         "cmo",
@@ -1447,13 +1621,37 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "williams_r",
     ]
     cov_table = "ta_oscillators_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
     features = [
         "pivots",
         "fractal",
     ]
     cov_table = "ta_other_price_patterns_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
     features = [
         "bollinger",
         "donchian",
@@ -1466,7 +1664,19 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "stdev_channels",
     ]
     cov_table = "ta_price_channel_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
     features = [
         "atr",
         "bop",
@@ -1479,14 +1689,38 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "ulcer_index",
     ]
     cov_table = "ta_price_characteristics_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
     features = [
         "fisher_transform",
         "heikin_ashi",
         "zig_zag",
     ]
     cov_table = "ta_price_transforms_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
     features = [
         "atr",
         "aroon",
@@ -1501,14 +1735,38 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "alligator",
     ]
     cov_table = "ta_price_trends_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
     features = [
         "chandelier",
         "parabolic_sar",
         "volatility_stop",
     ]
     cov_table = "ta_stop_reverse_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
     features = [
         "adl",
         "cmf",
@@ -1520,7 +1778,19 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         "pvo",
     ]
     cov_table = "ta_volume_based_view"
-    _covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args)
+    futures.append(
+        client.submit(
+            covar_metric,
+            anchor_symbol,
+            anchor_df,
+            cov_table,
+            features,
+            dates,
+            min_count,
+            args,
+            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
+        )
+    )
 
     # TODO prep options
 

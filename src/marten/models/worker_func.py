@@ -78,16 +78,21 @@ def merge_covar_df(
         case _ if cov_table.startswith("ta_"):  # handle technical indicators table
             column_names = columns_with_prefix(alchemyEngine, cov_table, feature)
             columns = ", ".join([f'{c} "{c}_{cov_symbol}"' for c in column_names])
+            # split cov_symbol by "::" so that we get the "table" from the first element and 
+            # the real "cov_symbol" from the second
+            cov_symbol_table, cov_symbol = cov_symbol.split("::")
             query = f"""
                 select date ds, {columns}
                 from {cov_table}
                 where symbol = %(cov_symbol)s
+                and "table" = %(table)s
                 and date >= %(min_date)s
                 and date <= %(cutoff_date)s
                 order by date
             """
             params = {
                 "cov_symbol": cov_symbol,
+                "table": cov_symbol_table,
                 "min_date": min_date,
                 "cutoff_date": cutoff_date,
             }
@@ -281,8 +286,10 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, alchemyEngine, l
         # saving imputation for technical indicators, where multiple columns could be infolved
         df_cols = [col for col in impute_df.columns if col.startswith(f"{feature}_")]
         column_names = columns_with_prefix(alchemyEngine, cov_table, feature)
+        column_names.sort(key=len, reverse=True)
         cols = []
         exclude = []
+        table, symbol = cov_symbol.split("::")
         for df_col in df_cols:
             for tbl_col in column_names:
                 if df_col.startswith(tbl_col + "_"):
@@ -296,8 +303,8 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, alchemyEngine, l
                 DO UPDATE SET 
                     {", ".join(exclude)}
               """
-        impute_df.insert(0, "symbol", cov_symbol)
-        impute_df.insert(1, "table", cov_table)
+        impute_df.insert(0, "symbol", symbol)
+        impute_df.insert(1, "table", table)
     else:
         last_col = impute_df.columns[-1]
         impute_df = impute_df[["ds", last_col]]

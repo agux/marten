@@ -32,16 +32,45 @@ def get_database_engine(url=None, pool_size=None) -> Engine:
             pool_size=pool_size,
         )
 
+from sqlalchemy import text
+
+
 def columns_with_prefix(conn, table, prefix):
-    with conn.connect() as conn:
-        result = conn.execute(
-            text(
-                f"""
-                    SELECT column_name
-                    FROM information_schema.columns
-                    WHERE table_name = '{table}'
-                    AND column_name LIKE '{prefix}_%'
-                """
-            ),
+    """
+    Retrieve column names from a table where the column names start with a given prefix followed by an underscore.
+
+    Parameters:
+    - conn: A SQLAlchemy engine object.
+    - table (str): The name of the table.
+    - prefix (str): The prefix to search for.
+
+    Returns:
+    - List[str]: A list of column names matching the pattern.
+    """
+    # Define the escape character (e.g., '!')
+    escape_char = "!"
+
+    # Escape the underscore in the pattern using the escape character
+    pattern = f"{prefix}{escape_char}_%"
+
+    # Craft the SQL query with parameter placeholders
+    query = text(
+        f"""
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = :table_name
+          AND column_name LIKE :pattern ESCAPE '{escape_char}'
+    """
+    )
+
+    # Execute the query with bound parameters
+    with conn.connect() as c:
+        result = c.execute(
+            query,
+            {
+                "table_name": table,
+                "pattern": pattern,
+            },
         )
+        # Fetch and return the column names
         return [row[0] for row in result.fetchall()]
