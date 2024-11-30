@@ -14,7 +14,12 @@ import pandas as pd
 import numpy as np
 from dotenv import load_dotenv
 
-from dask.distributed import get_worker, worker_client, as_completed, get_client
+from dask.distributed import (
+    get_worker,
+    worker_client,
+    as_completed,
+    get_client,
+)
 
 from marten.models.base_model import BaseModel
 from marten.utils.database import get_database_engine, columns_with_prefix
@@ -268,7 +273,9 @@ def covar_symbols_from_table(
         having count(*) >= %(min_count)s
     """
 
-    cov_symbols = pd.read_sql(query, alchemyEngine, params=params)
+    # with worker.sem:
+    with alchemyEngine.connect() as conn:
+        cov_symbols = pd.read_sql(query, conn, params=params)
     cov_symbols = cov_symbols[["symbol"]]
     cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
     cov_symbols = cov_symbols["symbol"].tolist()

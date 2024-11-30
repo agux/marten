@@ -16,6 +16,7 @@ from dask.distributed import (
     worker_client,
     Future,
     Lock,
+    Semaphore,
 )
 
 from marten.utils.database import get_database_engine
@@ -35,6 +36,9 @@ class LocalWorkerPlugin(WorkerPlugin):
     def __init__(self, logger_name, args):
         self.logger_name = logger_name
         self.args = args
+        self.sem = Semaphore(
+            max_leases=int(args.min_worker/2.0), name="RESOURCE_INTENSIVE_SQL_SEMAPHORE"
+        )
 
     def setup(self, worker):
         load_dotenv()  # take environment variables from .env.
