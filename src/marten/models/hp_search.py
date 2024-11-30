@@ -333,6 +333,7 @@ def _pair_endogenous_covar_metrics(
 
 
 def _pair_covar_metrics(
+    client,
     anchor_symbol,
     anchor_df_future,
     cov_table,
@@ -344,7 +345,6 @@ def _pair_covar_metrics(
     covar_fut = []
     worker = get_worker()
     logger = worker.logger
-    client = get_client()
     for symbol in cov_symbols:
         logger.debug(
             "submitting fit_with_covar:\nanchor_symbol:%s\ncov_table:%s\ncov_symbol:%s\nfeature:%s",
@@ -1181,6 +1181,7 @@ def covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count
                 case "bond_metrics_em" | "bond_metrics_em_view":
                     # construct a dummy cov_symbols dataframe with `symbol` column and the value 'bond'.
                     _pair_covar_metrics(
+                        client,
                         anchor_symbol,
                         anchor_df,
                         cov_table,
@@ -1191,6 +1192,7 @@ def covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count
                     )
                 case "currency_boc_safe_view":
                     _pair_covar_metrics(
+                        client,
                         anchor_symbol,
                         anchor_df,
                         cov_table,
@@ -1227,23 +1229,24 @@ def covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count
                     # cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
         # logger.info("[DEBUG] len(futures): %s in %s", len(cov_symbols_fut), cov_table)
         if cov_symbols_fut:
-            for future in as_completed(cov_symbols_fut):
-                cov_symbols, feature = future.result()
-                # logger.info(
-                #     "identified %s symbols for %s.%s",
-                #     len(cov_symbols),
-                #     cov_table,
-                #     feature
-                # )
-                _pair_covar_metrics(
-                    anchor_symbol,
-                    anchor_df,
-                    cov_table,
-                    cov_symbols,
-                    feature,
-                    min_date,
-                    args,
-                )
+            for batch in as_completed(cov_symbols_fut, with_results=True).batches():
+                for _, (cov_symbols, feature) in batch:
+                    # logger.info(
+                    #     "identified %s symbols for %s.%s",
+                    #     len(cov_symbols),
+                    #     cov_table,
+                    #     feature
+                    # )
+                    _pair_covar_metrics(
+                        client,
+                        anchor_symbol,
+                        anchor_df,
+                        cov_table,
+                        cov_symbols,
+                        feature,
+                        min_date,
+                        args,
+                    )
     return True
 
 
