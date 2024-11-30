@@ -36,9 +36,10 @@ class LocalWorkerPlugin(WorkerPlugin):
     def __init__(self, logger_name, args):
         self.logger_name = logger_name
         self.args = args
-        self.sem = Semaphore(
-            max_leases=int(args.min_worker/2.0), name="RESOURCE_INTENSIVE_SQL_SEMAPHORE"
-        )
+        #FIXME not all args has min_worker property
+        # self.sem = Semaphore(
+        #     max_leases=int(args.min_worker/2.0), name="RESOURCE_INTENSIVE_SQL_SEMAPHORE"
+        # )
 
     def setup(self, worker):
         load_dotenv()  # take environment variables from .env.
