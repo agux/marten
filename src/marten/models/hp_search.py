@@ -1229,8 +1229,9 @@ def covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count
                     # cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
         # logger.info("[DEBUG] len(futures): %s in %s", len(cov_symbols_fut), cov_table)
         if cov_symbols_fut:
-            for batch in as_completed(cov_symbols_fut, with_results=True).batches():
-                for _, (cov_symbols, feature) in batch:
+            for batch in as_completed(cov_symbols_fut).batches():
+                for future in batch:
+                    cov_symbols, feature = future.result()
                     # logger.info(
                     #     "identified %s symbols for %s.%s",
                     #     len(cov_symbols),
