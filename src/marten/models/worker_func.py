@@ -42,6 +42,8 @@ def merge_covar_df(
     anchor_symbol, anchor_df, cov_table, cov_symbol, feature, min_date, alchemyEngine
 ):
 
+    worker = get_worker()
+    
     if anchor_symbol == cov_symbol and not cov_table.startswith("ta_"):
         if feature == "y":
             # no covariate is needed. this is a baseline metric
@@ -113,8 +115,9 @@ def merge_covar_df(
                 "cutoff_date": cutoff_date,
             }
 
-    with alchemyEngine.connect() as conn:
-        cov_symbol_df = pd.read_sql(query, conn, params=params, parse_dates=["ds"])
+    with worker.sem:
+        with alchemyEngine.connect() as conn:
+            cov_symbol_df = pd.read_sql(query, conn, params=params, parse_dates=["ds"])
 
     if cov_symbol_df.empty:
         return None

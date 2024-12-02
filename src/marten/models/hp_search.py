@@ -273,9 +273,9 @@ def covar_symbols_from_table(
         having count(*) >= %(min_count)s
     """
 
-    # with worker.sem:
-    with alchemyEngine.connect() as conn:
-        cov_symbols = pd.read_sql(query, conn, params=params)
+    with worker.sem:
+        with alchemyEngine.connect() as conn:
+            cov_symbols = pd.read_sql(query, conn, params=params)
     cov_symbols = cov_symbols[["symbol"]]
     cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
     cov_symbols = cov_symbols["symbol"].tolist()
