@@ -126,12 +126,12 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
             "distributed.scheduler.work-stealing-interval": "5 seconds",
             "distributed.scheduler.worker-ttl": "30 minutes",
             "distributed.scheduler.worker-saturation": 0.0001,
+            "distributed.scheduler.locks.lease-timeout": "30 minutes",
             "distributed.comm.retry.count": 10,
             "distributed.comm.timeouts.connect": 120,
             "distributed.nanny.pre-spawn-environ.MALLOC_TRIM_THRESHOLD_": 0,
             "distributed.admin.log-length": 0,
             "distributed.admin.low-level-log-length": 0,
-            "distributed.scheduler.locks.lease-timeout": "1000s"
         }
     )
     cluster = LocalCluster(
