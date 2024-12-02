@@ -36,10 +36,6 @@ class LocalWorkerPlugin(WorkerPlugin):
     def __init__(self, logger_name, args):
         self.logger_name = logger_name
         self.args = args
-        if hasattr(args, "min_worker"):
-            self.sem = Semaphore(
-                max_leases=int(args.min_worker/2.0), name="RESOURCE_INTENSIVE_SQL_SEMAPHORE"
-            )
 
     def setup(self, worker):
         load_dotenv()  # take environment variables from .env.
@@ -68,6 +64,12 @@ class LocalWorkerPlugin(WorkerPlugin):
                     worker.model = TSMixerxModel()
                 case _:
                     worker.model = None
+
+        if hasattr(self.args, "min_worker"):
+            worker.sem = Semaphore(
+                max_leases=int(self.args.min_worker / 2.0),
+                name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
+            )
 
 
 class TaskException(Exception):
