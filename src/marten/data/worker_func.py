@@ -1667,7 +1667,7 @@ def impute(df, random_seed, client=None):
         futures = []
         for na_col in na_cols:
             df_na = df[["ds", na_col]]
-            futures.append(client.submit(_neupro_impute, df_na, random_seed))
+            futures.append(client.submit(_neural_impute, df_na, random_seed, priority=100))
         return client.gather(futures)
 
     if client is not None:
@@ -1676,7 +1676,7 @@ def impute(df, random_seed, client=None):
         with worker_client() as client:
             results = _func(client)
     else:
-        results = [_neupro_impute(df[["ds", na_cols[0]]].copy(), random_seed)]
+        results = [_neural_impute(df[["ds", na_cols[0]]].copy(), random_seed)]
     imputed_df = results[0]
     for result in results[1:]:
         imputed_df = imputed_df.merge(result, on="ds", how="left")
@@ -1690,7 +1690,7 @@ def impute(df, random_seed, client=None):
     return df, imputed_df
 
 
-def _neupro_impute(df, random_seed):
+def _neural_impute(df, random_seed):
     na_col = df.columns[1]
     df.rename(columns={na_col: "y"}, inplace=True)
 
