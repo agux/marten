@@ -116,7 +116,7 @@ def merge_covar_df(
             }
 
     if sem:
-        with worker.sem:
+        with sem:
             with alchemyEngine.connect() as conn:
                 cov_symbol_df = pd.read_sql(query, conn, params=params, parse_dates=["ds"])
     else:
