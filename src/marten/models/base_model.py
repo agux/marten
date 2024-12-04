@@ -87,6 +87,7 @@ class BaseModel(ABC):
         self.device = None
         self.model_args = None
         self.accelerator_lock = None
+        self.locks = None
 
         load_dotenv()
         self.device_lock_release_delay = float(
@@ -156,7 +157,7 @@ class BaseModel(ABC):
         def lock_cpu():
             nonlocal lock_acquired, accelerator
             if lock_acquired is None and self._check_cpu():
-                lock = self.lock["cpu"]
+                lock = self.locks["cpu"]
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
                     lock_acquired = lock
                     accelerator = "cpu"
@@ -165,7 +166,7 @@ class BaseModel(ABC):
         def lock_gpu():
             nonlocal lock_acquired, accelerator
             if lock_acquired is None and accelerator in ("gpu", "auto"):
-                lock = self.lock["gpu"]
+                lock = self.locks["gpu"]
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
                     lock_acquired = lock
                     accelerator = "gpu"
@@ -179,14 +180,14 @@ class BaseModel(ABC):
             gu, _ = gpu_util()
 
             if cu >= gu:
-                if self.lock:
+                if self.locks:
                     get_logger().debug("%s >= %s, trying GPU lock first", cu, gu)
                     lock_gpu()
                     lock_cpu()
                 else:
                     return "gpu"
             else:
-                if self.lock:
+                if self.locks:
                     get_logger().debug("%s < %s, trying CPU lock first", cu, gu)
                     lock_cpu()
                     lock_gpu()
