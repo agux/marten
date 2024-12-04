@@ -65,11 +65,11 @@ class LocalWorkerPlugin(WorkerPlugin):
                 case _:
                     worker.model = None
 
-        if hasattr(self.args, "min_worker"):
-            worker.sem = Semaphore(
-                max_leases=int(self.args.min_worker / 2.0),
-                name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
-            )
+        # if hasattr(self.args, "min_worker"):
+        #     worker.sem = Semaphore(
+        #         max_leases=int(self.args.min_worker / 2.0),
+        #         name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
+        #     )
 
 
 class TaskException(Exception):

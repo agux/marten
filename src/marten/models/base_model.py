@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 import os
 import time
 import socket
-import random
 import numpy as np
 import pandas as pd
 
@@ -149,49 +148,57 @@ class BaseModel(ABC):
                 return True
 
     def _lock_accelerator(self, accelerator) -> Lock:
-        gpu_lock_key = f"""{socket.gethostname()}::GPU-auto"""
-        cpu_lock_key = f"""{socket.gethostname()}::CPU"""
         gpu_ut, gpu_rt = self.gpu_threshold()
         cpu_ut, cpu_rt = self.cpu_threshold()
         lock_acquired = None
+        accelerator = None
 
         def lock_cpu():
-            nonlocal lock_acquired
+            nonlocal lock_acquired, accelerator
             if lock_acquired is None and self._check_cpu():
-                lock = Lock(cpu_lock_key)
+                lock = self.lock["cpu"]
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
                     lock_acquired = lock
+                    accelerator = "cpu"
                     get_logger().debug("lock acquired: %s", lock_acquired.name)
 
         def lock_gpu():
-            nonlocal lock_acquired
+            nonlocal lock_acquired, accelerator
             if lock_acquired is None and accelerator in ("gpu", "auto"):
-                lock = Lock(gpu_lock_key)
+                lock = self.lock["gpu"]
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
                     lock_acquired = lock
+                    accelerator = "gpu"
                     get_logger().debug("lock acquired: %s", lock_acquired.name)
 
         while True:
             lock_acquired = None
+            accelerator = None
 
             cu, _ = cpu_util()
             gu, _ = gpu_util()
 
             if cu >= gu:
-                get_logger().debug("%s >= %s, trying GPU lock first", cu, gu)
-                lock_gpu()
-                lock_cpu()
+                if self.lock:
+                    get_logger().debug("%s >= %s, trying GPU lock first", cu, gu)
+                    lock_gpu()
+                    lock_cpu()
+                else:
+                    return "gpu"
             else:
-                get_logger().debug("%s < %s, trying CPU lock first", cu, gu)
-                lock_cpu()
-                lock_gpu()
+                if self.lock:
+                    get_logger().debug("%s < %s, trying CPU lock first", cu, gu)
+                    lock_cpu()
+                    lock_gpu()
+                else:
+                    return "cpu"
 
             if lock_acquired is None:
                 continue
 
             stop_at = time.time() + self.resource_wait_time
             interval = 0.5 if self.is_baseline(**self.model_args) else 1
-            if lock_acquired.name == gpu_lock_key:
+            if accelerator == "gpu":
                 while wait_gpu(gpu_ut, gpu_rt, stop_at):
                     time.sleep(0.2)
             elif self._check_cpu():  # CPU
@@ -216,7 +223,7 @@ class BaseModel(ABC):
 
         self.accelerator_lock = lock_acquired
 
-        return lock_acquired
+        return accelerator
 
     def _select_accelerator(self) -> str:
         accelerator = self.model_args["accelerator"].lower()
@@ -235,8 +242,7 @@ class BaseModel(ABC):
         accelerator = "gpu" if accelerator == "auto" else accelerator
 
         self.release_accelerator_lock()
-        lock = self._lock_accelerator(accelerator)
-        accelerator = "gpu" if "::GPU" in lock.name else "cpu"
+        accelerator = self._lock_accelerator(accelerator)
         self.release_accelerator_lock(
             self.device_lock_release_delay
             if self.is_baseline(**self.model_args)
@@ -358,6 +364,7 @@ class BaseModel(ABC):
                 - device: e.g. GPU:0, CPU, etc.
                 - machine: which machine the model is trained on. Can be obtained from socket.gethostname()
         """
+        self.locks = kwargs["locks"]
         df = df.copy()
         df.insert(0, "unique_id", "0")
         self.model_args = kwargs

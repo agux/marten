@@ -39,11 +39,11 @@ LOSS_CAP = 99.99
 
 
 def merge_covar_df(
-    anchor_symbol, anchor_df, cov_table, cov_symbol, feature, min_date, alchemyEngine
+    anchor_symbol, anchor_df, cov_table, cov_symbol, feature, min_date, alchemyEngine, sem
 ):
 
     worker = get_worker()
-    
+
     if anchor_symbol == cov_symbol and not cov_table.startswith("ta_"):
         if feature == "y":
             # no covariate is needed. this is a baseline metric
@@ -80,7 +80,7 @@ def merge_covar_df(
         case _ if cov_table.startswith("ta_"):  # handle technical indicators table
             column_names = columns_with_prefix(alchemyEngine, cov_table, feature)
             columns = ", ".join([f'{c} "{c}_{cov_symbol}"' for c in column_names])
-            # split cov_symbol by "::" so that we get the "table" from the first element and 
+            # split cov_symbol by "::" so that we get the "table" from the first element and
             # the real "cov_symbol" from the second
             cov_symbol_table, cov_symbol = cov_symbol.split("::")
             query = f"""
@@ -115,7 +115,11 @@ def merge_covar_df(
                 "cutoff_date": cutoff_date,
             }
 
-    with worker.sem:
+    if sem:
+        with worker.sem:
+            with alchemyEngine.connect() as conn:
+                cov_symbol_df = pd.read_sql(query, conn, params=params, parse_dates=["ds"])
+    else:
         with alchemyEngine.connect() as conn:
             cov_symbol_df = pd.read_sql(query, conn, params=params, parse_dates=["ds"])
 
@@ -139,6 +143,8 @@ def fit_with_covar(
     accelerator,
     early_stopping,
     infer_holiday,
+    sem=None,
+    locks=None,
 ):
     # Local import of get_worker to avoid circular import issue?
     worker = get_worker()
@@ -154,6 +160,7 @@ def fit_with_covar(
             feature,
             min_date,
             alchemyEngine,
+            sem,
         )
 
         if merged_df is None:
@@ -236,6 +243,7 @@ def fit_with_covar(
                 )
                 config["validate"] = True
                 config["random_seed"] = random_seed
+                config["locks"] = locks
                 metrics = model.train(merged_df, **config)
 
         fit_time = time.time() - start_time
