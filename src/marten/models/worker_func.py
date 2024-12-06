@@ -26,7 +26,7 @@ from marten.data.worker_func import impute
 from marten.utils.worker import await_futures
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
-from marten.utils.trainer import select_device
+from marten.utils.trainer import select_device, get_accelerator_locks
 from marten.utils.softs import SOFTSPredictor, baseline_config
 from marten.utils.database import columns_with_prefix
 from marten.utils.neuralprophet import (
@@ -41,8 +41,6 @@ LOSS_CAP = 99.99
 def merge_covar_df(
     anchor_symbol, anchor_df, cov_table, cov_symbol, feature, min_date, alchemyEngine, sem
 ):
-
-    worker = get_worker()
 
     if anchor_symbol == cov_symbol and not cov_table.startswith("ta_"):
         if feature == "y":
@@ -244,6 +242,12 @@ def fit_with_covar(
                 config["validate"] = True
                 config["random_seed"] = random_seed
                 config["locks"] = locks
+                # logger.info(
+                #     "fitting: %s @ %s.%s",
+                #     cov_symbol,
+                #     cov_table,
+                #     feature,
+                # )
                 metrics = model.train(merged_df, **config)
 
         fit_time = time.time() - start_time
@@ -516,7 +520,7 @@ def reg_search_params(params):
         params["trend_reg"] = round(params["trend_reg"], 5)
 
 
-def validate_hyperparams(args, df, covar_set_id, hps_id, params):
+def validate_hyperparams(args, df, covar_set_id, hps_id, params, locks):
     reg_params = params.copy()
     if args.model == "NeuralProphet":
         reg_search_params(reg_params)
@@ -537,6 +541,7 @@ def validate_hyperparams(args, df, covar_set_id, hps_id, params):
             hps_id,
             args.early_stopping,
             args.infer_holiday,
+            locks,
         )
     except Exception as e:
         get_logger().error(
@@ -570,6 +575,7 @@ def log_metrics_for_hyper_params(
     hps_id,
     early_stopping,
     infer_holiday,
+    locks=None,
 ):
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
@@ -691,6 +697,7 @@ def log_metrics_for_hyper_params(
             params["accelerator"] = (
                 "auto" if accelerator == True or accelerator is None else accelerator
             )
+            params["locks"] = locks
             last_metric = model.train(df, **params)
 
     fit_time = time.time() - start_time
@@ -1998,6 +2005,7 @@ def fast_bayesopt(
     if args.model == "SOFTS" or (model is not None and not model.accept_missing_data()):
         df, _ = impute(df, args.random_seed, client)
 
+    locks = get_accelerator_locks()
     # split large iterations into smaller runs to avoid OOM / memory leak
     for i in range(args.max_itr):
         logger.info(
@@ -2021,6 +2029,7 @@ def fast_bayesopt(
             args.mini_itr,
             domain_size,
             args.resume or i > 0,
+            locks,
         )
 
         if min_loss is None or min_loss > base_loss:

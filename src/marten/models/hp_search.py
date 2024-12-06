@@ -8,7 +8,6 @@ import random
 import datetime
 import argparse
 import json
-import socket
 import math
 import multiprocessing
 import pandas as pd
@@ -20,7 +19,7 @@ from dask.distributed import (
     worker_client,
     as_completed,
     Semaphore,
-    Lock,
+    wait,
 )
 
 from marten.models.base_model import BaseModel
@@ -34,7 +33,11 @@ from marten.utils.worker import (
 )
 from marten.utils.neuralprophet import select_topk_features
 from marten.utils.softs import is_large_model
-from marten.utils.trainer import select_device, select_randk_covars
+from marten.utils.trainer import (
+    select_device,
+    select_randk_covars,
+    get_accelerator_locks,
+)
 from marten.models.worker_func import (
     fit_with_covar,
     log_metrics_for_hyper_params,
@@ -200,7 +203,14 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None, anchor_table=
 
 
 def covar_symbols_from_table(
-    model, anchor_symbol, dates, table, feature, ts_date, min_count, sem,
+    model,
+    anchor_symbol,
+    dates,
+    table,
+    feature,
+    ts_date,
+    min_count,
+    sem,
 ):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
@@ -364,32 +374,33 @@ def _pair_covar_metrics(
             symbol,
             feature,
         )
-        future = client.submit(
-            fit_with_covar,
-            anchor_symbol,
-            anchor_df_future,
-            cov_table,
-            symbol,
-            min_date,
-            args.random_seed,
-            feature,
-            select_device(
-                args.accelerator,
-                getattr(args, "gpu_util_threshold", None),
-                getattr(args, "gpu_ram_threshold", None),
-            ),
-            args.early_stopping,
-            args.infer_holiday,
-            sem,
-            locks,
-            key=f"{fit_with_covar.__name__}-{cov_table}.{feature}",
-            priority=3,
+        covar_fut.append(
+            client.submit(
+                fit_with_covar,
+                anchor_symbol,
+                anchor_df_future,
+                cov_table,
+                symbol,
+                min_date,
+                args.random_seed,
+                feature,
+                select_device(
+                    args.accelerator,
+                    getattr(args, "gpu_util_threshold", None),
+                    getattr(args, "gpu_ram_threshold", None),
+                ),
+                args.early_stopping,
+                args.infer_holiday,
+                sem,
+                locks,
+                key=f"{fit_with_covar.__name__}-{cov_table}.{feature}",
+                priority=3,
+            )
         )
-        covar_fut.append(future)
         # if too much pending task, then slow down for the tasks to be digested
-        await_futures(covar_fut, False)
-
-    await_futures(covar_fut, hard_wait=True)
+        # await_futures(covar_fut, False)
+    wait(covar_fut)
+    # await_futures(covar_fut, hard_wait=True)
 
 
 def _load_covar_set(covar_set_id, model, alchemyEngine):
@@ -939,6 +950,7 @@ def _bayesopt_run(
     iteration,
     domain_size,
     resume,
+    locks,
 ):
     global logger, client
 
@@ -971,6 +983,7 @@ def _bayesopt_run(
                 params,
                 resources={"POWER": power_demand(args, params)},
                 retries=1,
+                locks=locks,
                 key=f"{validate_hyperparams.__name__}-{hpid}",
             )
             future.add_done_callback(hps_task_callback)
@@ -1163,7 +1176,9 @@ def _remove_measured_features(model, anchor_symbol, cov_table, features, ts_date
     return features
 
 
-def covar_metric(anchor_symbol, anchor_df, cov_table, features, dates, min_count, args, sem, locks):
+def covar_metric(
+    anchor_symbol, anchor_df, cov_table, features, dates, min_count, args, sem, locks
+):
     worker = get_worker()
     logger = worker.logger
     min_date = min(dates).strftime("%Y-%m-%d")
@@ -1304,10 +1319,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         max_leases=int(args.min_worker / 2.0),
         name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
     )
-    locks = {
-        "cpu": Lock(f"""{socket.gethostname()}::CPU"""),
-        "gpu": Lock(f"""{socket.gethostname()}::GPU-auto""")
-    }
+    locks = get_accelerator_locks(2, 2)
 
     # prep CN index covariates
     features = [

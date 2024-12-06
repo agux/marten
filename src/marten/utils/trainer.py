@@ -1,9 +1,19 @@
 import torch
 import psutil
 import socket
-from dask.distributed import get_worker
+from dask.distributed import get_worker, Semaphore
 from marten.utils.logger import get_logger
 
+def get_accelerator_locks(cpu_leases=1, gpu_leases=1):
+    locks = {
+        "cpu": Semaphore(
+            max_leases=cpu_leases, name=f"""{socket.gethostname()}::CPU"""
+        ),
+        "gpu": Semaphore(
+            max_leases=gpu_leases, name=f"""{socket.gethostname()}::GPU-auto"""
+        ),
+    }
+    return locks
 
 def is_cuda_error(exception):
     exmsg = str(exception)
