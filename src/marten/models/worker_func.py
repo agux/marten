@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import text
 from psycopg2.extras import execute_values
 from neuralprophet.event_utils import get_all_holidays
+import dask
 from dask.distributed import get_worker, worker_client
 from types import SimpleNamespace
 from tenacity import (
@@ -2005,7 +2006,8 @@ def fast_bayesopt(
     if args.model == "SOFTS" or (model is not None and not model.accept_missing_data()):
         df, _ = impute(df, args.random_seed, client)
 
-    locks = get_accelerator_locks()
+    dask.config.set({"distributed.scheduler.locks.lease-timeout": "10s"})
+    locks = get_accelerator_locks(cpu_leases=2, gpu_leases=1)
     # split large iterations into smaller runs to avoid OOM / memory leak
     for i in range(args.max_itr):
         logger.info(

@@ -32,6 +32,7 @@ from pprint import pformat
 
 compute_power = None
 
+
 class LocalWorkerPlugin(WorkerPlugin):
     def __init__(self, logger_name, args):
         self.logger_name = logger_name
@@ -61,6 +62,7 @@ class LocalWorkerPlugin(WorkerPlugin):
                     worker.model = TimeMixerModel()
                 case "tsmixerx":
                     from marten.models.nf_tstimerx import TSMixerxModel
+
                     worker.model = TSMixerxModel()
                 case _:
                     worker.model = None
@@ -79,7 +81,6 @@ class TaskException(Exception):
         self.message = message
         self.task_info = args
 
-    
     def __str__(self):
         # Return a custom string representation
         if self.task_info:
@@ -111,6 +112,7 @@ def local_machine_power():
     compute_power = 2 if total_memory >= 8192 and multi_processor_count >= 64 else 1
     return compute_power
 
+
 def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     # setting worker resources in environment variable for restarted workers
     # os.environ["DASK_DISTRIBUTED__WORKER__RESOURCES__POWER"] = str(local_machine_power())
@@ -126,7 +128,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
             "distributed.scheduler.work-stealing-interval": "5 seconds",
             "distributed.scheduler.worker-ttl": "30 minutes",
             "distributed.scheduler.worker-saturation": 0.0001,
-            "distributed.scheduler.locks.lease-timeout": "30 minutes",
+            # "distributed.scheduler.locks.lease-timeout": "30 minutes",
             "distributed.comm.retry.count": 10,
             "distributed.comm.timeouts.connect": 120,
             "distributed.nanny.pre-spawn-environ.MALLOC_TRIM_THRESHOLD_": 0,
@@ -333,7 +335,7 @@ def hps_task_callback(future: Future):
         lock_key = "workload_info.finished"
         with Lock(lock_key):
             fin = future.client.get_metadata(["workload_info", "finished"])
-            future.client.set_metadata(["workload_info", "finished"], fin+1)
+            future.client.set_metadata(["workload_info", "finished"], fin + 1)
     except Exception as e:
         exception = e
 
@@ -359,6 +361,8 @@ def hps_task_callback(future: Future):
         future.client.restart_workers(
             workers=[worker.address], timeout=600, raise_for_error=False
         )
+
+
 #     future.client.restart_workers()
 
 
@@ -379,7 +383,11 @@ def restart_worker(exception):
 
 
 def release_lock(lock: Lock, after=10):
-    if lock is None or not lock.locked:
+    if (
+        lock is None
+        or (isinstance(lock, Lock) and not lock.locked)
+        or (isinstance(lock, Semaphore) and lock.get_value() <= 0)
+    ):
         return
 
     def _release():
@@ -392,32 +400,41 @@ def release_lock(lock: Lock, after=10):
             msg = str(e).lower()
             if "lock is not yet acquired" in msg or "released too often" in msg:
                 return
-            get_logger().warning(
-                "exception releasing lock %s: %s", lock.name, str(e)
-            )
+            get_logger().warning("exception releasing lock %s: %s", lock.name, str(e))
 
     if after <= 0:
         _release()
     else:
         threading.Timer(after, _release).start()
 
+
 def gpu_util():
     util = torch.cuda.utilization()
     mu = torch.cuda.memory_usage()
     return util, mu
+
 
 def wait_gpu(util_threshold=80, vram_threshold=80, stop_at=None):
     if stop_at is not None and time.time() > stop_at:
         return False
     util, mu = gpu_util()
     keep_waiting = util > 0 and (util >= util_threshold or mu >= vram_threshold)
-    get_logger().debug("gpu: %s/%s, vram: %s/%s, keep_waiting: %s", util, util_threshold, mu, vram_threshold, keep_waiting)
+    get_logger().debug(
+        "gpu: %s/%s, vram: %s/%s, keep_waiting: %s",
+        util,
+        util_threshold,
+        mu,
+        vram_threshold,
+        keep_waiting,
+    )
     return keep_waiting
+
 
 def cpu_util(interval=0.1):
     cpu_util = psutil.cpu_percent(interval)
     mem_util = psutil.virtual_memory().percent
     return cpu_util, mem_util
+
 
 def wait_cpu(util_threshold=80, mem_threshold=80, stop_at=None, interval=0.1):
     if stop_at is not None and time.time() > stop_at:

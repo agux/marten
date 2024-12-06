@@ -14,6 +14,7 @@ import pandas as pd
 import numpy as np
 from dotenv import load_dotenv
 
+import dask
 from dask.distributed import (
     get_worker,
     worker_client,
@@ -1315,10 +1316,12 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     # for the rest of exogenous covariates, keep only the core features of anchor_df
     anchor_df = anchor_df[["ds", "y"]]
 
+    dask.config.set({"distributed.scheduler.locks.lease-timeout": "60s"})
     sem = Semaphore(
         max_leases=int(args.min_worker / 2.0),
         name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
     )
+    dask.config.set({"distributed.scheduler.locks.lease-timeout": "10s"})
     locks = get_accelerator_locks(2, 2)
 
     # prep CN index covariates
