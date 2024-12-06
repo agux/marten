@@ -369,10 +369,9 @@ def _pair_covar_metrics(
     logger = worker.logger
     for symbol in cov_symbols:
         logger.debug(
-            "submitting fit_with_covar:\nanchor_symbol:%s\ncov_table:%s\ncov_symbol:%s\nfeature:%s",
-            anchor_symbol,
-            cov_table,
+            "submitting fit_with_covar: %s @ %s.%s",
             symbol,
+            cov_table,
             feature,
         )
         covar_fut.append(
@@ -394,8 +393,8 @@ def _pair_covar_metrics(
                 args.infer_holiday,
                 sem,
                 locks,
-                key=f"{fit_with_covar.__name__}-{cov_table}.{feature}",
-                priority=3,
+                key=f"{fit_with_covar.__name__}-{symbol}@{cov_table}.{feature}",
+                priority=10,
             )
         )
         # if too much pending task, then slow down for the tasks to be digested
@@ -1316,7 +1315,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     # for the rest of exogenous covariates, keep only the core features of anchor_df
     anchor_df = anchor_df[["ds", "y"]]
 
-    dask.config.set({"distributed.scheduler.locks.lease-timeout": "60s"})
+    dask.config.set({"distributed.scheduler.locks.lease-timeout": "120s"})
     sem = Semaphore(
         max_leases=int(args.min_worker / 2.0),
         name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",

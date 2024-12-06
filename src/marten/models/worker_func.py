@@ -243,12 +243,6 @@ def fit_with_covar(
                 config["validate"] = True
                 config["random_seed"] = random_seed
                 config["locks"] = locks
-                # logger.info(
-                #     "fitting: %s @ %s.%s",
-                #     cov_symbol,
-                #     cov_table,
-                #     feature,
-                # )
                 metrics = model.train(merged_df, **config)
 
         fit_time = time.time() - start_time
