@@ -230,7 +230,7 @@ class BaseModel(ABC):
                 self.resource_wait_time,
                 now,
                 stop_at,
-                self.accelerator_lock.name,
+                self.accelerator_lock.name if self.accelerator_lock else "no-lock",
             )
             release_lock(self.accelerator_lock, 0)
 
