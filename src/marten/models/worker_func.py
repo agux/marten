@@ -243,7 +243,7 @@ def fit_with_covar(
                 config["validate"] = True
                 config["random_seed"] = random_seed
                 config["locks"] = locks
-                get_logger().info("fit_with_covar : %s", locks)
+                # get_logger().info("fit_with_covar : %s", locks)
                 metrics = model.train(merged_df, **config)
 
         fit_time = time.time() - start_time

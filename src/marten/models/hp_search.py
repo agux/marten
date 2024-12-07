@@ -309,7 +309,7 @@ def covar_symbols_from_table(
 
 
 def _pair_endogenous_covar_metrics(
-    anchor_symbol, anchor_df, cov_table, features, args, cutoff_date
+    anchor_symbol, anchor_df, cov_table, features, args, cutoff_date, sem, locks
 ):
     global client, futures, logger
 
@@ -343,10 +343,10 @@ def _pair_endogenous_covar_metrics(
                 getattr(args, "gpu_util_threshold", None),
                 getattr(args, "gpu_ram_threshold", None),
             ),
-            None,
-            None,
             args.early_stopping,
             args.infer_holiday,
+            sem,
+            locks
         )
         futures.append(future)
         await_futures(futures, False)
@@ -1306,21 +1306,21 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     min_count = int(len(anchor_df) * (1 - args.nan_limit))
     dates = tuple(anchor_df["ds"])
 
-    # endogenous features of the anchor time series per se
-    endogenous_features = [col for col in anchor_df.columns if col not in ("ds")]
-    _pair_endogenous_covar_metrics(
-        anchor_symbol, anchor_df, anchor_table, endogenous_features, args, cutoff_date
-    )
-
-    # for the rest of exogenous covariates, keep only the core features of anchor_df
-    anchor_df = anchor_df[["ds", "y"]]
-
     dask.config.set({"distributed.scheduler.locks.lease-timeout": "120s"})
     sem = Semaphore(
         max_leases=int(args.min_worker / 2.0),
         name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
     )
     locks = get_accelerator_locks(1, 2, "30s")
+
+    # endogenous features of the anchor time series per se
+    endogenous_features = [col for col in anchor_df.columns if col not in ("ds")]
+    _pair_endogenous_covar_metrics(
+        anchor_symbol, anchor_df, anchor_table, endogenous_features, args, cutoff_date, sem, locks
+    )
+
+    # for the rest of exogenous covariates, keep only the core features of anchor_df
+    anchor_df = anchor_df[["ds", "y"]]
 
     # prep CN index covariates
     features = [
