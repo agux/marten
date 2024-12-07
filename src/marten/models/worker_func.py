@@ -2000,7 +2000,7 @@ def fast_bayesopt(
     if args.model == "SOFTS" or (model is not None and not model.accept_missing_data()):
         df, _ = impute(df, args.random_seed, client)
 
-    locks = get_accelerator_locks(cpu_leases=1, gpu_leases=1, timeout="15s")
+    locks = get_accelerator_locks(cpu_leases=1, gpu_leases=1, timeout="30s")
     # split large iterations into smaller runs to avoid OOM / memory leak
     for i in range(args.max_itr):
         logger.info(

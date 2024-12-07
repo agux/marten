@@ -1320,7 +1320,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         max_leases=int(args.min_worker / 2.0),
         name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
     )
-    locks = get_accelerator_locks(1, 2, "10s")
+    locks = get_accelerator_locks(1, 2, "30s")
 
     # prep CN index covariates
     features = [

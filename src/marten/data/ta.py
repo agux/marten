@@ -22,11 +22,13 @@ from marten.data.tabledef import (
     ta_volume_based,
 )
 
+
 def tofl(value, mapping=None):
     if value is None:
         return value
     else:
         return float(value) if mapping is None else mapping[value]
+
 
 def calc_ta():
     worker = get_worker()
@@ -38,35 +40,34 @@ def calc_ta():
     total = 0
     futures = []
     # load symbol list from the asset tables
-    etf_list = pd.read_sql(
-        "select distinct symbol from fund_etf_daily_em", alchemyEngine
-    )
-    logger.info("%s ETF", len(etf_list))
-    total += len(etf_list)
-    cn_index_list = pd.read_sql(
-        "SELECT distinct symbol FROM index_daily_em", alchemyEngine
-    )
-    logger.info("%s CN indices", len(cn_index_list))
-    total += len(cn_index_list)
-    bond_list = pd.read_sql(
-        "select distinct symbol from bond_zh_hs_daily", alchemyEngine
-    )
-    logger.info("%s bonds", len(bond_list))
-    total += len(bond_list)
-    stock_list = pd.read_sql(
-        "select distinct symbol from stock_zh_a_hist_em", alchemyEngine
-    )
-    logger.info("%s stocks", len(stock_list))
-    total += len(stock_list)
-    us_index_list = pd.read_sql(
-        "select distinct symbol from us_index_daily_sina", alchemyEngine
-    )
-    logger.info("%s US indices", len(us_index_list))
-    total += len(us_index_list)
+    with alchemyEngine.connect() as conn:
+        etf_list = pd.read_sql("select distinct symbol from fund_etf_daily_em", conn)
+        logger.info("%s ETF", len(etf_list))
+        total += len(etf_list)
+        cn_index_list = pd.read_sql("SELECT distinct symbol FROM index_daily_em", conn)
+        logger.info("%s CN indices", len(cn_index_list))
+        total += len(cn_index_list)
+        bond_list = pd.read_sql("select distinct symbol from bond_zh_hs_daily", conn)
+        logger.info("%s bonds", len(bond_list))
+        total += len(bond_list)
+        stock_list = pd.read_sql("select distinct symbol from stock_zh_a_hist_em", conn)
+        logger.info("%s stocks", len(stock_list))
+        total += len(stock_list)
+        us_index_list = pd.read_sql(
+            "select distinct symbol from us_index_daily_sina", conn
+        )
+        logger.info("%s US indices", len(us_index_list))
+        total += len(us_index_list)
     with worker_client() as client:
         for symbol in etf_list["symbol"]:
-            futures.append(client.submit(calc_ta_for, symbol, "fund_etf_daily_em", 
-                                         key=f"{calc_ta_for.__name__}_ETF--{symbol.lower()}"))
+            futures.append(
+                client.submit(
+                    calc_ta_for,
+                    symbol,
+                    "fund_etf_daily_em",
+                    key=f"{calc_ta_for.__name__}_ETF--{symbol.lower()}",
+                )
+            )
             await_futures(futures, False, multiplier=1.5)
         for symbol in cn_index_list["symbol"]:
             futures.append(
@@ -100,8 +101,12 @@ def calc_ta():
             await_futures(futures, False, multiplier=1.5)
         for symbol in stock_list["symbol"]:
             futures.append(
-                client.submit(calc_ta_for, symbol, "stock_zh_a_hist_em",
-                              key=f"{calc_ta_for.__name__}_STOCK--{symbol.lower()}")
+                client.submit(
+                    calc_ta_for,
+                    symbol,
+                    "stock_zh_a_hist_em",
+                    key=f"{calc_ta_for.__name__}_STOCK--{symbol.lower()}",
+                )
             )
             await_futures(futures, False, multiplier=1.5)
 
@@ -110,6 +115,7 @@ def calc_ta():
     logger.info("Technical indicators time taken: %s seconds", time.time() - t_start)
 
     return total
+
 
 def calc_ta_for(symbol, table):
     worker = get_worker()
@@ -140,9 +146,8 @@ def save_ta(ta_table, df):
     worker = get_worker()
     alchemyEngine = worker.alchemyEngine
     with alchemyEngine.begin() as conn:
-        update_on_conflict(
-            ta_table, conn, df, primary_keys=["table", "symbol", "date"]
-        )
+        update_on_conflict(ta_table, conn, df, primary_keys=["table", "symbol", "date"])
+
 
 def count_ta(ta_table, table, symbol):
     worker = get_worker()
@@ -164,6 +169,7 @@ def count_ta(ta_table, table, symbol):
             },
         )
         return result.fetchone()[0]
+
 
 def numerical_analysis(quotes_list, symbol, table):
     c = count_ta("ta_numerical_analysis", table, symbol)
@@ -218,6 +224,7 @@ def numerical_analysis(quotes_list, symbol, table):
         )
     df = pd.DataFrame(data, columns=columns)
     save_ta(ta_numerical_analysis, df)
+
 
 def price_characteristics(quotes_list, symbol, table):
     c = count_ta("ta_price_characteristics", table, symbol)
@@ -347,6 +354,7 @@ def price_characteristics(quotes_list, symbol, table):
     df = pd.DataFrame(data, columns=columns)
     save_ta(ta_price_characteristics, df)
 
+
 def price_transforms(quotes_list, symbol, table):
     c = count_ta("ta_price_transforms", table, symbol)
     if c == len(quotes_list):
@@ -424,6 +432,7 @@ def price_transforms(quotes_list, symbol, table):
         )
     df = pd.DataFrame(data, columns=columns)
     save_ta(ta_price_transforms, df)
+
 
 def ma(quotes_list, symbol, table):
     c = count_ta("ta_ma", table, symbol)
@@ -562,6 +571,7 @@ def ma(quotes_list, symbol, table):
     df = pd.DataFrame(data, columns=columns)
     save_ta(ta_ma, df)
 
+
 def volume_based(quotes_list, symbol, table):
     c = count_ta("ta_volume_based", table, symbol)
     if c == len(quotes_list):
@@ -631,6 +641,7 @@ def volume_based(quotes_list, symbol, table):
     df = pd.DataFrame(data, columns=columns)
     save_ta(ta_volume_based, df)
 
+
 def other_price_patterns(quotes_list, symbol, table):
     c = count_ta("ta_other_price_patterns", table, symbol)
     if c == len(quotes_list):
@@ -669,6 +680,7 @@ def other_price_patterns(quotes_list, symbol, table):
         )
     df = pd.DataFrame(data, columns=columns)
     save_ta(ta_other_price_patterns, df)
+
 
 def stop_reverse(quotes_list, symbol, table):
     c = count_ta("ta_stop_reverse", table, symbol)
@@ -792,6 +804,7 @@ def oscillators(quotes_list, symbol, table):
         )
     df = pd.DataFrame(data, columns=columns)
     save_ta(ta_oscillators, df)
+
 
 def price_channel(quotes_list, symbol, table):
     c = count_ta("ta_price_channel", table, symbol)
@@ -1023,11 +1036,12 @@ def load_historical(symbol, alchemyEngine, anchor_table):
 
     query += " order by DS"
 
-    df = pd.read_sql(
-        query,
-        alchemyEngine,
-        params=params,
-        parse_dates=["ds"],
-    )
+    with alchemyEngine.connect() as conn:
+        df = pd.read_sql(
+            query,
+            conn,
+            params=params,
+            parse_dates=["ds"],
+        )
 
     return df
