@@ -151,66 +151,77 @@ class BaseModel(ABC):
     def _lock_accelerator(self, accelerator) -> Lock:
         gpu_ut, gpu_rt = self.gpu_threshold()
         cpu_ut, cpu_rt = self.cpu_threshold()
-        lock_acquired = None
-        accelerator = None
+        mod_accelerator = None
 
         def lock_cpu():
-            nonlocal lock_acquired, accelerator
-            if lock_acquired is None and self._check_cpu():
+            nonlocal mod_accelerator
+            if self.accelerator_lock is None and self._check_cpu():
                 lock = self.locks["cpu"]
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
-                    lock_acquired = lock
-                    accelerator = "cpu"
-                    get_logger().debug("lock acquired: %s", lock_acquired.name)
+                    self.accelerator_lock = lock
+                    mod_accelerator = "cpu"
+                    get_logger().debug("lock acquired: %s", self.accelerator_lock.name)
 
         def lock_gpu():
-            nonlocal lock_acquired, accelerator
-            if lock_acquired is None and accelerator in ("gpu", "auto"):
+            nonlocal mod_accelerator, accelerator
+            if self.accelerator_lock is None and accelerator in ("gpu", "auto"):
                 lock = self.locks["gpu"]
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
-                    lock_acquired = lock
-                    accelerator = "gpu"
-                    get_logger().debug("lock acquired: %s", lock_acquired.name)
+                    self.accelerator_lock = lock
+                    mod_accelerator = "gpu"
+                    get_logger().debug("lock acquired: %s", self.accelerator_lock.name)
+
+        is_baseline = self.is_baseline(**self.model_args)
 
         while True:
-            lock_acquired = None
-            accelerator = None
+            self.accelerator_lock = None
+            mod_accelerator = None
 
-            cu, _ = cpu_util()
-            gu, _ = gpu_util()
-
-            if cu >= gu:
+            if accelerator == "cpu":
                 if self.locks:
-                    get_logger().debug("%s >= %s, trying GPU lock first", cu, gu)
-                    lock_gpu()
                     lock_cpu()
-                else:
-                    return "gpu"
-            else:
-                if self.locks:
-                    get_logger().debug("%s < %s, trying CPU lock first", cu, gu)
-                    lock_cpu()
-                    lock_gpu()
                 else:
                     return "cpu"
+            else:
+                cu, _ = cpu_util()
+                gu, _ = gpu_util()
+                if cu >= gu:
+                    if self.locks:
+                        get_logger().debug("%s >= %s, trying GPU lock first", cu, gu)
+                        lock_gpu()
+                        lock_cpu()
+                    else:
+                        return "gpu"
+                else:
+                    if self.locks:
+                        get_logger().debug("%s < %s, trying CPU lock first", cu, gu)
+                        lock_cpu()
+                        lock_gpu()
+                    else:
+                        return "cpu"
 
-            if lock_acquired is None:
+            if self.accelerator_lock is None:
                 continue
 
             stop_at = time.time() + self.resource_wait_time
-            interval = 0.5 if self.is_baseline(**self.model_args) else 1
-            if accelerator == "gpu":
+            interval = 0.5 if is_baseline else 1
+            if mod_accelerator == "gpu":
                 while wait_gpu(gpu_ut, gpu_rt, stop_at):
                     time.sleep(0.2)
             elif self._check_cpu():  # CPU
                 while wait_cpu(cpu_ut, cpu_rt, stop_at, interval):
                     time.sleep(0.2)
             else:
-                release_lock(lock_acquired, 0)
+                release_lock(self.accelerator_lock, 0)
                 continue
 
             now = time.time()
             if now <= stop_at:
+                self.release_accelerator_lock(
+                    self.device_lock_release_delay
+                    if is_baseline
+                    else self.device_lock_release_delay_large
+                )
                 break
 
             get_logger().debug(
@@ -218,13 +229,11 @@ class BaseModel(ABC):
                 self.resource_wait_time,
                 now,
                 stop_at,
-                lock_acquired.name,
+                self.accelerator_lock.name,
             )
-            release_lock(lock_acquired, 0)
+            release_lock(self.accelerator_lock, 0)
 
-        self.accelerator_lock = lock_acquired
-
-        return accelerator
+        return mod_accelerator
 
     def _select_accelerator(self) -> str:
         accelerator = self.model_args["accelerator"].lower()
@@ -244,11 +253,6 @@ class BaseModel(ABC):
 
         self.release_accelerator_lock()
         accelerator = self._lock_accelerator(accelerator)
-        self.release_accelerator_lock(
-            self.device_lock_release_delay
-            if self.is_baseline(**self.model_args)
-            else self.device_lock_release_delay_large
-        )
         return accelerator
 
     def _evaluate_cross_validation(self, df, metric):
