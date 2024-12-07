@@ -282,7 +282,8 @@ def fit_with_covar(
         return _func()
     except Exception as e:
         logger.error(
-            "failed to fit covar %s @ %s.%s:\n%s",
+            "failed to fit covar (locks:%s) %s @ %s.%s:\n%s",
+            locks,
             cov_symbol,
             cov_table,
             feature,
