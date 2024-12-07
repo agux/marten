@@ -149,6 +149,7 @@ class BaseModel(ABC):
                 return True
 
     def _lock_accelerator(self, accelerator) -> Lock:
+        get_logger().info("locking accelerator: %s", self.locks)
         gpu_ut, gpu_rt = self.gpu_threshold()
         cpu_ut, cpu_rt = self.cpu_threshold()
         mod_accelerator = None
@@ -369,6 +370,7 @@ class BaseModel(ABC):
                 - device: e.g. GPU:0, CPU, etc.
                 - machine: which machine the model is trained on. Can be obtained from socket.gethostname()
         """
+        get_logger().info("training : %s", kwargs["locks"])
         self.locks = kwargs["locks"]
         df = df.copy()
         df.insert(0, "unique_id", "0")

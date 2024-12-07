@@ -391,8 +391,8 @@ def _pair_covar_metrics(
                 ),
                 args.early_stopping,
                 args.infer_holiday,
-                sem,
-                locks,
+                sem=sem,
+                locks=locks,
                 key=f"{fit_with_covar.__name__}-{symbol}@{cov_table}.{feature}",
                 priority=10,
             )
