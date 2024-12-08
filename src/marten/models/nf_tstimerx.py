@@ -64,21 +64,21 @@ class TSMixerxModel(BaseModel):
 
     def gpu_threshold(self) -> Tuple[float, float]:
         if self.is_baseline(**self.model_args):
-            return 60, 50
+            return 40, 50
         else:
             return 35, 35
 
     def cpu_threshold(self) -> Tuple[float, float]:
         if self.is_baseline(**self.model_args):
-            return 70, 70
+            return 60, 70
         else:
-            return 50, 60
+            return 40, 60
 
     def trainable_on_cpu(self, **kwargs: Any) -> bool:
         return True
 
     def torch_cpu_ratio(self) -> float:
-        return 0.6 if self.is_baseline(**self.model_args) else 0.8
+        return 0.45 if self.is_baseline(**self.model_args) else 0.8
 
     def _train(self, df: pd.DataFrame, **kwargs: Any) -> dict:
         model_config = default_params.copy()
