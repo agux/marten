@@ -1,5 +1,6 @@
 import time
 import pandas as pd
+import numpy as np
 from sqlalchemy import text
 from dask.distributed import worker_client, get_worker
 
@@ -223,6 +224,7 @@ def numerical_analysis(quotes_list, symbol, table):
             ]
         )
     df = pd.DataFrame(data, columns=columns)
+    df.replace({np.nan: None}, inplace=True)
     save_ta(ta_numerical_analysis, df)
 
 
@@ -352,6 +354,7 @@ def price_characteristics(quotes_list, symbol, table):
             ]
         )
     df = pd.DataFrame(data, columns=columns)
+    df.replace({np.nan: None}, inplace=True)
     save_ta(ta_price_characteristics, df)
 
 
@@ -431,6 +434,7 @@ def price_transforms(quotes_list, symbol, table):
             ]
         )
     df = pd.DataFrame(data, columns=columns)
+    df.replace({np.nan: None}, inplace=True)
     save_ta(ta_price_transforms, df)
 
 
@@ -569,6 +573,7 @@ def ma(quotes_list, symbol, table):
             ]
         )
     df = pd.DataFrame(data, columns=columns)
+    df.replace({np.nan: None}, inplace=True)
     save_ta(ta_ma, df)
 
 
@@ -639,6 +644,7 @@ def volume_based(quotes_list, symbol, table):
             ]
         )
     df = pd.DataFrame(data, columns=columns)
+    df.replace({np.nan: None}, inplace=True)
     save_ta(ta_volume_based, df)
 
 
@@ -679,6 +685,7 @@ def other_price_patterns(quotes_list, symbol, table):
             ]
         )
     df = pd.DataFrame(data, columns=columns)
+    df.replace({np.nan: None}, inplace=True)
     save_ta(ta_other_price_patterns, df)
 
 
@@ -718,6 +725,7 @@ def stop_reverse(quotes_list, symbol, table):
             ]
         )
     df = pd.DataFrame(data, columns=columns)
+    df.replace({np.nan: None}, inplace=True)
     save_ta(ta_stop_reverse, df)
 
 
@@ -803,6 +811,7 @@ def oscillators(quotes_list, symbol, table):
             ]
         )
     df = pd.DataFrame(data, columns=columns)
+    df.replace({np.nan: None}, inplace=True)
     save_ta(ta_oscillators, df)
 
 
@@ -916,6 +925,7 @@ def price_channel(quotes_list, symbol, table):
             ]
         )
     df = pd.DataFrame(data, columns=columns)
+    df.replace({np.nan: None}, inplace=True)
     save_ta(ta_price_channel, df)
 
 
@@ -1017,6 +1027,7 @@ def price_trends(quotes_list, symbol, table):
             ]
         )
     df = pd.DataFrame(data, columns=columns)
+    df.replace({np.nan: None}, inplace=True)
     save_ta(ta_price_trends, df)
 
 
