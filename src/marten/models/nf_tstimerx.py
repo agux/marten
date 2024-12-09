@@ -78,7 +78,7 @@ class TSMixerxModel(BaseModel):
         return True
 
     def torch_cpu_ratio(self) -> float:
-        return 0.25 if self.is_baseline(**self.model_args) else 0.8
+        return 0.24 if self.is_baseline(**self.model_args) else 0.8
 
     def _train(self, df: pd.DataFrame, **kwargs: Any) -> dict:
         model_config = default_params.copy()
