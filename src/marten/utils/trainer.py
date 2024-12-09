@@ -1,9 +1,12 @@
 import torch
 import psutil
 import socket
+
 import dask
 from dask.distributed import get_worker, Semaphore
+
 from marten.utils.logger import get_logger
+from marten.utils.worker import cpu_util
 
 def get_accelerator_locks(cpu_leases=1, gpu_leases=1, timeout="10s"):
     dask.config.set({"distributed.scheduler.locks.lease-timeout": timeout})
