@@ -62,11 +62,14 @@ def log_train_args(df, *args, **kwargs):
 
 # this simple triage algorithm is to be deprecated
 def select_device(accelerator, util_threshold=80, vram_threshold=80):
+    cpu_util, mem_util = cpu_util()
+    gpu_util = torch.cuda.utilization()
+    vram_util = torch.cuda.memory_usage()
     return (
         "gpu"
         if accelerator
-        and torch.cuda.utilization() < util_threshold
-        and torch.cuda.memory_usage() < vram_threshold
+        and gpu_util < min(util_threshold, cpu_util)
+        and vram_util < min(vram_threshold, mem_util)
         else None
     )
 
