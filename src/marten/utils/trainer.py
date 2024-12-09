@@ -6,7 +6,6 @@ import dask
 from dask.distributed import get_worker, Semaphore
 
 from marten.utils.logger import get_logger
-from marten.utils.worker import cpu_util
 
 def get_accelerator_locks(cpu_leases=1, gpu_leases=1, timeout="10s"):
     dask.config.set({"distributed.scheduler.locks.lease-timeout": timeout})
@@ -65,7 +64,8 @@ def log_train_args(df, *args, **kwargs):
 
 # this simple triage algorithm is to be deprecated
 def select_device(accelerator, util_threshold=80, vram_threshold=80):
-    cpu_util, mem_util = cpu_util()
+    cpu_util = psutil.cpu_percent(0.1)
+    mem_util = psutil.virtual_memory().percent
     gpu_util = torch.cuda.utilization()
     vram_util = torch.cuda.memory_usage()
     return (
