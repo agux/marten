@@ -224,7 +224,7 @@ class BaseModel(ABC):
                 while wait_gpu(gpu_ut, gpu_rt, stop_at):
                     time.sleep(0.2)
             elif self._check_cpu():  # CPU
-                stop_at += self.resource_wait_time # double wait time for CPU
+                stop_at += self.resource_wait_time  # double wait time for CPU
                 while wait_cpu(cpu_ut, cpu_rt, stop_at, interval):
                     time.sleep(0.2)
             else:
@@ -586,8 +586,13 @@ class BaseModel(ABC):
         df_filled = df.ffill().bfill()
         df.iloc[:, 1:] = scaler.transform(df_filled.iloc[:, 1:])
         df[na_positions] = np.nan
-        accelerator = self._lock_accelerator("auto")
-        accelerator = accelerator if accelerator == "gpu" else None
+
+        # accelerator = self._lock_accelerator("auto")
+        # self.release_accelerator_lock(self.device_lock_release_delay)
+        # accelerator = accelerator if accelerator == "gpu" else None
+
+        gu, _ = gpu_util()
+        accelerator = None if gu > 0 else "gpu"
 
         try:
             m = NeuralProphet(
