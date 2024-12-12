@@ -67,11 +67,12 @@ class LocalWorkerPlugin(WorkerPlugin):
                 case _:
                     worker.model = None
 
-        # if hasattr(self.args, "min_worker"):
-        #     worker.sem = Semaphore(
-        #         max_leases=int(self.args.min_worker / 2.0),
-        #         name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
-        #     )
+        torch.cuda.set_per_process_memory_fraction(1.0)
+        if hasattr(self.args, "max_worker"):
+            n_threads = max(1, int(float(psutil.cpu_count())/self.args["max_worker"]))
+            torch.set_num_threads(
+                n_threads
+            )  # Sets the number of threads used for intraop parallelism on CPU.
 
 
 class TaskException(Exception):

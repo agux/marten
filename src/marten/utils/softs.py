@@ -27,7 +27,7 @@ from marten.utils.trainer import (
     is_cuda_error,
     log_train_args,
     cuda_memory_stats,
-    optimize_torch,
+    optimize_torch_on_cpu,
 )
 from marten.utils.holidays import get_next_trade_dates
 from marten.utils.worker import (
@@ -382,7 +382,7 @@ def train_on_cpu(
         release_lock(lock, 2 if base_model else 7)
         # ratio = 0.9 if large_model else 0.8
         ratio = 0.5 if base_model else 0.85
-        optimize_torch(ratio)
+        optimize_torch_on_cpu(ratio)
         m = _train(new_config, setting, train, val, save_model_file)
         return m
     else:
@@ -594,7 +594,7 @@ class SOFTSPredictor:
                 if time.time() <= stop_at:
                     if model.args.use_gpu:
                         model.args.use_gpu = False
-                    optimize_torch(0.9)
+                    optimize_torch_on_cpu(0.9)
                     break
             release_lock(lock_acquired, 0)
 
@@ -610,7 +610,7 @@ class SOFTSPredictor:
                 if lock.acquire(timeout="24 hours"):
                     while wait_cpu(cpu_ut, cpu_rt):
                         time.sleep(1)
-                    optimize_torch(0.9)
+                    optimize_torch_on_cpu(0.9)
                     release_lock(lock, 5)
                     forecast = model.predict(setting=model.setting, pred_data=input)
                 else:

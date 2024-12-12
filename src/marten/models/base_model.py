@@ -19,7 +19,7 @@ from utilsforecast.compat import DataFrame, pl
 from dask.distributed import get_worker, Lock
 
 from marten.utils.logger import get_logger
-from marten.utils.trainer import optimize_torch, is_cuda_error
+from marten.utils.trainer import optimize_torch_on_cpu, is_cuda_error
 from marten.utils.worker import (
     release_lock,
     wait_gpu,
@@ -148,11 +148,15 @@ class BaseModel(ABC):
             case _:
                 return True
 
-    def _lock_accelerator(self, accelerator) -> Lock:
+    def _lock_accelerator(self, accelerator) -> str:
         # get_logger().info("locking accelerator: %s", self.locks)
+        is_baseline = self.is_baseline(**self.model_args)
         gpu_ut, gpu_rt = self.gpu_threshold()
         cpu_ut, cpu_rt = self.cpu_threshold()
         mod_accelerator = None
+
+        if is_baseline and gpu_ut > 0:
+            return "cpu"
 
         def lock_cpu():
             nonlocal mod_accelerator
@@ -172,29 +176,29 @@ class BaseModel(ABC):
                     mod_accelerator = "gpu"
                     get_logger().debug("lock acquired: %s", self.accelerator_lock.name)
 
-        is_baseline = self.is_baseline(**self.model_args)
-
         while True:
             self.accelerator_lock = None
             mod_accelerator = None
 
             if accelerator == "cpu":
-                if self.locks:
+                if self.locks and "cpu" in self.locks.keys():
                     lock_cpu()
                 else:
                     return "cpu"
             else:
                 cu, _ = cpu_util()
                 gu, _ = gpu_util()
-                if cu >= gu:
-                    if self.locks:
+                if is_baseline or cu >= gu:
+                    if self.locks and "gpu" in self.locks.keys():
                         get_logger().debug("%s >= %s, trying GPU lock first", cu, gu)
                         lock_gpu()
+                        if is_baseline and not self.accelerator_lock:
+                            return "cpu"
                         lock_cpu()
                     else:
                         return "gpu"
                 else:
-                    if self.locks:
+                    if self.locks and "cpu" in self.locks.keys():
                         get_logger().debug("%s < %s, trying CPU lock first", cu, gu)
                         lock_cpu()
                         lock_gpu()
@@ -219,11 +223,6 @@ class BaseModel(ABC):
 
             now = time.time()
             if now <= stop_at:
-                self.release_accelerator_lock(
-                    self.device_lock_release_delay
-                    if is_baseline
-                    else self.device_lock_release_delay_large
-                )
                 break
 
             get_logger().debug(
@@ -234,6 +233,9 @@ class BaseModel(ABC):
                 self.accelerator_lock.name if self.accelerator_lock else "no-lock",
             )
             release_lock(self.accelerator_lock, 0)
+
+            if is_baseline:
+                return "cpu"
 
         return mod_accelerator
 
@@ -255,6 +257,11 @@ class BaseModel(ABC):
 
         self.release_accelerator_lock()
         accelerator = self._lock_accelerator(accelerator)
+        self.release_accelerator_lock(
+            self.device_lock_release_delay
+            if self.is_baseline(**self.model_args)
+            else self.device_lock_release_delay_large
+        )
         return accelerator
 
     def _evaluate_cross_validation(self, df, metric):
@@ -351,6 +358,13 @@ class BaseModel(ABC):
         """
         pass
 
+    def configure_torch(self):
+        is_baseline = self.is_baseline(**self.model_args)
+        if is_baseline:
+            return torch.get_num_threads()
+        else:
+            return optimize_torch_on_cpu(self.torch_cpu_ratio())
+
     def train(self, df: pd.DataFrame, **kwargs: Any) -> dict:
         """
         Select the proper accelerator and train the model with the given data.
@@ -378,8 +392,9 @@ class BaseModel(ABC):
         self.model_args = kwargs
         accelerator = self._select_accelerator()
         kwargs["accelerator"] = accelerator
+        cpu_cores = None
         if accelerator == "cpu":
-            optimize_torch(self.torch_cpu_ratio())
+            cpu_cores = self.configure_torch()
             # NOTE: `devices` selected with `CPUAccelerator` should be an int > 0.
             kwargs["devices"] = 1
         else:
@@ -398,7 +413,7 @@ class BaseModel(ABC):
             elif accelerator != "cpu":
                 # fallback to train on CPU
                 kwargs["accelerator"] = "cpu"
-                optimize_torch(self.torch_cpu_ratio())
+                cpu_cores = self.configure_torch()
                 kwargs["devices"] = 1
                 self.model_args = kwargs
                 model_config = self._train(df, **kwargs)
@@ -409,6 +424,7 @@ class BaseModel(ABC):
         metrics = self._get_metrics(**model_config)
         metrics["device"] = "CPU" if kwargs["accelerator"] == "cpu" else "GPU:auto"
         metrics["machine"] = socket.gethostname()
+        metrics["cpu_cores"] = cpu_cores
 
         return metrics
 

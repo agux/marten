@@ -40,7 +40,14 @@ LOSS_CAP = 99.99
 
 
 def merge_covar_df(
-    anchor_symbol, anchor_df, cov_table, cov_symbol, feature, min_date, alchemyEngine, sem
+    anchor_symbol,
+    anchor_df,
+    cov_table,
+    cov_symbol,
+    feature,
+    min_date,
+    alchemyEngine,
+    sem,
 ):
 
     if anchor_symbol == cov_symbol and not cov_table.startswith("ta_"):
@@ -117,7 +124,9 @@ def merge_covar_df(
     if sem:
         with sem:
             with alchemyEngine.connect() as conn:
-                cov_symbol_df = pd.read_sql(query, conn, params=params, parse_dates=["ds"])
+                cov_symbol_df = pd.read_sql(
+                    query, conn, params=params, parse_dates=["ds"]
+                )
     else:
         with alchemyEngine.connect() as conn:
             cov_symbol_df = pd.read_sql(query, conn, params=params, parse_dates=["ds"])
@@ -375,7 +384,11 @@ def save_covar_metrics(
 
     if "device" in cov_metrics or "machine" in cov_metrics:
         device_info = json.dumps(
-            {"device": cov_metrics["device"], "machine": cov_metrics["machine"]},
+            {
+                "device": cov_metrics["device"],
+                "machine": cov_metrics["machine"],
+                "cpu_cores": cov_metrics["cpu_cores"],
+            },
             sort_keys=True,
         )
     else:
@@ -753,6 +766,8 @@ def update_metrics_table(
         device_info["machine"] = last_metric["machine"]
     if "device" in last_metric:
         device_info["device"] = last_metric["device"]
+    if "cpu_cores" in last_metric:
+        device_info["cpu_cores"] = last_metric["cpu_cores"]
     device_info = json.dumps(device_info, sort_keys=True)
 
     def action():

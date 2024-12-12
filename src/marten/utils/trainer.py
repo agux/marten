@@ -92,15 +92,20 @@ def select_randk_covars(df, ranked_features, covar_dist, k):
             columns_to_keep.append(f)
     return df[columns_to_keep]
 
-
-def optimize_torch(ratio=0.85) -> int:
+def optimize_torch_on_gpu():
     torch.cuda.set_per_process_memory_fraction(1.0)
 
-    cpu_cap = (100.0 - psutil.cpu_percent(1)) / 100.0
-    n_cores = float(psutil.cpu_count())
-    # n_workers = max(1.0, float(num_workers()))
-    # n_threads = min(int(n_cores * cpu_cap * 0.85), n_cores/n_workers)
-    n_threads = max(1, int(n_cores * cpu_cap * ratio))
+
+def optimize_torch_on_cpu(
+    ratio=0.85,
+    n_threads=None,
+) -> int:
+    if not n_threads:
+        cpu_cap = (100.0 - psutil.cpu_percent(1)) / 100.0
+        n_cores = float(psutil.cpu_count())
+        # n_workers = max(1.0, float(num_workers()))
+        # n_threads = min(int(n_cores * cpu_cap * 0.85), n_cores/n_workers)
+        n_threads = max(1, int(n_cores * cpu_cap * ratio))
     torch.set_num_threads(
         n_threads
     )  # Sets the number of threads used for intraop parallelism on CPU.
