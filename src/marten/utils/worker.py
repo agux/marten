@@ -55,6 +55,7 @@ class LocalWorkerPlugin(WorkerPlugin):
         # worker.logger.info(torch.__config__.parallel_info())
 
         if hasattr(self.args, "model"):
+            torch.cuda.set_per_process_memory_fraction(1.0)
             match self.args.model.lower():
                 case "timemixer":
                     from marten.models.time_mixer import TimeMixerModel
@@ -67,9 +68,8 @@ class LocalWorkerPlugin(WorkerPlugin):
                 case _:
                     worker.model = None
 
-        torch.cuda.set_per_process_memory_fraction(1.0)
         if hasattr(self.args, "max_worker"):
-            n_threads = max(1, int(float(psutil.cpu_count())/self.args.max_worker))
+            n_threads = max(1, int(float(psutil.cpu_count())/self.args.max_worker)-1)
             torch.set_num_threads(
                 n_threads
             )  # Sets the number of threads used for intraop parallelism on CPU.

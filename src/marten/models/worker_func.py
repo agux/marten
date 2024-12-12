@@ -231,16 +231,6 @@ def fit_with_covar(
                 )
                 m.cleanup()
             case _:
-                if not model.accept_missing_data():
-                    df_na = merged_df.iloc[:, 1:].isna()
-                    if df_na.any().any():
-                        logger.info(
-                            "running imputation for %s @ %s.%s",
-                            cov_symbol,
-                            cov_table,
-                            feature,
-                        )
-                    merged_df, impute_df = impute(merged_df, random_seed)
                 config = model.baseline_params()
                 config["h"] = args.future_steps
                 config["max_steps"] = args.epochs
@@ -253,6 +243,16 @@ def fit_with_covar(
                 config["random_seed"] = random_seed
                 config["locks"] = locks
                 # get_logger().info("fit_with_covar : %s", locks)
+                if not model.accept_missing_data():
+                    df_na = merged_df.iloc[:, 1:].isna()
+                    if df_na.any().any():
+                        logger.info(
+                            "running imputation for %s @ %s.%s",
+                            cov_symbol,
+                            cov_table,
+                            feature,
+                        )
+                    merged_df, impute_df = model.impute(merged_df, **config)
                 metrics = model.train(merged_df, **config)
 
         fit_time = time.time() - start_time

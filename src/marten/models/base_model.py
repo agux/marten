@@ -7,16 +7,26 @@ import time
 import socket
 import numpy as np
 import pandas as pd
+import logging
+import warnings
+
+from neuralprophet import (
+    set_random_seed as np_random_seed,
+    set_log_level,
+    NeuralProphet,
+)
 
 import torch
 import torch.optim as optim
 from torch.optim.optimizer import Optimizer
 
+from sklearn.preprocessing import StandardScaler
+
 from utilsforecast.losses import _pl_agg_expr, _base_docstring, mae, rmse
 from utilsforecast.evaluation import evaluate
 from utilsforecast.compat import DataFrame, pl
 
-from dask.distributed import get_worker, Lock
+from dask.distributed import get_worker, worker_client
 
 from marten.utils.logger import get_logger
 from marten.utils.trainer import optimize_torch_on_cpu, is_cuda_error
@@ -555,6 +565,100 @@ class BaseModel(ABC):
         for col in forecast.select_dtypes(include=[np.float32]).columns:
             forecast[col] = forecast[col].astype(float)
         return forecast
+
+    def _neural_impute(self, df):
+        random_seed = self.model_args["random_seed"]
+        na_col = df.columns[1]
+        df.rename(columns={na_col: "y"}, inplace=True)
+
+        seed_logger = logging.getLogger("lightning_fabric.utilities.seed")
+        orig_seed_log_level = seed_logger.getEffectiveLevel()
+        seed_logger.setLevel(logging.FATAL)
+
+        np_random_seed(random_seed)
+        set_log_level("ERROR")
+        # optimize_torch()
+
+        na_positions = df.isna()
+        df_nona = df.dropna()
+        scaler = StandardScaler()
+        scaler.fit(df_nona.iloc[:, 1:])
+        df_filled = df.ffill().bfill()
+        df.iloc[:, 1:] = scaler.transform(df_filled.iloc[:, 1:])
+        df[na_positions] = np.nan
+        accelerator = self._lock_accelerator("auto")
+        accelerator = accelerator if accelerator == "gpu" else None
+
+        try:
+            m = NeuralProphet(
+                accelerator=accelerator,
+                # changepoints_range=1.0,
+            )
+            m.fit(
+                df,
+                progress=None,
+                #   early_stopping=True,
+                checkpointing=False,
+            )
+        except Exception as e:
+            m = NeuralProphet(
+                # changepoints_range=1.0,
+            )
+            m.fit(
+                df,
+                progress=None,
+                #   early_stopping=True,
+                checkpointing=False,
+            )
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
+            forecast = m.predict(df)
+
+        seed_logger.setLevel(orig_seed_log_level)
+
+        forecast = forecast[["ds", "yhat1"]]
+        forecast["ds"] = forecast["ds"].dt.date
+        forecast["yhat1"] = forecast["yhat1"].astype(float)
+        forecast.rename(columns={"yhat1": na_col}, inplace=True)
+        forecast.iloc[:, 1:] = scaler.inverse_transform(forecast.iloc[:, 1:])
+
+        return forecast
+
+    def impute(self, df, **kwargs):
+        self.model_args = kwargs
+        df_na = df.iloc[:, 1:].isna()
+
+        if not df_na.any().any():
+            return df, None
+
+        na_counts = df_na.sum()
+        na_cols = na_counts[na_counts > 0].index.tolist()
+        na_row_indices = df[df.iloc[:, 1:].isna().any(axis=1)].index
+
+        def _func():
+            results = []
+            for na_col in na_cols:
+                df_na = df[["ds", na_col]].copy()
+                results.append(self._neural_impute(df_na))
+            return results
+
+        if len(na_cols) > 1:
+            results = _func()
+        else:
+            results = [self._neural_impute(df[["ds", na_cols[0]]].copy())]
+        imputed_df = results[0]
+        for result in results[1:]:
+            imputed_df = imputed_df.merge(result, on="ds", how="left")
+
+        for na_col in na_cols:
+            df[na_col].fillna(imputed_df[na_col], inplace=True)
+
+        # Select imputed rows only
+        imputed_df = imputed_df.loc[na_row_indices].copy()
+
+        return df, imputed_df
 
     @abstractmethod
     def search_space(self, **kwargs: Any) -> str:
