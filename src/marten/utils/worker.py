@@ -69,7 +69,7 @@ class LocalWorkerPlugin(WorkerPlugin):
 
         torch.cuda.set_per_process_memory_fraction(1.0)
         if hasattr(self.args, "max_worker"):
-            n_threads = max(1, int(float(psutil.cpu_count())/self.argslmax_worker))
+            n_threads = max(1, int(float(psutil.cpu_count())/self.args.max_worker))
             torch.set_num_threads(
                 n_threads
             )  # Sets the number of threads used for intraop parallelism on CPU.
