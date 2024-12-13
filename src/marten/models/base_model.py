@@ -167,7 +167,7 @@ class BaseModel(ABC):
             gpu_ut, gpu_rt = self.gpu_threshold()
             cpu_ut, cpu_rt = self.cpu_threshold()
             if gpu_ut > cpu_ut:
-                get_logger.info("using CPU: %s > %s", gpu_ut, cpu_ut)
+                get_logger.debug("using CPU: %s > %s", gpu_ut, cpu_ut)
                 return "cpu"
 
         def lock_cpu():
@@ -186,7 +186,7 @@ class BaseModel(ABC):
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
                     self.accelerator_lock = lock
                     mod_accelerator = "gpu"
-                    get_logger().info("lock acquired: %s", self.accelerator_lock.name)
+                    get_logger().debug("lock acquired: %s", self.accelerator_lock.name)
 
         while True:
             self.accelerator_lock = None
@@ -194,7 +194,7 @@ class BaseModel(ABC):
 
             if accelerator == "cpu":
                 if self.locks and "cpu" in self.locks.keys():
-                    get_logger().info("enforcing CPU lock")
+                    get_logger().debug("enforcing CPU lock")
                     lock_cpu()
                 else:
                     return "cpu"
@@ -203,7 +203,7 @@ class BaseModel(ABC):
                 gu, _ = gpu_util()
                 if is_baseline or cu >= gu:
                     if self.locks and "gpu" in self.locks.keys():
-                        get_logger().info("%s >= %s, trying GPU lock first", cu, gu)
+                        get_logger().debug("%s >= %s, trying GPU lock first", cu, gu)
                         lock_gpu()
                         if is_baseline and not self.accelerator_lock:
                             return "cpu"
@@ -212,7 +212,7 @@ class BaseModel(ABC):
                         return "gpu"
                 else:
                     if self.locks and "cpu" in self.locks.keys():
-                        get_logger().info("%s < %s, trying CPU lock first", cu, gu)
+                        get_logger().debug("%s < %s, trying CPU lock first", cu, gu)
                         lock_cpu()
                         lock_gpu()
                     else:
@@ -237,7 +237,7 @@ class BaseModel(ABC):
             if now <= stop_at:
                 break
 
-            get_logger().info(
+            get_logger().debug(
                 "resource wait timeout (%ss): %s > %s, %s",
                 self.resource_wait_time,
                 now,

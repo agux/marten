@@ -121,15 +121,18 @@ def merge_covar_df(
                 "cutoff_date": cutoff_date,
             }
 
-    if sem:
-        with sem:
-            with alchemyEngine.connect() as conn:
-                cov_symbol_df = pd.read_sql(
-                    query, conn, params=params, parse_dates=["ds"]
-                )
-    else:
-        with alchemyEngine.connect() as conn:
-            cov_symbol_df = pd.read_sql(query, conn, params=params, parse_dates=["ds"])
+    # if sem:
+    #     with sem:
+    #         with alchemyEngine.connect() as conn:
+    #             cov_symbol_df = pd.read_sql(
+    #                 query, conn, params=params, parse_dates=["ds"]
+    #             )
+    # else:
+    #     with alchemyEngine.connect() as conn:
+    #         cov_symbol_df = pd.read_sql(query, conn, params=params, parse_dates=["ds"])
+    
+    with alchemyEngine.connect() as conn:
+        cov_symbol_df = pd.read_sql(query, conn, params=params, parse_dates=["ds"])
 
     if cov_symbol_df.empty:
         return None
