@@ -1306,7 +1306,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     min_count = int(len(anchor_df) * (1 - args.nan_limit))
     dates = tuple(anchor_df["ds"])
 
-    dask.config.set({"distributed.scheduler.locks.lease-timeout": "120s"})
+    dask.config.set({"distributed.scheduler.locks.lease-timeout": "300s"})
     sem = Semaphore(
         max_leases=int(args.min_worker / 2.0),
         name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",

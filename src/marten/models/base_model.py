@@ -591,30 +591,36 @@ class BaseModel(ABC):
         # self.release_accelerator_lock(self.device_lock_release_delay)
         # accelerator = accelerator if accelerator == "gpu" else None
 
-        gu, _ = gpu_util()
-        accelerator = None if gu > 0 else "gpu"
+        # gu, _ = gpu_util()
+        # accelerator = None if gu > 0 else "gpu"
 
-        try:
-            m = NeuralProphet(
-                accelerator=accelerator,
-                # changepoints_range=1.0,
-            )
-            m.fit(
-                df,
-                progress=None,
-                #   early_stopping=True,
-                checkpointing=False,
-            )
-        except Exception as e:
-            m = NeuralProphet(
-                # changepoints_range=1.0,
-            )
-            m.fit(
-                df,
-                progress=None,
-                #   early_stopping=True,
-                checkpointing=False,
-            )
+        # try:
+        #     m = NeuralProphet(
+        #         accelerator=accelerator,
+        #         # changepoints_range=1.0,
+        #     )
+        #     m.fit(
+        #         df,
+        #         progress=None,
+        #         #   early_stopping=True,
+        #         checkpointing=False,
+        #     )
+        # except Exception as e:
+        #     m = NeuralProphet(
+        #         # changepoints_range=1.0,
+        #     )
+        #     m.fit(
+        #         df,
+        #         progress=None,
+        #         #   early_stopping=True,
+        #         checkpointing=False,
+        #     )
+        m = NeuralProphet()
+        m.fit(
+            df,
+            progress=None,
+            checkpointing=False,
+        )
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", FutureWarning)
