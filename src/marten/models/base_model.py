@@ -161,12 +161,14 @@ class BaseModel(ABC):
     def _lock_accelerator(self, accelerator) -> str:
         # get_logger().info("locking accelerator: %s", self.locks)
         is_baseline = self.is_baseline(**self.model_args)
-        gpu_ut, gpu_rt = self.gpu_threshold()
-        cpu_ut, cpu_rt = self.cpu_threshold()
         mod_accelerator = None
 
-        if is_baseline and gpu_ut > 0:
-            return "cpu"
+        if is_baseline:
+            gpu_ut, gpu_rt = self.gpu_threshold()
+            cpu_ut, cpu_rt = self.cpu_threshold()
+            if gpu_ut > cpu_ut:
+                get_logger.info("using CPU: %s > %s", gpu_ut, cpu_ut)
+                return "cpu"
 
         def lock_cpu():
             nonlocal mod_accelerator
@@ -184,7 +186,7 @@ class BaseModel(ABC):
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
                     self.accelerator_lock = lock
                     mod_accelerator = "gpu"
-                    get_logger().debug("lock acquired: %s", self.accelerator_lock.name)
+                    get_logger().info("lock acquired: %s", self.accelerator_lock.name)
 
         while True:
             self.accelerator_lock = None
@@ -192,6 +194,7 @@ class BaseModel(ABC):
 
             if accelerator == "cpu":
                 if self.locks and "cpu" in self.locks.keys():
+                    get_logger().info("enforcing CPU lock")
                     lock_cpu()
                 else:
                     return "cpu"
@@ -200,7 +203,7 @@ class BaseModel(ABC):
                 gu, _ = gpu_util()
                 if is_baseline or cu >= gu:
                     if self.locks and "gpu" in self.locks.keys():
-                        get_logger().debug("%s >= %s, trying GPU lock first", cu, gu)
+                        get_logger().info("%s >= %s, trying GPU lock first", cu, gu)
                         lock_gpu()
                         if is_baseline and not self.accelerator_lock:
                             return "cpu"
@@ -209,7 +212,7 @@ class BaseModel(ABC):
                         return "gpu"
                 else:
                     if self.locks and "cpu" in self.locks.keys():
-                        get_logger().debug("%s < %s, trying CPU lock first", cu, gu)
+                        get_logger().info("%s < %s, trying CPU lock first", cu, gu)
                         lock_cpu()
                         lock_gpu()
                     else:
@@ -219,13 +222,12 @@ class BaseModel(ABC):
                 continue
 
             stop_at = time.time() + self.resource_wait_time
-            interval = 0.5 if is_baseline else 1
             if mod_accelerator == "gpu":
                 while wait_gpu(gpu_ut, gpu_rt, stop_at):
                     time.sleep(0.2)
             elif self._check_cpu():  # CPU
                 stop_at += self.resource_wait_time  # double wait time for CPU
-                while wait_cpu(cpu_ut, cpu_rt, stop_at, interval):
+                while wait_cpu(cpu_ut, cpu_rt, stop_at, 1):
                     time.sleep(0.2)
             else:
                 release_lock(self.accelerator_lock, 0)
@@ -235,7 +237,7 @@ class BaseModel(ABC):
             if now <= stop_at:
                 break
 
-            get_logger().debug(
+            get_logger().info(
                 "resource wait timeout (%ss): %s > %s, %s",
                 self.resource_wait_time,
                 now,
@@ -625,7 +627,8 @@ class BaseModel(ABC):
         seed_logger.setLevel(orig_seed_log_level)
 
         forecast = forecast[["ds", "yhat1"]]
-        forecast["ds"] = forecast["ds"].dt.date
+        # forecast["ds"] = forecast["ds"].dt.date
+        forecast["ds"] = forecast["ds"].dt.normalize()
         forecast["yhat1"] = forecast["yhat1"].astype(float)
         forecast.rename(columns={"yhat1": na_col}, inplace=True)
         forecast.iloc[:, 1:] = scaler.inverse_transform(forecast.iloc[:, 1:])
