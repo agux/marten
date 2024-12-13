@@ -627,8 +627,7 @@ class BaseModel(ABC):
         seed_logger.setLevel(orig_seed_log_level)
 
         forecast = forecast[["ds", "yhat1"]]
-        # forecast["ds"] = forecast["ds"].dt.date
-        forecast["ds"] = forecast["ds"].dt.normalize()
+        forecast["ds"] = forecast["ds"].dt.date
         forecast["yhat1"] = forecast["yhat1"].astype(float)
         forecast.rename(columns={"yhat1": na_col}, inplace=True)
         forecast.iloc[:, 1:] = scaler.inverse_transform(forecast.iloc[:, 1:])
@@ -650,6 +649,7 @@ class BaseModel(ABC):
         for na_col in na_cols:
             df_na = df[["ds", na_col]].copy()
             if df[na_col].isnull().all(): # all rows are null
+                df_na["ds"] = df_na["ds"].dt.date
                 results.append(df_na)
             else:
                 results.append(self._neural_impute(df_na))
