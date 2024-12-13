@@ -591,38 +591,31 @@ class BaseModel(ABC):
         # self.release_accelerator_lock(self.device_lock_release_delay)
         # accelerator = accelerator if accelerator == "gpu" else None
 
-        gu, _ = gpu_util()
-        accelerator = "cpu" if gu > 0 else "gpu"
+        # gu, _ = gpu_util()
+        # accelerator = "cpu" if gu > 0 else "gpu"
+        accelerator = "cpu"
 
-        # try:
-        #     m = NeuralProphet(
-        #         accelerator=accelerator,
-        #         # changepoints_range=1.0,
-        #     )
-        #     m.fit(
-        #         df,
-        #         progress=None,
-        #         #   early_stopping=True,
-        #         checkpointing=False,
-        #     )
-        # except Exception as e:
-        #     m = NeuralProphet(
-        #         # changepoints_range=1.0,
-        #     )
-        #     m.fit(
-        #         df,
-        #         progress=None,
-        #         #   early_stopping=True,
-        #         checkpointing=False,
-        #     )
-        m = NeuralProphet(
-            accelerator=accelerator
-        )
-        m.fit(
-            df,
-            progress=None,
-            checkpointing=False,
-        )
+        try:
+            m = NeuralProphet(
+                accelerator=accelerator,
+            )
+            m.fit(
+                df,
+                progress=None,
+                checkpointing=False,
+            )
+        except Exception as e:
+            if accelerator != "cpu":
+                m = NeuralProphet(
+                    accelerator="cpu",
+                )
+                m.fit(
+                    df,
+                    progress=None,
+                    checkpointing=False,
+                )
+            else:
+                raise e
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", FutureWarning)
@@ -650,17 +643,14 @@ class BaseModel(ABC):
         na_cols = na_counts[na_counts > 0].index.tolist()
         na_row_indices = df[df.iloc[:, 1:].isna().any(axis=1)].index
 
-        def _func():
-            results = []
-            for na_col in na_cols:
-                df_na = df[["ds", na_col]].copy()
+        results = []
+        for na_col in na_cols:
+            df_na = df[["ds", na_col]].copy()
+            if df[na_col].isnull().all(): # all rows are null
+                results.append(df_na)
+            else:
                 results.append(self._neural_impute(df_na))
-            return results
 
-        if len(na_cols) > 1:
-            results = _func()
-        else:
-            results = [self._neural_impute(df[["ds", na_cols[0]]].copy())]
         imputed_df = results[0]
         for result in results[1:]:
             imputed_df = imputed_df.merge(result, on="ds", how="left")

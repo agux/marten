@@ -243,6 +243,7 @@ def fit_with_covar(
                 config["random_seed"] = random_seed
                 config["locks"] = locks
                 # get_logger().info("fit_with_covar : %s", locks)
+                merged_df.replace([np.inf, -np.inf], np.nan, inplace=True)
                 if not model.accept_missing_data():
                     df_na = merged_df.iloc[:, 1:].isna()
                     if df_na.any().any():
@@ -252,7 +253,9 @@ def fit_with_covar(
                             cov_table,
                             feature,
                         )
-                    merged_df, impute_df = model.impute(merged_df, **config)
+                        merged_df, impute_df = model.impute(merged_df, **config)
+                        merged_df.dropna(axis=1, how="any", inplace=True)
+                        impute_df.dropna(axis=1, how="all", inplace=True)
                 metrics = model.train(merged_df, **config)
 
         fit_time = time.time() - start_time
@@ -302,6 +305,8 @@ def fit_with_covar(
 
 
 def save_impute_data(impute_df, cov_table, cov_symbol, feature, alchemyEngine, logger):
+    if len(impute_df.columns) <= 1: # no valid imputation data
+        return
     cov_table = cov_table[:-5] if cov_table.endswith("_view") else cov_table
     if cov_table.startswith("ta_"):
         # saving imputation for technical indicators, where multiple columns could be infolved
