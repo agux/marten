@@ -591,8 +591,8 @@ class BaseModel(ABC):
         # self.release_accelerator_lock(self.device_lock_release_delay)
         # accelerator = accelerator if accelerator == "gpu" else None
 
-        # gu, _ = gpu_util()
-        # accelerator = None if gu > 0 else "gpu"
+        gu, _ = gpu_util()
+        accelerator = "cpu" if gu > 0 else "gpu"
 
         # try:
         #     m = NeuralProphet(
@@ -615,7 +615,9 @@ class BaseModel(ABC):
         #         #   early_stopping=True,
         #         checkpointing=False,
         #     )
-        m = NeuralProphet()
+        m = NeuralProphet(
+            accelerator=accelerator
+        )
         m.fit(
             df,
             progress=None,
