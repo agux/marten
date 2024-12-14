@@ -271,7 +271,9 @@ def covar_symbols_from_table(
         notnull = f"and {feature} is not null"
         group_by = "group by t.symbol"
 
-    orig_table = table[:-5] if table.startswith("ta_") and table.endswith("_view") else table
+    orig_table = (
+        table[:-5] if table.startswith("ta_") and table.endswith("_view") else table
+    )
 
     query = f"""
         WITH dates AS (
@@ -355,7 +357,7 @@ def _pair_endogenous_covar_metrics(
             args.early_stopping,
             args.infer_holiday,
             sem,
-            locks
+            locks,
         )
         futures.append(future)
         await_futures(futures, False)
@@ -1193,9 +1195,12 @@ def covar_metric(
     min_date = min(dates).strftime("%Y-%m-%d")
     cutoff_date = max(dates).strftime("%Y-%m-%d")
 
-    # features = _remove_measured_features(
-    #     args.model, anchor_symbol, cov_table, features, cutoff_date
-    # )
+    if cov_table.startswith("bond_metrics_em") or cov_table.startswith(
+        "currency_boc_safe"
+    ):
+        features = _remove_measured_features(
+            args.model, anchor_symbol, cov_table, features, cutoff_date
+        )
 
     if len(features) == 0:
         logger.info(
@@ -1317,9 +1322,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
 
     dask.config.set({"distributed.scheduler.locks.lease-timeout": "300s"})
     sem = Semaphore(
-        max_leases=os.getenv(
-            "RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker
-        ),
+        max_leases=os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker),
         name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
     )
     locks = get_accelerator_locks(0, 1, "60s")
@@ -1327,7 +1330,14 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     # endogenous features of the anchor time series per se
     endogenous_features = [col for col in anchor_df.columns if col not in ("ds")]
     _pair_endogenous_covar_metrics(
-        anchor_symbol, anchor_df, anchor_table, endogenous_features, args, cutoff_date, sem, locks
+        anchor_symbol,
+        anchor_df,
+        anchor_table,
+        endogenous_features,
+        args,
+        cutoff_date,
+        sem,
+        locks,
     )
 
     # for the rest of exogenous covariates, keep only the core features of anchor_df
