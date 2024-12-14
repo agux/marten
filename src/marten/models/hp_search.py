@@ -47,6 +47,7 @@ from marten.models.worker_func import (
 )
 
 from sqlalchemy import text
+import psycopg2.extras
 
 from neuralprophet import set_log_level
 
@@ -221,7 +222,7 @@ def covar_symbols_from_table(
         "anchor_symbol": anchor_symbol,
         "feature": feature,
         "ts_date": ts_date,
-        "dates": dates,
+        "dates": list(dates),
         "min_count": min_count,
     }
     match model:
@@ -276,20 +277,16 @@ def covar_symbols_from_table(
     )
 
     query = f"""
-        WITH dates AS (
-            SELECT unnest(%(dates)s::date[]) AS date
-        ),
-        {existing_cov_symbols}
+        WITH {existing_cov_symbols}
         select
             {symbol_col} symbol, count(*) num
         from
             {orig_table} t
-        join 
-            dates d on t.date = d.date
         left join
             existing_cov_symbols ecs on {symbol_col} = ecs.cov_symbol
         where
-            ecs.cov_symbol IS NULL
+            t.date = ANY(%(dates)s::date[])
+            and ecs.cov_symbol IS NULL
             {notnull}
             {exclude}
         {group_by}
