@@ -37,7 +37,7 @@ services:
       -c max_worker_processes=96
       -c max_parallel_workers_per_gather=96
       -c timescaledb.max_background_workers=96
-      -c track_activity_query_size = 16384
+      -c track_activity_query_size=16384
     networks:
       - pchn_network
 

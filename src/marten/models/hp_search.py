@@ -262,13 +262,13 @@ def covar_symbols_from_table(
         exclude = ""
         column_names = columns_with_prefix(alchemyEngine, table, feature)
         notnull = (
-            "and (" + " or ".join([f"{c} is not null" for c in column_names]) + ")"
+            "and (" + " or ".join([f"t.{c} is not null" for c in column_names]) + ")"
         )
         group_by = 'group by t."table", t.symbol'
     else:
         symbol_col = "t.symbol"
         exclude = "and t.symbol <> %(anchor_symbol)s"
-        notnull = f"and {feature} is not null"
+        notnull = f"and t.{feature} is not null"
         group_by = "group by t.symbol"
 
     orig_table = (
@@ -289,9 +289,9 @@ def covar_symbols_from_table(
         left join
             existing_cov_symbols ecs on {symbol_col} = ecs.cov_symbol
         where
+            ecs.cov_symbol IS NULL
             {notnull}
             {exclude}
-            AND ecs.cov_symbol IS NULL
         {group_by}
         having 
             count(*) >= %(min_count)s
