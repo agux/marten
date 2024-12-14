@@ -222,7 +222,8 @@ def covar_symbols_from_table(
         "anchor_symbol": anchor_symbol,
         "feature": feature,
         "ts_date": ts_date,
-        "dates": list(dates),
+        "start_date": min(dates),
+        "end_date": max(dates),
         "min_count": min_count,
     }
     match model:
@@ -255,11 +256,11 @@ def covar_symbols_from_table(
 
     # get a list of symbols from the given table, of which metrics are not recorded yet
     if table.startswith("ta_"):
-        symbol_col = """t."table" || '::' || t.symbol """
+        symbol_col = "t.table_symbol"
         exclude = "1=1"
         column_names = columns_with_prefix(alchemyEngine, table, feature)
         notnull = "(" + " or ".join([f"t.{c} is not null" for c in column_names]) + ")"
-        group_by = 'group by t."table", t.symbol'
+        group_by = "group by t.table_symbol"
     else:
         symbol_col = "t.symbol"
         exclude = "t.symbol <> %(anchor_symbol)s"
@@ -284,7 +285,7 @@ def covar_symbols_from_table(
             )
             and {notnull}
             and {exclude}
-            and t.date = ANY(%(dates)s::date[])
+            and t.date between %(start_date)s and %(end_date)s
         {group_by}
         having 
             count(*) >= %(min_count)s
@@ -292,14 +293,14 @@ def covar_symbols_from_table(
 
     if sem and table.startswith("ta_"):
         with sem:
-            raw_conn = alchemyEngine.raw_connection()
-            try:
-                cursor = raw_conn.cursor()
-                final_query = cursor.mogrify(query, params)
-                logger.info("SQL query:\n%s", final_query)
-                cursor.close()
-            finally:
-                raw_conn.close()
+            # raw_conn = alchemyEngine.raw_connection()
+            # try:
+            #     cursor = raw_conn.cursor()
+            #     final_query = cursor.mogrify(query, params)
+            #     logger.info("SQL query:\n%s", final_query)
+            #     cursor.close()
+            # finally:
+            #     raw_conn.close()
 
             with alchemyEngine.connect() as conn:
                 cov_symbols = pd.read_sql(
