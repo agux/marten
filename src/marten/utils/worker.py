@@ -69,15 +69,15 @@ class LocalWorkerPlugin(WorkerPlugin):
                     worker.model = None
 
         if hasattr(self.args, "max_worker"):
+            # Sets the number of threads used for intraop parallelism on CPU.
             n_threads = int(
                 os.getenv(
                     "TORCH_CPU_THREADS",
                     psutil.cpu_count() / self.args.max_worker,
                 )
             )
-            torch.set_num_threads(
-                max(1, n_threads)
-            )  # Sets the number of threads used for intraop parallelism on CPU.
+            if n_threads > 0:
+                torch.set_num_threads(n_threads)
 
 
 class TaskException(Exception):
