@@ -258,9 +258,7 @@ def covar_symbols_from_table(
         symbol_col = """t."table" || '::' || t.symbol """
         exclude = "1=1"
         column_names = columns_with_prefix(alchemyEngine, table, feature)
-        notnull = (
-            "(" + " or ".join([f"t.{c} is not null" for c in column_names]) + ")"
-        )
+        notnull = "(" + " or ".join([f"t.{c} is not null" for c in column_names]) + ")"
         group_by = 'group by t."table", t.symbol'
     else:
         symbol_col = "t.symbol"
@@ -298,16 +296,23 @@ def covar_symbols_from_table(
             try:
                 cursor = raw_conn.cursor()
                 final_query = cursor.mogrify(query, params)
-                logger.info(final_query)
+                logger.info("SQL query:\n%s", final_query)
                 cursor.close()
             finally:
                 raw_conn.close()
 
             with alchemyEngine.connect() as conn:
-                cov_symbols = pd.read_sql(query, conn, params=params)
+                cov_symbols = pd.read_sql(
+                    query,
+                    conn,
+                    params=params,
+                    dtype={"symbol": "string", "num": "int32"},
+                )
     else:
         with alchemyEngine.connect() as conn:
-            cov_symbols = pd.read_sql(query, conn, params=params)
+            cov_symbols = pd.read_sql(
+                query, conn, params=params, dtype={"symbol": "string", "num": "int32"}
+            )
 
     cov_symbols = cov_symbols[["symbol"]]
     cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
@@ -1152,7 +1157,9 @@ def update_hps_sessions(id, method, search_params, search_space, covar_set_id):
         conn.execute(text(update), params)
 
 
-def _remove_measured_features(alchemyEngine, model, anchor_symbol, cov_table, features, ts_date=None):
+def _remove_measured_features(
+    alchemyEngine, model, anchor_symbol, cov_table, features, ts_date=None
+):
     params = {
         "symbol": anchor_symbol,
         "cov_table": cov_table,
