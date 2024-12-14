@@ -256,7 +256,7 @@ def covar_symbols_from_table(
     # get a list of symbols from the given table, of which metrics are not recorded yet
     if table.startswith("ta_"):
         symbol_col = """t."table" || '::' || t.symbol """
-        exclude = ""
+        exclude = "1=1"
         column_names = columns_with_prefix(alchemyEngine, table, feature)
         notnull = (
             "(" + " or ".join([f"t.{c} is not null" for c in column_names]) + ")"
@@ -302,7 +302,7 @@ def covar_symbols_from_table(
                 cursor.close()
             finally:
                 raw_conn.close()
-                
+
             with alchemyEngine.connect() as conn:
                 cov_symbols = pd.read_sql(query, conn, params=params)
     else:
