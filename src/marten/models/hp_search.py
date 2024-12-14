@@ -228,32 +228,28 @@ def covar_symbols_from_table(
     match model:
         case "NeuralProphet":
             existing_cov_symbols = """
-                existing_cov_symbols AS (
-                    SELECT
-                        cov_symbol
-                    FROM
-                        neuralprophet_corel nc
-                    WHERE
-                        AND nc.symbol = %(anchor_symbol)s
-                        AND nc.cov_table = %(table)s
-                        AND nc.feature = %(feature)s
-                        AND nc.ts_date = %(ts_date)s
-                )
+                SELECT
+                    cov_symbol
+                FROM
+                    neuralprophet_corel nc
+                WHERE
+                    AND nc.symbol = %(anchor_symbol)s
+                    AND nc.cov_table = %(table)s
+                    AND nc.feature = %(feature)s
+                    AND nc.ts_date = %(ts_date)s
             """
         case _:
             existing_cov_symbols = """
-                existing_cov_symbols AS (
-                    SELECT
-                        cov_symbol
-                    FROM
-                        paired_correlation pc
-                    WHERE
-                        pc.model = %(model)s
-                        AND pc.symbol = %(anchor_symbol)s
-                        AND pc.cov_table = %(table)s
-                        AND pc.feature = %(feature)s
-                        AND pc.ts_date = %(ts_date)s
-                )
+                SELECT
+                    cov_symbol
+                FROM
+                    paired_correlation pc
+                WHERE
+                    pc.model = %(model)s
+                    AND pc.symbol = %(anchor_symbol)s
+                    AND pc.cov_table = %(table)s
+                    AND pc.feature = %(feature)s
+                    AND pc.ts_date = %(ts_date)s
             """
             params["model"] = model
 
@@ -263,13 +259,13 @@ def covar_symbols_from_table(
         exclude = ""
         column_names = columns_with_prefix(alchemyEngine, table, feature)
         notnull = (
-            "and (" + " or ".join([f"t.{c} is not null" for c in column_names]) + ")"
+            "(" + " or ".join([f"t.{c} is not null" for c in column_names]) + ")"
         )
         group_by = 'group by t."table", t.symbol'
     else:
         symbol_col = "t.symbol"
-        exclude = "and t.symbol <> %(anchor_symbol)s"
-        notnull = f"and t.{feature} is not null"
+        exclude = "t.symbol <> %(anchor_symbol)s"
+        notnull = f"t.{feature} is not null"
         group_by = "group by t.symbol"
 
     orig_table = (
@@ -277,17 +273,19 @@ def covar_symbols_from_table(
     )
 
     query = f"""
-        WITH {existing_cov_symbols}
+        WITH existing_cov_symbols AS ({existing_cov_symbols})
         select
             {symbol_col} symbol, count(*) num
         from
             {orig_table} t
-        left join
-            existing_cov_symbols ecs on {symbol_col} = ecs.cov_symbol
         where
-            ecs.cov_symbol IS NULL
-            {notnull}
-            {exclude}
+            NOT EXISTS (
+                SELECT 1
+                FROM existing_cov_symbols ecs
+                WHERE {symbol_col} = ecs.cov_symbol
+            )
+            and {notnull}
+            and {exclude}
             and t.date = ANY(%(dates)s::date[])
         {group_by}
         having 
@@ -296,6 +294,11 @@ def covar_symbols_from_table(
 
     if sem and table.startswith("ta_"):
         with sem:
+            with alchemyEngine.raw_connection() as raw_conn:
+                cursor = raw_conn.cursor()
+                final_query = cursor.mogrify(query, params)
+                logger.info(final_query)
+                cursor.close()
             with alchemyEngine.connect() as conn:
                 cov_symbols = pd.read_sql(query, conn, params=params)
     else:
