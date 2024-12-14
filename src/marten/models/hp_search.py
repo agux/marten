@@ -226,64 +226,73 @@ def covar_symbols_from_table(
     }
     match model:
         case "NeuralProphet":
-            sub_query = """
-                select
-                    cov_symbol
-                from
-                    neuralprophet_corel nc
-                where
-                    symbol = %(anchor_symbol)s
-                    and cov_table = %(table)s
-                    and feature = %(feature)s
-                    and ts_date = %(ts_date)s
+            existing_cov_symbols = """
+                existing_cov_symbols AS (
+                    SELECT
+                        cov_symbol
+                    FROM
+                        neuralprophet_corel nc
+                    WHERE
+                        AND nc.symbol = %(anchor_symbol)s
+                        AND nc.cov_table = %(table)s
+                        AND nc.feature = %(feature)s
+                        AND nc.ts_date = %(ts_date)s
+                )
             """
         case _:
-            sub_query = """
-                select
-                    cov_symbol
-                from
-                    paired_correlation pc
-                where
-                    model = %(model)s
-                    and symbol = %(anchor_symbol)s
-                    and cov_table = %(table)s
-                    and feature = %(feature)s
-                    and ts_date = %(ts_date)s
+            existing_cov_symbols = """
+                existing_cov_symbols AS (
+                    SELECT
+                        cov_symbol
+                    FROM
+                        paired_correlation pc
+                    WHERE
+                        pc.model = %(model)s
+                        AND pc.symbol = %(anchor_symbol)s
+                        AND pc.cov_table = %(table)s
+                        AND pc.feature = %(feature)s
+                        AND pc.ts_date = %(ts_date)s
+                )
             """
             params["model"] = model
 
     # get a list of symbols from the given table, of which metrics are not recorded yet
     if table.startswith("ta_"):
-        symbol_col = """t."table" || '::' || t.symbol symbol"""
-        exclude = f"""and t."table" || '::' || t.symbol not in (
-                {sub_query}
-            )"""
+        symbol_col = """t."table" || '::' || t.symbol """
+        exclude = ""
         column_names = columns_with_prefix(alchemyEngine, table, feature)
         notnull = (
             "and (" + " or ".join([f"{c} is not null" for c in column_names]) + ")"
         )
         group_by = 'group by t."table", t.symbol'
     else:
-        symbol_col = "t.symbol symbol"
-        exclude = f"""
-            and t.symbol <> %(anchor_symbol)s 
-            and t.symbol not in (
-                {sub_query}
-            )"""
+        symbol_col = "t.symbol"
+        exclude = "and t.symbol <> %(anchor_symbol)s"
         notnull = f"and {feature} is not null"
         group_by = "group by t.symbol"
 
+    orig_table = table[:-5] if table.startswith("ta_") and table.endswith("_view") else table
+
     query = f"""
+        WITH dates AS (
+            SELECT unnest(%(dates)s::date[]) AS date
+        ),
+        {existing_cov_symbols}
         select
-            {symbol_col}, count(*) num
+            {symbol_col} symbol, count(*) num
         from
-            {table} t
+            {orig_table} t
+        join 
+            dates d on t.date = d.date
+        left join
+            existing_cov_symbols ecs on {symbol_col} = ecs.cov_symbol
         where
-            t.date in %(dates)s
             {notnull}
             {exclude}
+            AND ecs.cov_symbol IS NULL
         {group_by}
-        having count(*) >= %(min_count)s
+        having 
+            count(*) >= %(min_count)s
     """
 
     if sem:
@@ -1308,7 +1317,9 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
 
     dask.config.set({"distributed.scheduler.locks.lease-timeout": "300s"})
     sem = Semaphore(
-        max_leases=int(args.min_worker / 2.0),
+        max_leases=os.getenv(
+            "RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker
+        ),
         name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
     )
     locks = get_accelerator_locks(0, 1, "60s")
