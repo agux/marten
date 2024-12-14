@@ -285,16 +285,16 @@ def covar_symbols_from_table(
         left join
             existing_cov_symbols ecs on {symbol_col} = ecs.cov_symbol
         where
-            t.date = ANY(%(dates)s::date[])
-            and ecs.cov_symbol IS NULL
+            ecs.cov_symbol IS NULL
             {notnull}
             {exclude}
+            and t.date = ANY(%(dates)s::date[])
         {group_by}
         having 
             count(*) >= %(min_count)s
     """
 
-    if sem:
+    if sem and table.startswith("ta_"):
         with sem:
             with alchemyEngine.connect() as conn:
                 cov_symbols = pd.read_sql(query, conn, params=params)
