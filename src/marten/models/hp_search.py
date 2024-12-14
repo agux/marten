@@ -294,11 +294,15 @@ def covar_symbols_from_table(
 
     if sem and table.startswith("ta_"):
         with sem:
-            with alchemyEngine.raw_connection() as raw_conn:
+            raw_conn = alchemyEngine.raw_connection()
+            try:
                 cursor = raw_conn.cursor()
                 final_query = cursor.mogrify(query, params)
                 logger.info(final_query)
                 cursor.close()
+            finally:
+                raw_conn.close()
+                
             with alchemyEngine.connect() as conn:
                 cov_symbols = pd.read_sql(query, conn, params=params)
     else:
