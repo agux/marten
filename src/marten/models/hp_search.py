@@ -322,11 +322,11 @@ def covar_symbols_from_table(
 def _pair_endogenous_covar_metrics(
     anchor_symbol, anchor_df, cov_table, features, args, cutoff_date, sem, locks
 ):
-    global client, futures, logger
+    global client, futures, logger, alchemyEngine
 
     # remove feature elements already exists in the neuralprophet_corel table.
     features = _remove_measured_features(
-        args.model, anchor_symbol, cov_table, features, cutoff_date
+        alchemyEngine, args.model, anchor_symbol, cov_table, features, cutoff_date
     )
 
     if not features:
@@ -1148,7 +1148,7 @@ def update_hps_sessions(id, method, search_params, search_space, covar_set_id):
         conn.execute(text(update), params)
 
 
-def _remove_measured_features(model, anchor_symbol, cov_table, features, ts_date=None):
+def _remove_measured_features(alchemyEngine, model, anchor_symbol, cov_table, features, ts_date=None):
     params = {
         "symbol": anchor_symbol,
         "cov_table": cov_table,
@@ -1177,11 +1177,12 @@ def _remove_measured_features(model, anchor_symbol, cov_table, features, ts_date
     if ts_date is not None:
         query += " and ts_date = %(ts_date)s"
         params["ts_date"] = ts_date
-    existing_features_pd = pd.read_sql(
-        query,
-        alchemyEngine,
-        params=params,
-    )
+    with alchemyEngine.connect() as conn:
+        existing_features_pd = pd.read_sql(
+            query,
+            conn,
+            params=params,
+        )
     # remove elements in the `features` list that exist in the existing_features_pd.
     features = list(set(features) - set(existing_features_pd["feature"]))
     return features
@@ -1192,6 +1193,7 @@ def covar_metric(
 ):
     worker = get_worker()
     logger = worker.logger
+    alchemyEngine = worker.alchemyEngine
     min_date = min(dates).strftime("%Y-%m-%d")
     cutoff_date = max(dates).strftime("%Y-%m-%d")
 
@@ -1199,7 +1201,7 @@ def covar_metric(
         "currency_boc_safe"
     ):
         features = _remove_measured_features(
-            args.model, anchor_symbol, cov_table, features, cutoff_date
+            alchemyEngine, args.model, anchor_symbol, cov_table, features, cutoff_date
         )
 
     if len(features) == 0:
