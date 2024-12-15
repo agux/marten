@@ -224,7 +224,6 @@ def covar_symbols_from_table(
         "ts_date": ts_date,
         "start_date": min(dates),
         "end_date": max(dates),
-        "dates": dates,
         "min_count": min_count,
     }
     match model:
@@ -287,7 +286,6 @@ def covar_symbols_from_table(
             and {notnull}
             and {exclude}
             and t.date between %(start_date)s and %(end_date)s
-            and t.date = ANY(%(dates)s::date[])
         {group_by}
         having 
             count(*) >= %(min_count)s
