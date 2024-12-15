@@ -161,14 +161,9 @@ class BaseModel(ABC):
     def _lock_accelerator(self, accelerator) -> str:
         # get_logger().info("locking accelerator: %s", self.locks)
         is_baseline = self.is_baseline(**self.model_args)
+        gpu_ut, gpu_rt = self.gpu_threshold()
+        cpu_ut, cpu_rt = self.cpu_threshold()
         mod_accelerator = None
-
-        if is_baseline:
-            gpu_ut, gpu_rt = self.gpu_threshold()
-            cpu_ut, cpu_rt = self.cpu_threshold()
-            if gpu_ut > cpu_ut:
-                get_logger.debug("using CPU: %s > %s", gpu_ut, cpu_ut)
-                return "cpu"
 
         def lock_cpu():
             nonlocal mod_accelerator
