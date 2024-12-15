@@ -412,6 +412,7 @@ class BaseModel(ABC):
         else:
             kwargs["devices"] = "auto"
         self.model_args = kwargs
+        start_time = time.time()
         try:
             get_logger().debug("training with kwargs: %s", kwargs)
             model_config = self._train(df, **kwargs)
@@ -428,15 +429,17 @@ class BaseModel(ABC):
                 cpu_cores = self.configure_torch()
                 kwargs["devices"] = 1
                 self.model_args = kwargs
+                start_time = time.time()
                 model_config = self._train(df, **kwargs)
             else:
                 get_logger().warning("encountered error with train params: %s", kwargs)
                 raise e
-
+        fit_time = time.time() - start_time
         metrics = self._get_metrics(**model_config)
         metrics["device"] = "CPU" if kwargs["accelerator"] == "cpu" else "GPU:auto"
         metrics["machine"] = socket.gethostname()
         metrics["cpu_cores"] = cpu_cores
+        metrics["fit_time"] = fit_time
 
         return metrics
 

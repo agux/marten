@@ -402,6 +402,12 @@ def save_covar_metrics(
     else:
         device_info = json.dumps({})
 
+    fit_time_str = None
+    if "fit_time" in cov_metrics:
+        fit_time_str = str(cov_metrics["fit_time"]) + " seconds"
+    elif fit_time is not None:
+        fit_time_str = str(fit_time) + " seconds"
+
     params = {
         "symbol": anchor_symbol,
         "cov_table": cov_table,
@@ -411,7 +417,7 @@ def save_covar_metrics(
         "mae_val": cov_metrics["MAE_val"],
         "rmse_val": cov_metrics["RMSE_val"],
         "loss_val": cov_metrics["Loss_val"],
-        "fit_time": ((str(fit_time) + " seconds") if fit_time is not None else None),
+        "fit_time": fit_time_str,
         "timesteps": timesteps,
         "nan_count": nan_count,
         "epochs": epochs,

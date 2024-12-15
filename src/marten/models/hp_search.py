@@ -224,7 +224,7 @@ def covar_symbols_from_table(
         "ts_date": ts_date,
         "start_date": min(dates),
         "end_date": max(dates),
-        "dates": list(dates),
+        "dates": dates,
         "min_count": min_count,
     }
     match model:
@@ -1334,7 +1334,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     # min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
     cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
     min_count = int(len(anchor_df) * (1 - args.nan_limit))
-    dates = tuple(anchor_df["ds"])
+    dates = anchor_df["ds"].dt.date.tolist()
 
     dask.config.set({"distributed.scheduler.locks.lease-timeout": "300s"})
     sem = Semaphore(

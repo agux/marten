@@ -32,12 +32,20 @@ services:
       -c work_mem=2GB
       -c maintenance_work_mem=2GB
       -c effective_cache_size=96GB
-      -c max_parallel_workers=96
-      -c max_parallel_maintenance_workers=96
-      -c max_worker_processes=96
-      -c max_parallel_workers_per_gather=96
-      -c timescaledb.max_background_workers=96
+      -c effective_io_concurrency=200
+      -c max_parallel_workers=32
+      -c max_parallel_maintenance_workers=8
+      -c max_parallel_workers_per_gather=8
+      -c max_worker_processes=64
+      -c autovacuum_max_workers=8
+      -c timescaledb.max_background_workers=16
       -c track_activity_query_size=16384
+      -c checkpoint_timeout=15min
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c max_wal_size=32GB
+      -c bgwriter_lru_maxpages=5000
+      -c autovacuum_work_mem=512MB
     networks:
       - pchn_network
 
