@@ -145,7 +145,7 @@ class TSMixerxModel(BaseModel):
 
         self.val_size = min(300, int(len(df) * 0.9)) if model_config["validate"] else 0
 
-        rank_zero_logger = logging.getLogger("lightning.pytorch.utilities.rank_zero")
+        rank_zero_logger = logging.getLogger("lightning_utilities.core.rank_zero")
         orig_log_level = rank_zero_logger.getEffectiveLevel()
         rank_zero_logger.setLevel(logging.FATAL)
 
