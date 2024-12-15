@@ -386,6 +386,7 @@ def _pair_covar_metrics(
     args,
     sem,
     locks,
+    p_order=0,
 ):
     covar_fut = []
     worker = get_worker()
@@ -417,7 +418,7 @@ def _pair_covar_metrics(
                 sem=sem,
                 locks=locks,
                 key=f"{fit_with_covar.__name__}-{symbol}@{cov_table}.{feature}",
-                priority=10,
+                priority=p_order,
             )
         )
         # if too much pending task, then slow down for the tasks to be digested
@@ -1203,7 +1204,16 @@ def _remove_measured_features(
 
 
 def covar_metric(
-    anchor_symbol, anchor_df, cov_table, features, dates, min_count, args, sem, locks
+    anchor_symbol,
+    anchor_df,
+    cov_table,
+    features,
+    dates,
+    min_count,
+    args,
+    sem,
+    locks,
+    p_order,
 ):
     worker = get_worker()
     logger = worker.logger
@@ -1249,6 +1259,7 @@ def covar_metric(
                         args,
                         sem,
                         locks,
+                        p_order,
                     )
                     num_symbols += 1
                 case "currency_boc_safe_view":
@@ -1263,6 +1274,7 @@ def covar_metric(
                         args,
                         sem,
                         locks,
+                        p_order,
                     )
                     num_symbols += 1
                 case _:
@@ -1278,7 +1290,7 @@ def covar_metric(
                             min_count,
                             sem,
                             key=f"{covar_symbols_from_table.__name__}-{cov_table}.{feature}",
-                            priority=2,
+                            priority=p_order + 1,
                         )
                     )
                     # cov_symbols = _covar_symbols_from_table(
@@ -1315,6 +1327,7 @@ def covar_metric(
                         args,
                         sem,
                         locks,
+                        p_order,
                     )
                     num_symbols += len(cov_symbols)
     logger.info(
@@ -1359,580 +1372,287 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     # for the rest of exogenous covariates, keep only the core features of anchor_df
     anchor_df = anchor_df[["ds", "y"]]
 
-    # prep CN index covariates
-    features = [
-        "change_rate",
-        "amt_change_rate",
-        "vol_change_rate",
-        "open_preclose_rate",
-        "high_preclose_rate",
-        "low_preclose_rate",
-    ]
-    cov_table = "index_daily_em_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-
-    # prep ETF covariates fund_etf_daily_em_view
-    features = [
-        "change_rate",
-        "amt_change_rate",
-        "vol_change_rate",
-        "turnover_rate",
-        "turnover_change_rate",
-        "open_preclose_rate",
-        "high_preclose_rate",
-        "low_preclose_rate",
-    ]
-    cov_table = "fund_etf_daily_em_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-
-    # prep bond covariates bond_metrics_em, cn_bond_indices_view
-    features = [
-        "china_yield_2y",
-        "china_yield_10y",
-        "china_yield_30y",
-        "china_yield_spread_10y_2y",
-        "us_yield_2y",
-        "us_yield_10y",
-        "us_yield_30y",
-        "us_yield_spread_10y_2y",
-        "quantile",
-        "china_yield_2y_change_rate",
-        "china_yield_5y_change_rate",
-        "china_yield_10y_change_rate",
-        "china_yield_30y_change_rate",
-        "china_yield_spread_10y_2y_change_rate",
-        "us_yield_2y_change_rate",
-        "us_yield_5y_change_rate",
-        "us_yield_10y_change_rate",
-        "us_yield_30y_change_rate",
-        "us_yield_spread_10y_2y_change_rate",
-        "performance_benchmark_change_rate",
-    ]
-    cov_table = "bond_metrics_em_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-
-    features = [
-        "wealthindex_change",
-        "fullpriceindex_change",
-        "cleanpriceindex_change",
-        "avgmv_duration_change_rate",
-        "avgcf_duration_change_rate",
-        "avgmv_convexity_change_rate",
-        "avgcf_convexity_change_rate",
-        "avgcf_ytm_change_rate",
-        "avgmv_ytm_change_rate",
-        "avgbpv_change_rate",
-        "avgmaturity_change_rate",
-        "avgcouponrate_change_rate",
-        "indexprevdaymv_change_rate",
-        "spotsettlementvolume_change_rate",
-    ]
-    cov_table = "cn_bond_indices_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-
-    # prep US index covariates us_index_daily_sina
-    features = [
-        "change_rate",
-        "amt_change_rate",
-        "vol_change_rate",
-        "open_preclose_rate",
-        "high_preclose_rate",
-        "low_preclose_rate",
-    ]
-    cov_table = "us_index_daily_sina_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-
-    # prep HK index covariates hk_index_daily_sina
-    features = [
-        "change_rate",
-        "open_preclose_rate",
-        "high_preclose_rate",
-        "low_preclose_rate",
-    ]
-    cov_table = "hk_index_daily_em_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-
-    # prep CN bond: bond_zh_hs_daily_view
-    features = [
-        "change_rate",
-        "vol_change_rate",
-        "open_preclose_rate",
-        "high_preclose_rate",
-        "low_preclose_rate",
-    ]
-    cov_table = "bond_zh_hs_daily_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-
-    # prep CN stock features. Sync table & view column names
-    features = [
-        "change_rate",
-        "turnover_rate",
-        "turnover_change_rate",
-        "open_preclose_rate",
-        "high_preclose_rate",
-        "low_preclose_rate",
-        "vol_change_rate",
-        "amt_change_rate",
-    ]
-    cov_table = "stock_zh_a_hist_em_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-
-    # RMB exchange rate
-    features = [
-        "usd_change_rate",
-        "eur_change_rate",
-        "jpy_change_rate",
-        "hkd_change_rate",
-        "gbp_change_rate",
-        "aud_change_rate",
-        "nzd_change_rate",
-        "sgd_change_rate",
-        "chf_change_rate",
-        "cad_change_rate",
-        "myr_change_rate",
-        "rub_change_rate",
-        "zar_change_rate",
-        "krw_change_rate",
-        "aed_change_rate",
-        "qar_change_rate",
-        "huf_change_rate",
-        "pln_change_rate",
-        "dkk_change_rate",
-        "sek_change_rate",
-        "nok_change_rate",
-        "try_change_rate",
-        "php_change_rate",
-        "thb_change_rate",
-        "mop_change_rate",
-    ]
-    cov_table = "currency_boc_safe_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-
-    # SGE spot
-    features = [
-        "change_rate",
-        "open_preclose_rate",
-        "high_preclose_rate",
-        "low_preclose_rate",
-    ]
-    cov_table = "spot_hist_sge_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-
-    # Interbank interest rates
-    features = ["change_rate"]
-    cov_table = "interbank_rate_hist_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-
-    # Technical indicators
-    features = [
-        "alma",
-        "dema",
-        "epma",
-        "ema",
-        "ht_trendline",
-        "hma",
-        "kama",
-        "mama",
-        "dynamic",
-        "smma",
-        "sma",
-        "t3",
-        "tema",
-        "vwma",
-        "wma",
-        "vwap",
-    ]
-    cov_table = "ta_ma_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-    features = [
-        "slope",
-    ]
-    cov_table = "ta_numerical_analysis_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-    features = [
-        "ao",
-        "cmo",
-        "cci",
-        "connors_rsi",
-        "dpo",
-        "stoch",
-        "rsi",
-        "stc",
-        "smi",
-        "stoch_rsi",
-        "trix",
-        "ultimate",
-        "williams_r",
-    ]
-    cov_table = "ta_oscillators_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-    features = [
-        "pivots",
-        "fractal",
-    ]
-    cov_table = "ta_other_price_patterns_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-    features = [
-        "bollinger",
-        "donchian",
-        "fcb",
-        "keltner",
-        "ma_envelopes",
-        "pivot_points",
-        "rolling_pivots",
-        "starc_bands",
-        "stdev_channels",
-    ]
-    cov_table = "ta_price_channel_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-    features = [
-        "atr",
-        "bop",
-        "chop",
-        "stdev",
-        "roc",
-        "roc2",
-        "pmo",
-        "tsi",
-        "ulcer_index",
-    ]
-    cov_table = "ta_price_characteristics_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-    features = [
-        "fisher_transform",
-        "heikin_ashi",
-        "zig_zag",
-    ]
-    cov_table = "ta_price_transforms_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-    features = [
-        "atr",
-        "aroon",
-        "adx",
-        "elder_ray",
-        "gator",
-        "hurst",
-        "ichimoku",
-        "macd",
-        "super_trend",
-        "vortex",
-        "alligator",
-    ]
-    cov_table = "ta_price_trends_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-    features = [
-        "chandelier",
-        "parabolic_sar",
-        "volatility_stop",
-    ]
-    cov_table = "ta_stop_reverse_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
-    features = [
-        "adl",
-        "cmf",
-        "chaikin_osc",
-        "force_index",
-        "kvo",
-        "mfi",
-        "obv",
-        "pvo",
-    ]
-    cov_table = "ta_volume_based_view"
-    futures.append(
-        client.submit(
-            covar_metric,
-            anchor_symbol,
-            anchor_df,
-            cov_table,
-            features,
-            dates,
-            min_count,
-            args,
-            sem,
-            locks,
-            key=f"{covar_metric.__name__}-{cov_table}({len(features)})",
-        )
-    )
+    table_features = {
+        "CN_Index": (
+            "index_daily_em_view",
+            [
+                "change_rate",
+                "amt_change_rate",
+                "vol_change_rate",
+                "open_preclose_rate",
+                "high_preclose_rate",
+                "low_preclose_rate",
+            ],
+        ),
+        "ETF": (
+            "fund_etf_daily_em_view",
+            [
+                "change_rate",
+                "amt_change_rate",
+                "vol_change_rate",
+                "turnover_rate",
+                "turnover_change_rate",
+                "open_preclose_rate",
+                "high_preclose_rate",
+                "low_preclose_rate",
+            ],
+        ),
+        "Bond": (
+            "bond_metrics_em_view",
+            [
+                "china_yield_2y",
+                "china_yield_10y",
+                "china_yield_30y",
+                "china_yield_spread_10y_2y",
+                "us_yield_2y",
+                "us_yield_10y",
+                "us_yield_30y",
+                "us_yield_spread_10y_2y",
+                "quantile",
+                "china_yield_2y_change_rate",
+                "china_yield_5y_change_rate",
+                "china_yield_10y_change_rate",
+                "china_yield_30y_change_rate",
+                "china_yield_spread_10y_2y_change_rate",
+                "us_yield_2y_change_rate",
+                "us_yield_5y_change_rate",
+                "us_yield_10y_change_rate",
+                "us_yield_30y_change_rate",
+                "us_yield_spread_10y_2y_change_rate",
+                "performance_benchmark_change_rate",
+            ],
+        ),
+        "Bond_Index": (
+            "cn_bond_indices_view",
+            [
+                "wealthindex_change",
+                "fullpriceindex_change",
+                "cleanpriceindex_change",
+                "avgmv_duration_change_rate",
+                "avgcf_duration_change_rate",
+                "avgmv_convexity_change_rate",
+                "avgcf_convexity_change_rate",
+                "avgcf_ytm_change_rate",
+                "avgmv_ytm_change_rate",
+                "avgbpv_change_rate",
+                "avgmaturity_change_rate",
+                "avgcouponrate_change_rate",
+                "indexprevdaymv_change_rate",
+                "spotsettlementvolume_change_rate",
+            ],
+        ),
+        "CN_Bond": (
+            "bond_zh_hs_daily_view",
+            [
+                "change_rate",
+                "vol_change_rate",
+                "open_preclose_rate",
+                "high_preclose_rate",
+                "low_preclose_rate",
+            ],
+        ),
+        "US_Index": (
+            "us_index_daily_sina_view",
+            [
+                "change_rate",
+                "amt_change_rate",
+                "vol_change_rate",
+                "open_preclose_rate",
+                "high_preclose_rate",
+                "low_preclose_rate",
+            ],
+        ),
+        "HK_Index": (
+            "hk_index_daily_em_view",
+            [
+                "change_rate",
+                "open_preclose_rate",
+                "high_preclose_rate",
+                "low_preclose_rate",
+            ],
+        ),
+        "CN_Stock": (
+            "stock_zh_a_hist_em_view",
+            [
+                "change_rate",
+                "turnover_rate",
+                "turnover_change_rate",
+                "open_preclose_rate",
+                "high_preclose_rate",
+                "low_preclose_rate",
+                "vol_change_rate",
+                "amt_change_rate",
+            ],
+        ),
+        "Currency": (
+            "currency_boc_safe_view",
+            [
+                "usd_change_rate",
+                "eur_change_rate",
+                "jpy_change_rate",
+                "hkd_change_rate",
+                "gbp_change_rate",
+                "aud_change_rate",
+                "nzd_change_rate",
+                "sgd_change_rate",
+                "chf_change_rate",
+                "cad_change_rate",
+                "myr_change_rate",
+                "rub_change_rate",
+                "zar_change_rate",
+                "krw_change_rate",
+                "aed_change_rate",
+                "qar_change_rate",
+                "huf_change_rate",
+                "pln_change_rate",
+                "dkk_change_rate",
+                "sek_change_rate",
+                "nok_change_rate",
+                "try_change_rate",
+                "php_change_rate",
+                "thb_change_rate",
+                "mop_change_rate",
+            ],
+        ),
+        "SGE_Spot": (
+            "spot_hist_sge_view",
+            [
+                "change_rate",
+                "open_preclose_rate",
+                "high_preclose_rate",
+                "low_preclose_rate",
+            ],
+        ),
+        "Interbank": (
+            "interbank_rate_hist_view",
+            ["change_rate"],
+        ),
+        "TA_MA": (
+            "ta_ma_view",
+            [
+                "alma",
+                "dema",
+                "epma",
+                "ema",
+                "ht_trendline",
+                "hma",
+                "kama",
+                "mama",
+                "dynamic",
+                "smma",
+                "sma",
+                "t3",
+                "tema",
+                "vwma",
+                "wma",
+                "vwap",
+            ],
+        ),
+        "TA_Numerical_Analysis": (
+            "ta_numerical_analysis_view",
+            [
+                "slope",
+            ],
+        ),
+        "TA_Oscillators": (
+            "ta_oscillators_view",
+            [
+                "ao",
+                "cmo",
+                "cci",
+                "connors_rsi",
+                "dpo",
+                "stoch",
+                "rsi",
+                "stc",
+                "smi",
+                "stoch_rsi",
+                "trix",
+                "ultimate",
+                "williams_r",
+            ],
+        ),
+        "TA_Other_Price_Patterns": (
+            "ta_other_price_patterns_view",
+            [
+                "pivots",
+                "fractal",
+            ],
+        ),
+        "TA_Price_Channel": (
+            "ta_price_channel_view",
+            [
+                "bollinger",
+                "donchian",
+                "fcb",
+                "keltner",
+                "ma_envelopes",
+                "pivot_points",
+                "rolling_pivots",
+                "starc_bands",
+                "stdev_channels",
+            ],
+        ),
+        "TA_Price_Characteristics": (
+            "ta_price_characteristics_view",
+            [
+                "atr",
+                "bop",
+                "chop",
+                "stdev",
+                "roc",
+                "roc2",
+                "pmo",
+                "tsi",
+                "ulcer_index",
+            ],
+        ),
+        "TA_Price_Transforms": (
+            "ta_price_transforms_view",
+            [
+                "fisher_transform",
+                "heikin_ashi",
+                "zig_zag",
+            ],
+        ),
+        "TA_Price_Trends": (
+            "ta_price_trends_view",
+            [
+                "atr",
+                "aroon",
+                "adx",
+                "elder_ray",
+                "gator",
+                "hurst",
+                "ichimoku",
+                "macd",
+                "super_trend",
+                "vortex",
+                "alligator",
+            ],
+        ),
+        "TA_Stop_Reverse": (
+            "ta_stop_reverse_view",
+            [
+                "chandelier",
+                "parabolic_sar",
+                "volatility_stop",
+            ],
+        ),
+        "TA_Volume_Based": (
+            "ta_volume_based_view",
+            [
+                "adl",
+                "cmf",
+                "chaikin_osc",
+                "force_index",
+                "kvo",
+                "mfi",
+                "obv",
+                "pvo",
+            ],
+        ),
+    }
 
     # TODO prep options
 
@@ -1942,6 +1662,26 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     # TODO exports and imports
     # TODO commodity prices: oil, copper, aluminum, coal, gold, etc.
     # TODO cash inflow
+
+    keys = list(table_features.keys())
+    for i in range(0, len(keys)):
+        cov_table, features = table_features[keys[i]]
+        futures.append(
+            client.submit(
+                covar_metric,
+                anchor_symbol,
+                anchor_df,
+                cov_table,
+                features,
+                dates,
+                min_count,
+                args,
+                sem,
+                locks,
+                p_order=len(keys) - i,
+                key=f"{covar_metric.__name__}_{keys[i].lower()}-{cov_table}({len(features)})",
+            )
+        )
 
 
 def univariate_baseline(anchor_df, hps_id, args):
