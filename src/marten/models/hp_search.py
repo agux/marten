@@ -293,7 +293,7 @@ def covar_symbols_from_table(
             count(*) >= %(min_count)s
     """
 
-    if sem and table.startswith("ta_"):
+    if sem:
         with sem:
             # raw_conn = alchemyEngine.raw_connection()
             # try:
@@ -1349,7 +1349,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     min_count = int(len(anchor_df) * (1 - args.nan_limit))
     dates = anchor_df["ds"].dt.date.tolist()
 
-    dask.config.set({"distributed.scheduler.locks.lease-timeout": "300s"})
+    dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
     sem = Semaphore(
         max_leases=int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker)),
         name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
