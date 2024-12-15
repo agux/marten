@@ -224,6 +224,7 @@ def covar_symbols_from_table(
         "ts_date": ts_date,
         "start_date": min(dates),
         "end_date": max(dates),
+        "dates": list(dates),
         "min_count": min_count,
     }
     match model:
@@ -260,12 +261,12 @@ def covar_symbols_from_table(
         exclude = "1=1"
         column_names = columns_with_prefix(alchemyEngine, table, feature)
         notnull = "(" + " or ".join([f"t.{c} is not null" for c in column_names]) + ")"
-        group_by = "group by t.table_symbol"
+        group_by = f"group by {symbol_col}"
     else:
         symbol_col = "t.symbol"
         exclude = "t.symbol <> %(anchor_symbol)s"
         notnull = f"t.{feature} is not null"
-        group_by = "group by t.symbol"
+        group_by = f"group by {symbol_col}"
 
     orig_table = (
         table[:-5] if table.startswith("ta_") and table.endswith("_view") else table
@@ -286,6 +287,7 @@ def covar_symbols_from_table(
             and {notnull}
             and {exclude}
             and t.date between %(start_date)s and %(end_date)s
+            and t.date = ANY(%(dates)s::date[])
         {group_by}
         having 
             count(*) >= %(min_count)s
