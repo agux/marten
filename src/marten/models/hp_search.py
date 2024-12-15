@@ -1,7 +1,7 @@
 import os
 
-OPENBLAS_NUM_THREADS = 1
-os.environ["OPENBLAS_NUM_THREADS"] = f"{OPENBLAS_NUM_THREADS}"
+# OPENBLAS_NUM_THREADS = 1
+# os.environ["OPENBLAS_NUM_THREADS"] = f"{OPENBLAS_NUM_THREADS}"
 
 import time
 import random
@@ -1010,7 +1010,7 @@ def _bayesopt_run(
             future.add_done_callback(hps_task_callback)
             jobs.append(future)
             if i < nworker:
-                interval = random.randint(5000, 15000) / 1000.0
+                interval = random.randint(1000, 5000) / 1000.0
                 time.sleep(interval)
         results = client.gather(jobs, errors="skip")
         elapsed = round(time.time() - t1, 3)

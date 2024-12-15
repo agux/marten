@@ -1,7 +1,7 @@
 import time
 import os
-OPENBLAS_NUM_THREADS = 1
-os.environ["OPENBLAS_NUM_THREADS"] = f"{OPENBLAS_NUM_THREADS}"
+# OPENBLAS_NUM_THREADS = 1
+# os.environ["OPENBLAS_NUM_THREADS"] = f"{OPENBLAS_NUM_THREADS}"
 
 from marten.models.base_model import BaseModel
 from marten.utils.logger import get_logger
