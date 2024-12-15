@@ -6,8 +6,8 @@ def configure_parser(parser):
     parser.add_argument(
         "--model",
         choices=["NeuralProphet", "SOFTS", "TimeMixer", "TSMixerx"],
-        default="SOFTS",
-        help="Model to be used for the prediction. Defaults to SOFTS.",
+        default="TSMixerx",
+        help="Model to be used for the prediction. Defaults to TSMixerx.",
     )
     parser.add_argument(
         "--epochs",
@@ -185,9 +185,10 @@ def configure_parser(parser):
     )
     parser.add_argument(
         "--resume",
-        action="store_true",
+        choices=["none", "covar", "hps"],
+        default="none",
         help=(
-            "Continue from last adhoc prediction process. "
+            "Continue from the specified prediction process. "
             "If not specified, we'll start from scratch with latest time-series data, "
             "which is the default behavior."
         ),

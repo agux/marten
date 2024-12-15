@@ -1094,7 +1094,7 @@ def bayesopt(df, covar_set_id, hps_id, ranked_features):
             eval(space_str, {"uniform": uniform}),
             args,
             itr,
-            i > 0 or args.resume,
+            i > 0 or args.resume.lower() != "none",
         )
 
 
@@ -1750,7 +1750,7 @@ def _get_cutoff_date(args):
 
     today = datetime.date.today()
 
-    if not resume:
+    if resume.lower() == "none":
         return today
 
     covar_cutoff = today
@@ -1846,7 +1846,7 @@ def main(_args):
         cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
 
         # TODO: make use of the returned covar_set_id to resume?
-        hps_id, _ = get_hps_session(args.symbol, args.model, cutoff_date, args.resume)
+        hps_id, _ = get_hps_session(args.symbol, args.model, cutoff_date, args.resume.lower() != "none")
         logger.info(
             "HPS session ID: %s, Cutoff date: %s, CovarSet ID: %s",
             hps_id,

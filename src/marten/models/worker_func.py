@@ -2058,7 +2058,7 @@ def fast_bayesopt(
             args,
             args.mini_itr,
             domain_size,
-            args.resume or i > 0,
+            args.resume.lower() != "none" or i > 0,
             locks,
         )
 
@@ -2188,7 +2188,11 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
 
     hps_id, covar_set_id = get_hps_session(
-        args.symbol, args.model, cutoff_date, args.resume, len(anchor_df)
+        args.symbol,
+        args.model,
+        cutoff_date,
+        args.resume.lower() != "none",
+        len(anchor_df),
     )
     args.covar_set_id = covar_set_id
     logger.info(
@@ -2209,7 +2213,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
 
     # if in resume mode, check if the topk HP is present, and further check if prediction is already conducted.
     topk_count = count_topk_hp(alchemyEngine, args.model, hps_id, base_loss)
-    if args.resume and topk_count >= args.topk:
+    if args.resume.lower() != "none" and topk_count >= args.topk:
         logger.info(
             "Found %s HP with Loss_val less than %s in HP search history already. Skipping covariate and HP search.",
             topk_count,
@@ -2232,18 +2236,18 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     logger.info("Scaling dask cluster to %s", args.max_worker)
     client.cluster.scale(args.max_worker)
 
-    # run covariate loss calculation in batch
-    logger.info("Starting covariate loss calculation")
-    t1_start = time.time()
-    prep_covar_baseline_metrics(anchor_df, anchor_table, args)
-    # logger.info("waiting dask futures: %s", len(hps.futures))
-    await_futures(hps.futures, hard_wait=True)
-
-    logger.info(
-        "%s covariate baseline metric computation completed. Time taken: %s seconds",
-        args.symbol,
-        round(time.time() - t1_start, 3),
-    )
+    if args.resume != "hps":
+        # run covariate loss calculation in batch
+        logger.info("Starting covariate loss calculation")
+        t1_start = time.time()
+        prep_covar_baseline_metrics(anchor_df, anchor_table, args)
+        # logger.info("waiting dask futures: %s", len(hps.futures))
+        await_futures(hps.futures, hard_wait=True)
+        logger.info(
+            "%s covariate baseline metric computation completed. Time taken: %s seconds",
+            args.symbol,
+            round(time.time() - t1_start, 3),
+        )
 
     min_covar_loss = min_covar_loss_val(alchemyEngine, args.model, symbol, cutoff_date)
     min_covar_loss = min_covar_loss if min_covar_loss is not None else LOSS_CAP

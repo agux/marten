@@ -32,7 +32,7 @@ services:
       -c work_mem=2GB
       -c maintenance_work_mem=2GB
       -c effective_cache_size=96GB
-      -c effective_io_concurrency=200
+      -c effective_io_concurrency=256
       -c max_parallel_workers=32
       -c max_parallel_maintenance_workers=8
       -c max_parallel_workers_per_gather=8

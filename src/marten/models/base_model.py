@@ -420,11 +420,13 @@ class BaseModel(ABC):
         pass
 
     def configure_torch(self):
-        is_baseline = self.is_baseline(**self.model_args)
-        if is_baseline:
-            return torch.get_num_threads()
-        else:
-            return optimize_torch_on_cpu(self.torch_cpu_ratio())
+        return torch.get_num_threads()
+        #TODO: commented to test static threads setting
+        # is_baseline = self.is_baseline(**self.model_args)
+        # if is_baseline:
+        #     return torch.get_num_threads()
+        # else:
+        #     return optimize_torch_on_cpu(self.torch_cpu_ratio())
 
     def train(self, df: pd.DataFrame, **kwargs: Any) -> dict:
         """
