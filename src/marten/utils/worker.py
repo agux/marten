@@ -142,6 +142,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
             "distributed.admin.low-level-log-length": 0,
         }
     )
+    mem_limit = os.getenv("dask_worker_memory_limit")
     cluster = LocalCluster(
         host="0.0.0.0",
         scheduler_port=getattr(args, "scheduler_port", 0),
@@ -154,7 +155,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
         processes=True,
         dashboard_address=":8787" if dashboard_port is None else f":{dashboard_port}",
         # memory_limit="2GB",
-        memory_limit=0,  # no limit
+        memory_limit=mem_limit if mem_limit else 0,  # 0=no limit
     )
     # unstable. worker got killed prematurely even there's job running
     # cluster.adapt(

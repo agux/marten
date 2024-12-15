@@ -27,6 +27,7 @@ model: BaseModel = None
 
 def init(args):
     global client, alchemyEngine, model
+    load_dotenv()  # take environment variables from .env.
     client = init_client(
         __name__,
         args.max_worker,
@@ -36,8 +37,6 @@ def init(args):
     )
 
     if alchemyEngine is None:
-        load_dotenv()  # take environment variables from .env.
-
         DB_USER = os.getenv("DB_USER")
         DB_PASSWORD = os.getenv("DB_PASSWORD")
         DB_HOST = os.getenv("DB_HOST")

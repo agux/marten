@@ -77,6 +77,7 @@ model: BaseModel = None
 
 def init(args):
     global client, model
+    load_dotenv()  # take environment variables from .env.
 
     _init_local_resource()
 
@@ -105,8 +106,6 @@ def _init_local_resource():
     set_log_level("ERROR")
 
     if alchemyEngine is None:
-        load_dotenv()  # take environment variables from .env.
-
         DB_USER = os.getenv("DB_USER")
         DB_PASSWORD = os.getenv("DB_PASSWORD")
         DB_HOST = os.getenv("DB_HOST")

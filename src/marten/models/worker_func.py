@@ -784,6 +784,12 @@ def update_metrics_table(
         device_info["cpu_cores"] = last_metric["cpu_cores"]
     device_info = json.dumps(device_info, sort_keys=True)
 
+    fit_time_str = None
+    if "fit_time" in last_metric:
+        fit_time_str = str(last_metric["fit_time"]) + " seconds"
+    elif fit_time is not None:
+        fit_time_str = str(fit_time) + " seconds"
+
     def action():
         with alchemyEngine.begin() as conn:
             conn.execute(
@@ -823,9 +829,7 @@ def update_metrics_table(
                     "mae": last_metric["MAE"],
                     "rmse": last_metric["RMSE"],
                     "loss": last_metric["Loss"],
-                    "fit_time": (
-                        (str(fit_time) + " seconds") if fit_time is not None else None
-                    ),
+                    "fit_time": fit_time_str,
                     "epochs": epochs,
                     "sub_topk": topk_covar,
                     "hps_id": hps_id,
