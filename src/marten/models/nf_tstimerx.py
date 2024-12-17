@@ -85,7 +85,7 @@ class TSMixerxModel(BaseModel):
                 * kwargs["topk_covar"]
             ),
             0.2,
-        ) < 100
+        ) < 80
         # return True
 
     def torch_cpu_ratio(self) -> float:
@@ -156,7 +156,7 @@ class TSMixerxModel(BaseModel):
 
         self.val_size = min(300, int(len(df) * 0.9)) if model_config["validate"] else 0
 
-        rank_zero_logger = logging.getLogger("pytorch_lightning.utilities.rank_zero")
+        rank_zero_logger = logging.getLogger("lightning.pytorch.utilities.rank_zero")
         orig_log_level = rank_zero_logger.getEffectiveLevel()
         rank_zero_logger.setLevel(logging.ERROR)
 
