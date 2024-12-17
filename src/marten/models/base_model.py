@@ -425,12 +425,12 @@ class BaseModel(ABC):
 
     def configure_torch(self):
         is_baseline = self.is_baseline(**self.model_args)
-        if is_baseline:
-            return torch.get_num_threads()
-        else:
+        if not is_baseline:
             n_workers = num_workers()
             cpu_count = psutil.cpu_count(logical=False)
-            return math.ceil(cpu_count/n_workers)
+            num_threads = math.ceil(cpu_count / n_workers)
+            torch.set_num_threads(num_threads)
+        return torch.get_num_threads()
             # return optimize_torch_on_cpu(self.torch_cpu_ratio())
 
     def train(self, df: pd.DataFrame, **kwargs: Any) -> dict:
@@ -634,7 +634,7 @@ class BaseModel(ABC):
 
         seed_logger = logging.getLogger("lightning_fabric.utilities.seed")
         orig_seed_log_level = seed_logger.getEffectiveLevel()
-        seed_logger.setLevel(logging.FATAL)
+        seed_logger.setLevel(logging.ERROR)
 
         np_random_seed(random_seed)
         set_log_level("ERROR")
