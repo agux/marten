@@ -642,7 +642,7 @@ def log_metrics_for_hyper_params(
     topk_covar = None
     if "topk_covar" in params:
         topk_covar = params["topk_covar"]
-        params.pop("topk_covar")
+        # params.pop("topk_covar")
 
     # if topk_covar is not None:
     # if "covar_dist" in params:
@@ -656,6 +656,8 @@ def log_metrics_for_hyper_params(
 
     match args.model:
         case "NeuralProphet":
+            if "topk_covar" in params:
+                params.pop("topk_covar")
             region = (
                 get_holiday_region(alchemyEngine, anchor_symbol)
                 if infer_holiday
@@ -678,6 +680,8 @@ def log_metrics_for_hyper_params(
                     else "baseline,multivariate"
                 )
         case "SOFTS":
+            if "topk_covar" in params:
+                params.pop("topk_covar")
             if SOFTSPredictor.isBaseline(params):
                 tag = (
                     "baseline,univariate"

@@ -74,6 +74,8 @@ class TSMixerxModel(BaseModel):
             return 40, 60
 
     def trainable_on_cpu(self, **kwargs: Any) -> bool:
+        if "topk_covar" not in kwargs:
+            return True
         return math.pow(
             (
                 kwargs["ff_dim"]
