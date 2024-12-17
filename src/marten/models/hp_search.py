@@ -572,11 +572,12 @@ def _load_covars(
     query += " ORDER BY ts_date desc, loss_val, nan_count, cov_table, cov_symbol"
     query += limit_clause
     logger.debug("loading topk covariates using sql:\n%s\nparams:%s", query, params)
-    df = pd.read_sql(
-        query,
-        alchemyEngine,
-        params=params,
-    )
+    with alchemyEngine.connect() as conn:
+        df = pd.read_sql(
+            query,
+            conn,
+            params=params,
+        )
 
     if df.empty:
         logger.warning(
@@ -587,32 +588,44 @@ def _load_covars(
         )
         return df, -1
 
-    with (
-        alchemyEngine.begin() as conn
-    ):  # need to use transaction for inserting new covar_set records.
+    params = {'symbol': anchor_symbol, 'num': len(df)}
+    values_clause = []
+    for i, row in enumerate(df.itertuples(index=False, name=None)):
+        params.update({
+            f'cov_symbol_{i}': row[0],
+            f'cov_table_{i}': row[1],
+            f'cov_feature_{i}': row[2],
+        })
+        values_clause.append(f"(:cov_symbol_{i}, :cov_table_{i}, :cov_feature_{i})")
+
+    values_sql = ',\n    '.join(values_clause)
+
+    query = f"""
+        WITH df_values (cov_symbol, cov_table, cov_feature) AS (
+            VALUES 
+                {values_sql}
+        )
+        SELECT cs.id
+        FROM covar_set cs
+        LEFT JOIN df_values dv ON 
+            cs.cov_symbol = dv.cov_symbol AND 
+            cs.cov_table = dv.cov_table AND 
+            cs.cov_feature = dv.cov_feature
+        WHERE 
+            cs.symbol = :symbol
+        GROUP BY cs.id
+        HAVING 
+            COUNT(*) = :num
+            AND
+            COUNT(dv.cov_symbol) = :num
+        ORDER BY cs.id DESC
+    """
+
+    with alchemyEngine.begin() as conn:  
+        # need to use transaction for inserting new covar_set records.
         # check if the same set of covar features exists in `covar_set` table. If so, reuse the same set_id.
-        query = """
-            select id, count(*) num
-            from covar_set
-            where 
-                symbol = :symbol
-                and id in (
-                    select id 
-                    from covar_set
-                    where
-                        symbol = :symbol
-                        and (cov_symbol, cov_table, cov_feature) IN :values
-                )
-            group by id
-            having count(*) = :num
-            order by id desc
-        """
-        params = {
-            "symbol": anchor_symbol,
-            "values": tuple(df.itertuples(index=False, name=None)),
-            "num": len(df),
-        }
         result = conn.execute(text(query), params)
+        # matching_ids = result.fetchall()
         first_row = result.first()
         covar_set_id = None
         if first_row is not None:
