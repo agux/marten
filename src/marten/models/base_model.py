@@ -4,7 +4,9 @@ from typing import Any, Tuple, List, Type
 from dotenv import load_dotenv
 import os
 import time
+import math
 import socket
+import psutil
 import numpy as np
 import pandas as pd
 import logging
@@ -38,6 +40,7 @@ from marten.utils.worker import (
     workload_stage,
     cpu_util,
     gpu_util,
+    num_workers,
 )
 
 
@@ -187,15 +190,16 @@ class BaseModel(ABC):
 
             cu, _ = cpu_util()
             gu, _ = gpu_util()
-            if cu >= gu:
+            if cu >= gu and self._check_cpu():
                 if self.locks and "gpu" in self.locks.keys():
                     get_logger().debug("%s >= %s, trying GPU lock first", cu, gu)
                     lock_gpu()
-                    if not self.accelerator_lock:
-                        return "cpu"
                 else:
                     return "gpu"
             else:
+                return "cpu"
+
+            if not self.accelerator_lock and self._check_cpu():
                 return "cpu"
 
             stop_at = time.time() + self.resource_wait_time
@@ -420,13 +424,14 @@ class BaseModel(ABC):
         pass
 
     def configure_torch(self):
-        return torch.get_num_threads()
-        #TODO: commented to test static threads setting
-        # is_baseline = self.is_baseline(**self.model_args)
-        # if is_baseline:
-        #     return torch.get_num_threads()
-        # else:
-        #     return optimize_torch_on_cpu(self.torch_cpu_ratio())
+        is_baseline = self.is_baseline(**self.model_args)
+        if is_baseline:
+            return torch.get_num_threads()
+        else:
+            n_workers = num_workers()
+            cpu_count = psutil.cpu_count(logical=False)
+            return math.ceil(cpu_count/n_workers)
+            # return optimize_torch_on_cpu(self.torch_cpu_ratio())
 
     def train(self, df: pd.DataFrame, **kwargs: Any) -> dict:
         """

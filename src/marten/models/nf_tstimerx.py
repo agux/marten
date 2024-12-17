@@ -1,9 +1,8 @@
 import logging
 import pandas as pd
 import numpy as np
-
+import math
 import torch
-
 
 from types import SimpleNamespace
 from typing import Any, Tuple
@@ -75,7 +74,17 @@ class TSMixerxModel(BaseModel):
             return 40, 60
 
     def trainable_on_cpu(self, **kwargs: Any) -> bool:
-        return True
+        return math.pow(
+            (
+                kwargs["ff_dim"]
+                * kwargs["n_block"]
+                * kwargs["batch_size"]
+                * kwargs["input_size"]
+                * kwargs["topk_covar"]
+            ),
+            0.2,
+        ) < 100
+        # return True
 
     def torch_cpu_ratio(self) -> float:
         return 0.23 if self.is_baseline(**self.model_args) else 0.8
