@@ -2264,13 +2264,13 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     )
 
     # scale-in to preserve more memory for hps
-    # worker_size = (
-    #     args.min_worker
-    #     if args.model != "NeuralProphet"
-    #     else max(args.min_worker, round(args.max_worker * 0.5))
-    # )
-    # logger.info("Scaling down dask cluster to %s", worker_size)
-    # client.cluster.scale(worker_size)
+    worker_size = (
+        args.min_worker
+        if args.model != "NeuralProphet"
+        else max(args.min_worker, round(args.max_worker * 0.5))
+    )
+    logger.info("Scaling down dask cluster to %s", worker_size)
+    client.cluster.scale(worker_size)
 
     # NOTE: if data is scattered before scale-down, the error will be thrown:
     # Removing worker 'tcp://<worker IP & port>' caused the cluster to lose scattered data, which can't be recovered

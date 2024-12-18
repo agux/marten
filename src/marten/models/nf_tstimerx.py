@@ -98,8 +98,11 @@ class TSMixerxModel(BaseModel):
         optimizer, optim_args = self._select_optimizer(**model_config)
 
         seed_logger = logging.getLogger("lightning_fabric.utilities.seed")
+        rank_zero_logger = logging.getLogger("lightning.pytorch.utilities.rank_zero")
         orig_seed_log_level = seed_logger.getEffectiveLevel()
-        seed_logger.setLevel(logging.FATAL)
+        orig_log_level = rank_zero_logger.getEffectiveLevel()
+        seed_logger.setLevel(logging.ERROR)
+        rank_zero_logger.setLevel(logging.ERROR)
 
         exog = [col for col in df.columns if col not in ["unique_id", "ds", "y"]]
 
@@ -151,17 +154,10 @@ class TSMixerxModel(BaseModel):
             # Can be 'standard', 'robust', 'robust-iqr', 'minmax' or 'boxcox'
             local_scaler_type=model_config["local_scaler_type"],
         )
-
-        seed_logger.setLevel(orig_seed_log_level)
-
         self.val_size = min(300, int(len(df) * 0.9)) if model_config["validate"] else 0
-
-        rank_zero_logger = logging.getLogger("lightning.pytorch.utilities.rank_zero")
-        orig_log_level = rank_zero_logger.getEffectiveLevel()
-        rank_zero_logger.setLevel(logging.ERROR)
-
         self.nf.fit(df, val_size=self.val_size, use_init_models=True)
 
+        seed_logger.setLevel(orig_seed_log_level)
         rank_zero_logger.setLevel(orig_log_level)
 
         return model_config
