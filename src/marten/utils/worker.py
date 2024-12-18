@@ -1,6 +1,7 @@
 import os
 import time
 import random
+import logging
 import psutil
 import multiprocessing
 import threading
@@ -78,6 +79,19 @@ class LocalWorkerPlugin(WorkerPlugin):
             )
             if n_threads > 0:
                 torch.set_num_threads(n_threads)
+
+        rank_zero_logger = logging.getLogger("pytorch_lightning.utilities.rank_zero")
+        rank_zero_logger.addFilter(IgnorePLFilter())
+
+
+class IgnorePLFilter(logging.Filter):
+    def filter(self, record):
+        msg = record.getMessage()
+        return (
+            "GPU available:" not in msg
+            and "TPU available:" not in msg
+            and "HPU available:" not in msg
+        )
 
 
 class TaskException(Exception):
