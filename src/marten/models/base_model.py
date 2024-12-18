@@ -114,6 +114,9 @@ class BaseModel(ABC):
         )  # seconds, waiting for compute resource.
         self.lock_wait_time = os.getenv("LOCK_WAIT_TIME", "2s")
 
+        logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
+        logging.getLogger("lightning_utilities").setLevel(logging.WARNING)
+
     def is_baseline(self, **kwargs: Any) -> bool:
         """
         Check if the given parameters are model-specific baseline parameters.
@@ -633,7 +636,8 @@ class BaseModel(ABC):
         df.rename(columns={na_col: "y"}, inplace=True)
 
         seed_logger = logging.getLogger("lightning_fabric.utilities.seed")
-        rank_zero_logger = logging.getLogger("lightning_utilities.core.rank_zero")
+        from lightning_utilities.core.rank_zero import log as rank_zero_logger
+        # rank_zero_logger = logging.getLogger("lightning_utilities.core.rank_zero")
         orig_seed_log_level = seed_logger.getEffectiveLevel()
         orig_log_level = rank_zero_logger.getEffectiveLevel()
         seed_logger.setLevel(logging.FATAL)

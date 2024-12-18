@@ -98,7 +98,8 @@ class TSMixerxModel(BaseModel):
         optimizer, optim_args = self._select_optimizer(**model_config)
 
         seed_logger = logging.getLogger("lightning_fabric.utilities.seed")
-        rank_zero_logger = logging.getLogger("lightning_utilities.core.rank_zero")
+        from lightning_utilities.core.rank_zero import log as rank_zero_logger
+        # rank_zero_logger = logging.getLogger("lightning_utilities.core.rank_zero")
         orig_seed_log_level = seed_logger.getEffectiveLevel()
         orig_log_level = rank_zero_logger.getEffectiveLevel()
         seed_logger.setLevel(logging.FATAL)
