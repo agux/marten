@@ -1364,7 +1364,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         max_leases=int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker)),
         name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
     )
-    locks = get_accelerator_locks(0, 1, "60s")
+    locks = get_accelerator_locks(0, 1, "20s")
 
     # endogenous features of the anchor time series per se
     endogenous_features = [col for col in anchor_df.columns if col not in ("ds")]

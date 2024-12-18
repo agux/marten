@@ -99,10 +99,13 @@ class TSMixerxModel(BaseModel):
 
         seed_logger = logging.getLogger("lightning_fabric.utilities.seed")
         rank_zero_logger = logging.getLogger("lightning.pytorch.utilities.rank_zero")
+        rank_zero_logger2 = logging.getLogger("lightning.fabric.utilities.rank_zero")
         orig_seed_log_level = seed_logger.getEffectiveLevel()
         orig_log_level = rank_zero_logger.getEffectiveLevel()
-        seed_logger.setLevel(logging.ERROR)
-        rank_zero_logger.setLevel(logging.ERROR)
+        orig_log_level2 = rank_zero_logger2.getEffectiveLevel()
+        seed_logger.setLevel(logging.FATAL)
+        rank_zero_logger.setLevel(logging.FATAL)
+        rank_zero_logger2.setLevel(logging.FATAL)
 
         exog = [col for col in df.columns if col not in ["unique_id", "ds", "y"]]
 
@@ -159,6 +162,7 @@ class TSMixerxModel(BaseModel):
 
         seed_logger.setLevel(orig_seed_log_level)
         rank_zero_logger.setLevel(orig_log_level)
+        rank_zero_logger2.setLevel(orig_log_level2)
 
         return model_config
 

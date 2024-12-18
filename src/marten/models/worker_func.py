@@ -130,7 +130,7 @@ def merge_covar_df(
     # else:
     #     with alchemyEngine.connect() as conn:
     #         cov_symbol_df = pd.read_sql(query, conn, params=params, parse_dates=["ds"])
-    
+
     with alchemyEngine.connect() as conn:
         cov_symbol_df = pd.read_sql(query, conn, params=params, parse_dates=["ds"])
 
@@ -308,7 +308,7 @@ def fit_with_covar(
 
 
 def save_impute_data(impute_df, cov_table, cov_symbol, feature, alchemyEngine, logger):
-    if len(impute_df.columns) <= 1: # no valid imputation data
+    if len(impute_df.columns) <= 1:  # no valid imputation data
         return
     cov_table = cov_table[:-5] if cov_table.endswith("_view") else cov_table
     if cov_table.startswith("ta_"):
@@ -2039,7 +2039,7 @@ def fast_bayesopt(
     if args.model == "SOFTS" or (model is not None and not model.accept_missing_data()):
         df, _ = impute(df, args.random_seed, client)
 
-    locks = get_accelerator_locks(cpu_leases=1, gpu_leases=1, timeout="60s")
+    locks = get_accelerator_locks(cpu_leases=0, gpu_leases=1, timeout="60s")
     # split large iterations into smaller runs to avoid OOM / memory leak
     for i in range(args.max_itr):
         logger.info(
@@ -2267,7 +2267,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     worker_size = (
         args.min_worker
         if args.model != "NeuralProphet"
-        else max(args.min_worker, round(args.max_worker * 0.5))
+        else int(math.sqrt(args.min_worker * args.max_worker))
     )
     logger.info("Scaling down dask cluster to %s", worker_size)
     client.cluster.scale(worker_size)
