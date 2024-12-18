@@ -114,6 +114,7 @@ class BaseModel(ABC):
         )  # seconds, waiting for compute resource.
         self.lock_wait_time = os.getenv("LOCK_WAIT_TIME", "2s")
 
+        logging.getLogger("lightning").setLevel(logging.WARNING)
         logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
         logging.getLogger("lightning_utilities").setLevel(logging.WARNING)
 
