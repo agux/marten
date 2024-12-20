@@ -170,16 +170,9 @@ class BaseModel(ABC):
             return accelerator
         # get_logger().info("locking accelerator: %s", self.locks)
         gpu_ut, gpu_rt = self.gpu_threshold()
-        mod_accelerator = None
 
-        def lock_cpu():
-            nonlocal mod_accelerator
-            if self.accelerator_lock is None and self._check_cpu():
-                lock = self.locks["cpu"]
-                if lock.acquire(timeout=f"{self.lock_wait_time}"):
-                    self.accelerator_lock = lock
-                    mod_accelerator = "cpu"
-                    get_logger().debug("lock acquired: %s", self.accelerator_lock.name)
+        if gpu_ut > 0 and self.is_baseline(**self.model_args):
+            return "cpu"
 
         def lock_gpu():
             nonlocal accelerator

@@ -35,7 +35,7 @@ def is_cuda_error(exception):
 def cuda_memory_stats():
     return {
         "mem_allocated": f"{torch.cuda.memory_allocated() / 1024**2} MB",
-        "mem_cached": f"{torch.cuda.memory_cached() / 1024**2} MB",
+        "mem_reserved": f"{torch.cuda.memory_reserved() / 1024**2} MB",
     }
 
 
