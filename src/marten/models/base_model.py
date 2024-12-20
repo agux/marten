@@ -669,7 +669,6 @@ class BaseModel(ABC):
                 accelerator=accelerator, 
                 trainer_config={
                     "enable_checkpointing": False,
-                    "checkpoint_callback": False, 
                     "logger": False,
                 }
             )
@@ -679,7 +678,6 @@ class BaseModel(ABC):
                 checkpointing=False,
                 trainer_config={
                     "enable_checkpointing": False,
-                    "checkpoint_callback": False,
                     "logger": False,
                 },
             )
@@ -689,7 +687,6 @@ class BaseModel(ABC):
                     accelerator="cpu",
                     trainer_config={
                         "enable_checkpointing": False,
-                        "checkpoint_callback": False,
                         "logger": False,
                     },
                 )
@@ -699,7 +696,6 @@ class BaseModel(ABC):
                     checkpointing=False,
                     trainer_config={
                         "enable_checkpointing": False,
-                        "checkpoint_callback": False,
                         "logger": False,
                     },
                 )
