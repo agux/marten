@@ -667,6 +667,7 @@ class BaseModel(ABC):
         try:
             m = NeuralProphet(
                 accelerator=accelerator, 
+                collect_metrics=False,
                 trainer_config={
                     "enable_checkpointing": False,
                     "logger": False,
@@ -685,6 +686,7 @@ class BaseModel(ABC):
             if accelerator != "cpu":
                 m = NeuralProphet(
                     accelerator="cpu",
+                    collect_metrics=False,
                     trainer_config={
                         "enable_checkpointing": False,
                         "logger": False,
