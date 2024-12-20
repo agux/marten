@@ -9,6 +9,7 @@ OUTPUT_LOG=predict.log
 
 # Clear old lr finder .ckpt files
 rm -f .lr_find_*.ckpt
+rm -rf lightning_logs
 
 export MALLOC_TRIM_THRESHOLD_=0
 # export DASK_DISTRIBUTED__WORKER__RESOURCES__POWER=2

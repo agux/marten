@@ -83,6 +83,9 @@ class LocalWorkerPlugin(WorkerPlugin):
         rank_zero_logger = logging.getLogger("pytorch_lightning.utilities.rank_zero")
         rank_zero_logger.addFilter(IgnorePLFilter())
 
+        # configure logging at the root level of Lightning
+        logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
+
 
 class IgnorePLFilter(logging.Filter):
     def filter(self, record):

@@ -666,22 +666,42 @@ class BaseModel(ABC):
 
         try:
             m = NeuralProphet(
-                accelerator=accelerator,
+                accelerator=accelerator, 
+                trainer_config={
+                    "enable_checkpointing": False,
+                    "checkpoint_callback": False, 
+                    "logger": False,
+                }
             )
             m.fit(
                 df,
                 progress=None,
                 checkpointing=False,
+                trainer_config={
+                    "enable_checkpointing": False,
+                    "checkpoint_callback": False,
+                    "logger": False,
+                },
             )
         except Exception as e:
             if accelerator != "cpu":
                 m = NeuralProphet(
                     accelerator="cpu",
+                    trainer_config={
+                        "enable_checkpointing": False,
+                        "checkpoint_callback": False,
+                        "logger": False,
+                    },
                 )
                 m.fit(
                     df,
                     progress=None,
                     checkpointing=False,
+                    trainer_config={
+                        "enable_checkpointing": False,
+                        "checkpoint_callback": False,
+                        "logger": False,
+                    },
                 )
             else:
                 raise e
