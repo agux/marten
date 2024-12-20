@@ -169,10 +169,6 @@ class BaseModel(ABC):
         if accelerator == "cpu":
             return accelerator
         # get_logger().info("locking accelerator: %s", self.locks)
-        gpu_ut, gpu_rt = self.gpu_threshold()
-
-        if gpu_ut > 0 and self.is_baseline(**self.model_args):
-            return "cpu"
 
         def lock_gpu():
             nonlocal accelerator
@@ -182,11 +178,16 @@ class BaseModel(ABC):
                     self.accelerator_lock = lock
                     get_logger().debug("lock acquired: %s", self.accelerator_lock.name)
 
+        gpu_ut, gpu_rt = self.gpu_threshold()
         while True:
             self.accelerator_lock = None
 
             cu, _ = cpu_util()
             gu, _ = gpu_util()
+
+            if gu > 0 and self.is_baseline(**self.model_args):
+                return "cpu"
+
             if cu >= gu and self._check_cpu():
                 if self.locks and "gpu" in self.locks.keys():
                     get_logger().debug("%s >= %s, trying GPU lock first", cu, gu)
@@ -663,16 +664,18 @@ class BaseModel(ABC):
                 collect_metrics=False,
                 trainer_config={
                     "enable_checkpointing": False,
-                    "logger": False,
+                    "logger": None,
                 }
             )
             m.fit(
                 df,
                 progress=None,
                 checkpointing=False,
+                minimal=True,
+                metrics=None,
                 trainer_config={
                     "enable_checkpointing": False,
-                    "logger": False,
+                    "logger": None,
                 },
             )
         except Exception as e:
@@ -682,13 +685,15 @@ class BaseModel(ABC):
                     collect_metrics=False,
                     trainer_config={
                         "enable_checkpointing": False,
-                        "logger": False,
+                        "logger": None,
                     },
                 )
                 m.fit(
                     df,
                     progress=None,
                     checkpointing=False,
+                    minimal=True,
+                    metrics=None,
                     trainer_config={
                         "enable_checkpointing": False,
                         "logger": False,

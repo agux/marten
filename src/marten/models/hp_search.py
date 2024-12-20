@@ -588,17 +588,19 @@ def _load_covars(
         )
         return df, -1
 
-    params = {'symbol': anchor_symbol, 'num': len(df)}
+    params = {"symbol": anchor_symbol, "num": len(df)}
     values_clause = []
     for i, row in enumerate(df.itertuples(index=False, name=None)):
-        params.update({
-            f'cov_symbol_{i}': row[0],
-            f'cov_table_{i}': row[1],
-            f'cov_feature_{i}': row[2],
-        })
+        params.update(
+            {
+                f"cov_symbol_{i}": row[0],
+                f"cov_table_{i}": row[1],
+                f"cov_feature_{i}": row[2],
+            }
+        )
         values_clause.append(f"(:cov_symbol_{i}, :cov_table_{i}, :cov_feature_{i})")
 
-    values_sql = ',\n    '.join(values_clause)
+    values_sql = ",\n    ".join(values_clause)
 
     query = f"""
         WITH df_values (cov_symbol, cov_table, cov_feature) AS (
@@ -621,7 +623,7 @@ def _load_covars(
         ORDER BY cs.id DESC
     """
 
-    with alchemyEngine.begin() as conn:  
+    with alchemyEngine.begin() as conn:
         # need to use transaction for inserting new covar_set records.
         # check if the same set of covar features exists in `covar_set` table. If so, reuse the same set_id.
         result = conn.execute(text(query), params)
@@ -1689,7 +1691,8 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
                 sem,
                 locks,
                 p_order=len(keys) - i,
-                key=f"{covar_metric.__name__}_{keys[i].lower()}-{cov_table}({len(features)})",
+                key=f"{covar_metric.__name__}_{keys[i].lower()}({len(features)})-"
+                + f"{cov_table}({len(features)})_{len(keys) - i}",
             )
         )
 
@@ -1859,7 +1862,9 @@ def main(_args):
         cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
 
         # TODO: make use of the returned covar_set_id to resume?
-        hps_id, _ = get_hps_session(args.symbol, args.model, cutoff_date, args.resume.lower() != "none")
+        hps_id, _ = get_hps_session(
+            args.symbol, args.model, cutoff_date, args.resume.lower() != "none"
+        )
         logger.info(
             "HPS session ID: %s, Cutoff date: %s, CovarSet ID: %s",
             hps_id,
