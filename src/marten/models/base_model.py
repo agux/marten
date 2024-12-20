@@ -661,21 +661,21 @@ class BaseModel(ABC):
                 trainer_config={
                     "enable_checkpointing": False,
                     "logger": False,
-                    "enable_progress_bar": False,
-                    "callbacks": [],
+                    # "enable_progress_bar": False,
+                    # "callbacks": [],
                 },
             )
             m.fit(
                 df,
                 progress=None,
                 checkpointing=False,
-                minimal=True,
-                metrics=None,
+                # minimal=True,
+                # metrics=None,
                 trainer_config={
                     "enable_checkpointing": False,
                     "logger": False,
-                    "enable_progress_bar": False,
-                    "callbacks": []
+                    # "enable_progress_bar": False,
+                    # "callbacks": []
                 },
             )
         except Exception as e:
@@ -686,21 +686,21 @@ class BaseModel(ABC):
                     trainer_config={
                         "enable_checkpointing": False,
                         "logger": False,
-                        "enable_progress_bar": False,
-                        "callbacks": [],
+                        # "enable_progress_bar": False,
+                        # "callbacks": [],
                     },
                 )
                 m.fit(
                     df,
                     progress=None,
                     checkpointing=False,
-                    minimal=True,
-                    metrics=None,
+                    # minimal=True,
+                    # metrics=None,
                     trainer_config={
                         "enable_checkpointing": False,
                         "logger": False,
-                        "enable_progress_bar": False,
-                        "callbacks": [],
+                        # "enable_progress_bar": False,
+                        # "callbacks": [],
                     },
                 )
             else:
