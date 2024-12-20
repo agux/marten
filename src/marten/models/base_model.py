@@ -182,20 +182,16 @@ class BaseModel(ABC):
         while True:
             self.accelerator_lock = None
 
-            cu, _ = cpu_util()
             gu, _ = gpu_util()
 
-            if gu > 0 and self.is_baseline(**self.model_args):
+            if gu > 0 and self._check_cpu():
                 return "cpu"
-
-            if cu >= gu and self._check_cpu():
+            else:
                 if self.locks and "gpu" in self.locks.keys():
-                    get_logger().debug("%s >= %s, trying GPU lock first", cu, gu)
+                    get_logger().debug("GPU Util:%s, trying GPU lock first", gu)
                     lock_gpu()
                 else:
                     return "gpu"
-            else:
-                return "cpu"
 
             if not self.accelerator_lock and self._check_cpu():
                 return "cpu"
@@ -660,12 +656,14 @@ class BaseModel(ABC):
 
         try:
             m = NeuralProphet(
-                accelerator=accelerator, 
+                accelerator=accelerator,
                 collect_metrics=False,
                 trainer_config={
                     "enable_checkpointing": False,
-                    "logger": None,
-                }
+                    "logger": False,
+                    "enable_progress_bar": False,
+                    "callbacks": [],
+                },
             )
             m.fit(
                 df,
@@ -675,7 +673,9 @@ class BaseModel(ABC):
                 metrics=None,
                 trainer_config={
                     "enable_checkpointing": False,
-                    "logger": None,
+                    "logger": False,
+                    "enable_progress_bar": False,
+                    "callbacks": []
                 },
             )
         except Exception as e:
@@ -685,7 +685,9 @@ class BaseModel(ABC):
                     collect_metrics=False,
                     trainer_config={
                         "enable_checkpointing": False,
-                        "logger": None,
+                        "logger": False,
+                        "enable_progress_bar": False,
+                        "callbacks": [],
                     },
                 )
                 m.fit(
@@ -697,6 +699,8 @@ class BaseModel(ABC):
                     trainer_config={
                         "enable_checkpointing": False,
                         "logger": False,
+                        "enable_progress_bar": False,
+                        "callbacks": [],
                     },
                 )
             else:
