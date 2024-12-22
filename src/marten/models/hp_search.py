@@ -1363,7 +1363,11 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
 
     dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
     sem = Semaphore(
-        max_leases=int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker)),
+        max_leases=(
+            args.resource_intensive_sql_semaphore
+            if args.resource_intensive_sql_semaphore > 0
+            else int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker))
+        ),
         name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
     )
     locks = get_accelerator_locks(0, 1, "20s")

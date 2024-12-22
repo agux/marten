@@ -169,6 +169,16 @@ def configure_parser(parser):
         ),
     )
     parser.add_argument(
+        "--resource_intensive_sql_semaphore",
+        action="store",
+        type=int,
+        default=8,
+        help=(
+            "Semaphore to limit resource intensive sql execution in parallel."
+            "Defaults to 8"
+        ),
+    )
+    parser.add_argument(
         "--early_stopping",
         action="store_true",
         help="Use early stopping during model fitting",
