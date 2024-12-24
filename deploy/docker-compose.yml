@@ -24,7 +24,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       # - POSTGRES_SHARED_PRELOAD_LIBRARIES=pg_stat_statements
     ##### enabling the 'pg_stat_statements' library may cause other (long) sql failing ####
-    shm_size: '64gb'
+    shm_size: '32gb'
     command: >
       postgres
       -c max_connections=1024
@@ -42,7 +42,7 @@ services:
       -c timescaledb.max_background_workers=16
       -c track_activity_query_size=16384
       -c checkpoint_timeout=15min
-      -c checkpoint_completion_target=0.9
+      -c checkpoint_completion_target=0.5
       -c wal_buffers=16MB
       -c max_wal_size=32GB
       -c bgwriter_lru_maxpages=2000
