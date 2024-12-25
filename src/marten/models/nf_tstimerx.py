@@ -85,7 +85,7 @@ class TSMixerxModel(BaseModel):
                 * kwargs["topk_covar"]
             ),
             0.2,
-        ) < 80
+        ) < 70
         # return True
 
     def torch_cpu_ratio(self) -> float:
