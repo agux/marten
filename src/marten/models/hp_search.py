@@ -673,7 +673,7 @@ def _load_covar_feature(cov_table, feature, symbols):
             params = {}
             for idx, (table_name, symbol) in enumerate(table_symbols):
                 conditions.append(
-                    f'("table" = :table_{idx} AND symbol = :symbol_{idx})'
+                    f'("table" = %(table_{idx})s AND symbol = %(symbol_{idx})s)'
                 )
                 params[f"table_{idx}"] = table_name
                 params[f"symbol_{idx}"] = symbol
