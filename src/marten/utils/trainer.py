@@ -92,7 +92,8 @@ def select_randk_covars(df, ranked_features, covar_dist, k):
     for f in top_k_features:
         if "::ta_" in f:
             # Technical indicators involved
-            columns_to_keep += [c for c in df.columns if c.startswith(f + "_")]
+            ti_prefix = f.split("::")[0]
+            columns_to_keep += [c for c in df.columns if c.startswith(ti_prefix + "_")]
         else:
             columns_to_keep.append(f)
     get_logger().info(

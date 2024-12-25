@@ -683,7 +683,7 @@ def _load_covar_feature(cov_table, feature, symbols):
 
             # Construct the query using named parameters
             query = f"""
-                SELECT symbol ID, date DS, {select_cols}
+                SELECT "table" || '::' || symbol ID, date DS, {select_cols}
                 FROM {cov_table}
                 WHERE {where_clause}
                 ORDER BY ID, DS ASC
@@ -774,7 +774,7 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
         # merge and append the feature column of table_feature_df to merged_df, by matching dates
         # split table_feature_df by symbol column
         grouped = table_feature_df.groupby("id")
-        for group2, sdf2 in grouped: # typically, group2 = symbol
+        for group2, sdf2 in grouped: # group2 = symbol
             if "y" in sdf2.columns:
                 col_name = f"{feature}::{cov_table}::{group2}"
                 sdf2.rename(
