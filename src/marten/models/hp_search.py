@@ -670,7 +670,7 @@ def _load_covar_feature(cov_table, feature, symbols):
             query = f"""
                 SELECT symbol ID, date DS, {', '.join(column_names)}
                 FROM {cov_table}
-                where symbol in %(symbols)s
+                where table_symbol in %(symbols)s
                 order by ID, DS asc
             """
             params = {
