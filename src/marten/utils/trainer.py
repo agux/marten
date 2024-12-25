@@ -7,11 +7,12 @@ from dask.distributed import get_worker, Semaphore
 
 from marten.utils.logger import get_logger
 
+
 def get_accelerator_locks(cpu_leases=1, gpu_leases=1, timeout="10s"):
     if cpu_leases > 0 or gpu_leases > 0:
         dask.config.set({"distributed.scheduler.locks.lease-timeout": timeout})
     locks = {}
-    if cpu_leases > 0 :
+    if cpu_leases > 0:
         locks["cpu"] = Semaphore(
             max_leases=cpu_leases, name=f"""{socket.gethostname()}::CPU"""
         )
@@ -20,6 +21,7 @@ def get_accelerator_locks(cpu_leases=1, gpu_leases=1, timeout="10s"):
             max_leases=gpu_leases, name=f"""{socket.gethostname()}::GPU-auto"""
         )
     return locks
+
 
 def is_cuda_error(exception):
     exmsg = str(exception)
@@ -64,6 +66,7 @@ def log_train_args(df, *args, **kwargs):
         kwargs,
     )
 
+
 # this simple triage algorithm is to be deprecated
 def select_device(accelerator, util_threshold=80, vram_threshold=80):
     cpu_util = psutil.cpu_percent(0.1)
@@ -92,7 +95,15 @@ def select_randk_covars(df, ranked_features, covar_dist, k):
             columns_to_keep += [c for c in df.columns if c.startswith(f + "_")]
         else:
             columns_to_keep.append(f)
+    get_logger().info(
+        "ranked_features:\n%s\ntop_k_features:\n%s\ndf.columns:\n%s\ncolumns_to_keep:\n%s\n",
+        ranked_features,
+        top_k_features,
+        df.columns,
+        columns_to_keep,
+    )
     return df[columns_to_keep]
+
 
 def optimize_torch_on_gpu():
     torch.cuda.set_per_process_memory_fraction(1.0)
