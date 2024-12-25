@@ -668,15 +668,26 @@ def _load_covar_feature(cov_table, feature, symbols):
             column_names = columns_with_prefix(alchemyEngine, cov_table, feature)
             table_symbols = [tuple(s.split("::")) for s in symbols]
             select_cols = ", ".join(column_names)
-            placeholders = ", ".join(['(%s, %s)'] * len(table_symbols))
-            # query rows from the TA table
+            # Build conditions and parameters
+            conditions = []
+            params = {}
+            for idx, (table_name, symbol) in enumerate(table_symbols):
+                conditions.append(
+                    f'("table" = :table_{idx} AND symbol = :symbol_{idx})'
+                )
+                params[f"table_{idx}"] = table_name
+                params[f"symbol_{idx}"] = symbol
+
+            # Combine conditions with OR
+            where_clause = " OR ".join(conditions)
+
+            # Construct the query using named parameters
             query = f"""
                 SELECT symbol ID, date DS, {select_cols}
                 FROM {cov_table}
-                where ("table", symbol) in ({placeholders})
-                order by ID, DS asc
+                WHERE {where_clause}
+                ORDER BY ID, DS ASC
             """
-            params = [item for pair in table_symbols for item in pair]
             table_feature_df = pd.read_sql(
                 query, alchemyEngine, params=params, parse_dates=["ds"]
             )
