@@ -786,7 +786,7 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
                 sdf2 = sdf2[["ds", col_name]]
             else:
                 col_names = {}
-                for col in [c for c in df.columns if c.startswith(f"{feature}_")]:
+                for col in [c for c in sdf2.columns if c.startswith(f"{feature}_")]:
                     col_names[col] = f"{col}::{cov_table}::{group2}"
                 sdf2.rename(columns=col_names, inplace=True)
                 sdf2 = sdf2[["ds"] + list(col_names.values())]
