@@ -2287,7 +2287,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     # NOTE: if data is scattered before scale-down, the error will be thrown:
     # Removing worker 'tcp://<worker IP & port>' caused the cluster to lose scattered data, which can't be recovered
     df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
-        anchor_df, args, alchemyEngine, logger, cutoff_date
+        anchor_df, args, alchemyEngine, logger, cutoff_date, sem
     )
     # df_future = client.scatter(df)
     # ranked_features_future = client.scatter(ranked_features)

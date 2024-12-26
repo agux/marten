@@ -712,7 +712,7 @@ def _load_covar_feature(cov_table, feature, symbols, sem=None):
     return table_feature_df
 
 
-def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date, sem):
+def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date, sem=None):
     global client
     # date_col = "ds" if args.model == "NeuralProphet" else "date"
     merged_df = df[["ds", "y"]]
