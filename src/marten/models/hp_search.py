@@ -47,7 +47,6 @@ from marten.models.worker_func import (
 )
 
 from sqlalchemy import text
-import psycopg2.extras
 
 from neuralprophet import set_log_level
 
@@ -646,7 +645,7 @@ def _load_covars(
     return df, covar_set_id
 
 
-def _load_covar_feature(cov_table, feature, symbols):
+def _load_covar_feature(cov_table, feature, symbols, sem=None):
     worker = get_worker()
     alchemyEngine = worker.alchemyEngine
     match cov_table:
@@ -688,9 +687,15 @@ def _load_covar_feature(cov_table, feature, symbols):
                 WHERE {where_clause}
                 ORDER BY ID, DS ASC
             """
-            table_feature_df = pd.read_sql(
-                query, alchemyEngine, params=params, parse_dates=["ds"]
-            )
+            if sem:
+                with sem:
+                    table_feature_df = pd.read_sql(
+                        query, alchemyEngine, params=params, parse_dates=["ds"]
+                    )
+            else:
+                table_feature_df = pd.read_sql(
+                        query, alchemyEngine, params=params, parse_dates=["ds"]
+                    )
         case _:
             query = f"""
                 SELECT symbol ID, date DS, {feature} y
@@ -707,7 +712,7 @@ def _load_covar_feature(cov_table, feature, symbols):
     return table_feature_df
 
 
-def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
+def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date, sem):
     global client
     # date_col = "ds" if args.model == "NeuralProphet" else "date"
     merged_df = df[["ds", "y"]]
@@ -760,7 +765,7 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
         cov_table = group1[0]
         feature = group1[1]
         futures.append(
-            client.submit(_load_covar_feature, cov_table, feature, sdf1["cov_symbol"])
+            client.submit(_load_covar_feature, cov_table, feature, sdf1["cov_symbol"], sem)
         )
 
     table_feature_dfs = client.gather(futures)
@@ -1363,7 +1368,7 @@ def covar_metric(
     return True
 
 
-def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
+def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=None):
     global random_seed, client, futures
 
     anchor_symbol = args.symbol
@@ -1373,16 +1378,18 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     min_count = int(len(anchor_df) * (1 - args.nan_limit))
     dates = anchor_df["ds"].dt.date.tolist()
 
-    dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
-    sem = Semaphore(
-        max_leases=(
-            args.resource_intensive_sql_semaphore
-            if args.resource_intensive_sql_semaphore > 0
-            else int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker))
-        ),
-        name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
-    )
-    locks = get_accelerator_locks(0, 1, "20s")
+    if not sem:
+        dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
+        sem = Semaphore(
+            max_leases=(
+                args.resource_intensive_sql_semaphore
+                if args.resource_intensive_sql_semaphore > 0
+                else int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker))
+            ),
+            name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
+        )
+    if not locks:
+        locks = get_accelerator_locks(0, 1, "20s")
 
     # endogenous features of the anchor time series per se
     endogenous_features = [col for col in anchor_df.columns if col not in ("ds")]

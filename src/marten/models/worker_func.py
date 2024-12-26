@@ -15,7 +15,7 @@ from sqlalchemy import text
 from psycopg2.extras import execute_values
 from neuralprophet.event_utils import get_all_holidays
 import dask
-from dask.distributed import get_worker, worker_client
+from dask.distributed import get_worker, worker_client, Semaphore
 from types import SimpleNamespace
 from tenacity import (
     stop_after_attempt,
@@ -2185,6 +2185,17 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     # worker = get_worker()
     # alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
 
+    dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
+    sem = Semaphore(
+        max_leases=(
+            args.resource_intensive_sql_semaphore
+            if args.resource_intensive_sql_semaphore > 0
+            else int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker))
+        ),
+        name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
+    )
+    locks = get_accelerator_locks(0, 1, "20s")
+
     args = init_hps(hps, model, symbol, args, client, alchemyEngine, logger)
     cutoff_date = _get_cutoff_date(args)
     anchor_df, anchor_table = load_anchor_ts(
@@ -2225,7 +2236,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
             base_loss,
         )
         df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
-            anchor_df, args, alchemyEngine, logger, cutoff_date
+            anchor_df, args, alchemyEngine, logger, cutoff_date, sem
         )
         # df_future = client.scatter(df)
         # ranked_features_future = client.scatter(ranked_features)
@@ -2246,7 +2257,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
         # run covariate loss calculation in batch
         logger.info("Starting covariate loss calculation")
         t1_start = time.time()
-        prep_covar_baseline_metrics(anchor_df, anchor_table, args)
+        prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem, locks)
         # logger.info("waiting dask futures: %s", len(hps.futures))
         await_futures(hps.futures, hard_wait=True)
         logger.info(
