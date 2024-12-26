@@ -421,7 +421,7 @@ class BaseModel(ABC):
         is_baseline = self.is_baseline(**self.model_args)
         if not is_baseline:
             n_workers = num_workers()
-            cpu_count = psutil.cpu_count(logical=False)
+            cpu_count = psutil.cpu_count(logical=True)
             num_threads = math.ceil(cpu_count / n_workers)
             torch.set_num_threads(num_threads)
         return torch.get_num_threads()
