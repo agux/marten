@@ -2018,7 +2018,7 @@ def fast_bayesopt(
     _cleanup_stale_keys()
 
     space_str = _search_space(
-        args.model, model, min(args.max_covars, len(ranked_features), args.topk_covars)
+        args.model, model, min(args.max_covars, len(ranked_features)), args.topk_covars
     )
 
     # Convert args to a dictionary, excluding non-serializable items
