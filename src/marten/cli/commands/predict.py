@@ -69,6 +69,17 @@ def configure_parser(parser):
         ),
     )
     parser.add_argument(
+        "--topk_covars",
+        action="store",
+        type=int,
+        default=50,
+        help=(
+            "Select the top-k covariates from the 'max_covars' for training and prediction. "
+            "If it's less than 1, we'll use up to all 'max_covar'."
+            "Defaults to 50."
+        ),
+    )
+    parser.add_argument(
         "--random_seed",
         action="store",
         type=int,

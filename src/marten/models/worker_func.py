@@ -1947,7 +1947,7 @@ def count_topk_hp(alchemyEngine, model, hps_id, base_loss):
         return result.fetchone()[0]
 
 
-def _search_space(model_name, model, max_covars):
+def _search_space(model_name, model, max_covars, topk_covars):
     match model_name:
         case "NeuralProphet":
             ss = f"""dict(
@@ -1988,7 +1988,7 @@ def _search_space(model_name, model, max_covars):
                 covar_dist=dirichlet([1.0]*{max_covars}),
             )"""
         case _:
-            return model.search_space(max_covars=max_covars)
+            return model.search_space(topk_covars=topk_covars)
     return ss
 
 
@@ -2017,7 +2017,7 @@ def fast_bayesopt(
     _cleanup_stale_keys()
 
     space_str = _search_space(
-        args.model, model, min(args.max_covars, len(ranked_features))
+        args.model, model, min(args.max_covars, len(ranked_features), args.topk_covars)
     )
 
     # Convert args to a dictionary, excluding non-serializable items
