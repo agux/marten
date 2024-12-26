@@ -503,3 +503,44 @@ def workload_stage():
                 stage,
             )
         return stage
+
+
+def scale_cluster_and_wait(client, n_workers, timeout=60):
+    """
+    Scale the Dask cluster to the specified number of workers and wait until all workers are ready.
+
+    Parameters:
+    - client: dask.distributed.Client
+        The Dask client connected to your cluster.
+    - n_workers: int
+        The desired number of workers to scale to.
+    - timeout: int, optional (default=60)
+        The maximum time in seconds to wait for the cluster to scale.
+
+    Raises:
+    - TimeoutError: If the cluster does not scale to the desired number of workers within the timeout period.
+    """
+    # Initiate scaling
+    client.cluster.scale(n_workers)
+
+    # Start timing
+    start_time = time.time()
+
+    # Loop until the desired number of workers is reached or timeout occurs
+    while True:
+        # Get the current number of workers
+        current_workers = len(client.scheduler_info()["workers"])
+
+        # Check if scaling is complete
+        if current_workers == n_workers:
+            break
+
+        # Check for timeout
+        elapsed_time = time.time() - start_time
+        if elapsed_time > timeout:
+            raise TimeoutError(
+                f"Timeout: Expected {n_workers} workers, but {current_workers} are alive after {timeout} seconds."
+            )
+
+        # Optional: Sleep before the next check to avoid overwhelming the scheduler with requests
+        time.sleep(1)

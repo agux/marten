@@ -666,16 +666,28 @@ def _load_covar_feature(cov_table, feature, symbols):
             table_feature_df = pd.read_sql(query, alchemyEngine, parse_dates=["ds"])
         case _ if cov_table.startswith("ta_"):  # handle technical indicators table
             column_names = columns_with_prefix(alchemyEngine, cov_table, feature)
-            # query rows from the TA table
+            table_symbols = [tuple(s.split("::")) for s in symbols]
+            select_cols = ", ".join(column_names)
+            # Build conditions and parameters
+            conditions = []
+            params = {}
+            for idx, (table_name, symbol) in enumerate(table_symbols):
+                conditions.append(
+                    f'("table" = %(table_{idx})s AND symbol = %(symbol_{idx})s)'
+                )
+                params[f"table_{idx}"] = table_name
+                params[f"symbol_{idx}"] = symbol
+
+            # Combine conditions with OR
+            where_clause = " OR ".join(conditions)
+
+            # Construct the query using named parameters
             query = f"""
-                SELECT symbol ID, date DS, {', '.join(column_names)}
+                SELECT "table" || '::' || symbol ID, date DS, {select_cols}
                 FROM {cov_table}
-                where symbol in %(symbols)s
-                order by ID, DS asc
+                WHERE {where_clause}
+                ORDER BY ID, DS ASC
             """
-            params = {
-                "symbols": tuple(symbols),
-            }
             table_feature_df = pd.read_sql(
                 query, alchemyEngine, params=params, parse_dates=["ds"]
             )
@@ -762,7 +774,7 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
         # merge and append the feature column of table_feature_df to merged_df, by matching dates
         # split table_feature_df by symbol column
         grouped = table_feature_df.groupby("id")
-        for group2, sdf2 in grouped:
+        for group2, sdf2 in grouped: # group2 = symbol
             if "y" in sdf2.columns:
                 col_name = f"{feature}::{cov_table}::{group2}"
                 sdf2.rename(
@@ -774,7 +786,7 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
                 sdf2 = sdf2[["ds", col_name]]
             else:
                 col_names = {}
-                for col in [c for c in df.columns if c.startswith(f"{feature}_")]:
+                for col in [c for c in sdf2.columns if c.startswith(f"{feature}_")]:
                     col_names[col] = f"{col}::{cov_table}::{group2}"
                 sdf2.rename(columns=col_names, inplace=True)
                 sdf2 = sdf2[["ds"] + list(col_names.values())]

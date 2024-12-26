@@ -24,7 +24,7 @@ from tenacity import (
 )
 
 from marten.data.worker_func import impute
-from marten.utils.worker import await_futures
+from marten.utils.worker import await_futures, scale_cluster_and_wait
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
 from marten.utils.trainer import select_device, get_accelerator_locks
@@ -1614,7 +1614,8 @@ def ensemble_topk_prediction(
 
     # scale-in to preserve more memory for prediction
     logger.info("Scaling dask cluster to %s", args.min_worker)
-    client.cluster.scale(args.min_worker)
+    scale_cluster_and_wait(client, args.min_worker)
+    # client.cluster.scale(args.min_worker)
 
     futures = []
     for _, row in settings.iterrows():
@@ -2238,7 +2239,8 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
 
     # scale up the cluster to args.max_worker
     logger.info("Scaling dask cluster to %s", args.max_worker)
-    client.cluster.scale(args.max_worker)
+    # client.cluster.scale(args.max_worker)
+    scale_cluster_and_wait(client, args.max_worker)
 
     if args.resume != "hps":
         # run covariate loss calculation in batch
@@ -2264,13 +2266,11 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     )
 
     # scale-in to preserve more memory for hps
-    worker_size = (
-        args.min_worker
-        if args.model != "NeuralProphet"
-        else int(math.sqrt(args.min_worker * args.max_worker))
-    )
-    logger.info("Scaling down dask cluster to %s", worker_size)
-    client.cluster.scale(worker_size)
+    if args.model != "NeuralProphet":
+        worker_size = int(math.sqrt(args.min_worker * args.max_worker))
+        logger.info("Scaling down dask cluster to %s", worker_size)
+        # client.cluster.scale(worker_size)
+        scale_cluster_and_wait(client, worker_size)
 
     # NOTE: if data is scattered before scale-down, the error will be thrown:
     # Removing worker 'tcp://<worker IP & port>' caused the cluster to lose scattered data, which can't be recovered
