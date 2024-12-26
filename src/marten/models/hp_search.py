@@ -701,7 +701,7 @@ def _load_covar_feature(cov_table, feature, symbols, start_date, end_date, sem=N
                 where symbol in %(symbols)s
                 and date between %(start_date)s and %(end_date)s
             """
-            params["symbols"] = tuple(symbols),
+            params["symbols"] = tuple(symbols)
             table_feature_df = pd.read_sql(
                 query, alchemyEngine, params=params, parse_dates=["ds"]
             )
