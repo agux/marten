@@ -189,7 +189,7 @@ class TSMixerxModel(BaseModel):
             batch_size=[2**w for w in range(5, 7+1)],
             local_scaler_type=[None, "standard", "robust", "robust-iqr", "minmax"],
             topk_covar=list(range(0, {kwargs["topk_covars"]}+1)),
-            covar_dist=dirichlet([1.0]*{kwargs["topk_covars"]}),
+            covar_dist=dirichlet([1.0]*{kwargs["max_covars"]}),
             optimizer=["Adam", "AdamW", "SGD"],
         )"""
 

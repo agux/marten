@@ -645,47 +645,45 @@ def _load_covars(
     return df, covar_set_id
 
 
-def _load_covar_feature(cov_table, feature, symbols, sem=None):
+def _load_covar_feature(cov_table, feature, symbols, start_date, end_date, sem=None):
     worker = get_worker()
     alchemyEngine = worker.alchemyEngine
+    params = {"start_date": start_date, "end_date": end_date}
     match cov_table:
         case "bond_metrics_em" | "bond_metrics_em_view":
             query = f"""
                 SELECT 'bond' ID, date DS, {feature} y
                 FROM {cov_table}
-                order by DS asc
+                and date between %(start_date)s and %(end_date)s
             """
-            table_feature_df = pd.read_sql(query, alchemyEngine, parse_dates=["ds"])
+            table_feature_df = pd.read_sql(query, alchemyEngine, params=params, parse_dates=["ds"])
         case "currency_boc_safe_view":
             query = f"""
                 SELECT 'currency_exchange' ID, date DS, {feature} y
                 FROM {cov_table}
-                order by DS asc
+                and date between %(start_date)s and %(end_date)s
             """
-            table_feature_df = pd.read_sql(query, alchemyEngine, parse_dates=["ds"])
+            table_feature_df = pd.read_sql(query, alchemyEngine, params=params, parse_dates=["ds"])
         case _ if cov_table.startswith("ta_"):  # handle technical indicators table
             column_names = columns_with_prefix(alchemyEngine, cov_table, feature)
             table_symbols = [tuple(s.split("::")) for s in symbols]
             select_cols = ", ".join(column_names)
-            # Build conditions and parameters
-            conditions = []
-            params = {}
+            # Ensure 'table' and 'symbol' are correctly quoted to prevent SQL injection
+            values_list = ", ".join(
+                [
+                    "(%(table_{0})s, %(symbol_{0})s)".format(idx)
+                    for idx in range(len(table_symbols))
+                ]
+            )
             for idx, (table_name, symbol) in enumerate(table_symbols):
-                conditions.append(
-                    f'("table" = %(table_{idx})s AND symbol = %(symbol_{idx})s)'
-                )
                 params[f"table_{idx}"] = table_name
                 params[f"symbol_{idx}"] = symbol
-
-            # Combine conditions with OR
-            where_clause = " OR ".join(conditions)
-
             # Construct the query using named parameters
             query = f"""
-                SELECT "table" || '::' || symbol ID, date DS, {select_cols}
+                SELECT "table" || '::' || symbol AS ID, date AS DS, {select_cols}
                 FROM {cov_table}
-                WHERE {where_clause}
-                ORDER BY ID, DS ASC
+                WHERE ("table", symbol) IN ({values_list})
+                and date between %(start_date)s and %(end_date)s
             """
             if sem:
                 with sem:
@@ -694,25 +692,25 @@ def _load_covar_feature(cov_table, feature, symbols, sem=None):
                     )
             else:
                 table_feature_df = pd.read_sql(
-                        query, alchemyEngine, params=params, parse_dates=["ds"]
-                    )
+                    query, alchemyEngine, params=params, parse_dates=["ds"]
+                )
         case _:
             query = f"""
                 SELECT symbol ID, date DS, {feature} y
                 FROM {cov_table}
                 where symbol in %(symbols)s
-                order by ID, DS asc
+                and date between %(start_date)s and %(end_date)s
             """
-            params = {
-                "symbols": tuple(symbols),
-            }
+            params["symbols"] = tuple(symbols),
             table_feature_df = pd.read_sql(
                 query, alchemyEngine, params=params, parse_dates=["ds"]
             )
     return table_feature_df
 
 
-def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date, sem=None):
+def augment_anchor_df_with_covars(
+    df, args, alchemyEngine, logger, cutoff_date, sem=None
+):
     global client
     # date_col = "ds" if args.model == "NeuralProphet" else "date"
     merged_df = df[["ds", "y"]]
@@ -760,12 +758,21 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date, 
     # covars_df contain these columns: cov_symbol, cov_table, feature
     by_table_feature = covars_df.groupby(["cov_table", "feature"])
     futures = []
+    start_date, end_date = min(merged_df["y"]), max(merged_df["y"])
     for group1, sdf1 in by_table_feature:
         ## load covariate time series from different tables and/or features
         cov_table = group1[0]
         feature = group1[1]
         futures.append(
-            client.submit(_load_covar_feature, cov_table, feature, sdf1["cov_symbol"], sem)
+            client.submit(
+                _load_covar_feature,
+                cov_table,
+                feature,
+                sdf1["cov_symbol"],
+                start_date,
+                end_date,
+                sem,
+            )
         )
 
     table_feature_dfs = client.gather(futures)
@@ -779,7 +786,7 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date, 
         # merge and append the feature column of table_feature_df to merged_df, by matching dates
         # split table_feature_df by symbol column
         grouped = table_feature_df.groupby("id")
-        for group2, sdf2 in grouped: # group2 = symbol
+        for group2, sdf2 in grouped:  # group2 = symbol
             if "y" in sdf2.columns:
                 col_name = f"{feature}::{cov_table}::{group2}"
                 sdf2.rename(

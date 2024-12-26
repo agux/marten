@@ -1989,7 +1989,9 @@ def _search_space(model_name, model, max_covars, topk_covars):
                 covar_dist=dirichlet([1.0]*{max_covars}),
             )"""
         case _:
-            return model.search_space(topk_covars=topk_covars)
+            return model.search_space(
+                topk_covars=topk_covars if topk_covars > 0 else max_covars
+            )
     return ss
 
 
