@@ -656,14 +656,18 @@ def _load_covar_feature(cov_table, feature, symbols, start_date, end_date, sem=N
                 FROM {cov_table}
                 and date between %(start_date)s and %(end_date)s
             """
-            table_feature_df = pd.read_sql(query, alchemyEngine, params=params, parse_dates=["ds"])
+            table_feature_df = pd.read_sql(
+                query, alchemyEngine, params=params, parse_dates=["ds"]
+            )
         case "currency_boc_safe_view":
             query = f"""
                 SELECT 'currency_exchange' ID, date DS, {feature} y
                 FROM {cov_table}
                 and date between %(start_date)s and %(end_date)s
             """
-            table_feature_df = pd.read_sql(query, alchemyEngine, params=params, parse_dates=["ds"])
+            table_feature_df = pd.read_sql(
+                query, alchemyEngine, params=params, parse_dates=["ds"]
+            )
         case _ if cov_table.startswith("ta_"):  # handle technical indicators table
             column_names = columns_with_prefix(alchemyEngine, cov_table, feature)
             table_symbols = [tuple(s.split("::")) for s in symbols]
@@ -1013,7 +1017,7 @@ def _bayesopt_run(
     resume,
     locks,
 ):
-    global logger, client
+    global logger, client, model
 
     @scheduler.custom(n_jobs=n_jobs)
     def objective(params_batch):
@@ -1026,6 +1030,11 @@ def _bayesopt_run(
         for i, params in enumerate(params_batch):
             new_df = df
             hpid, _ = get_hpid(params)
+            priority = 1
+            if model:
+                priority = (
+                    priority + 1 if model.trainable_on_cpu(**params) else priority
+                )
             if "topk_covar" in params:
                 if "covar_dist" in params:
                     new_df = select_randk_covars(
@@ -1046,6 +1055,7 @@ def _bayesopt_run(
                 retries=1,
                 locks=locks,
                 key=f"{validate_hyperparams.__name__}-{hpid}",
+                priority=priority,
             )
             future.add_done_callback(hps_task_callback)
             jobs.append(future)

@@ -85,7 +85,7 @@ class TSMixerxModel(BaseModel):
                 * kwargs["topk_covar"]
             ),
             0.2,
-        ) < 50
+        ) < 60
         # return True
 
     def torch_cpu_ratio(self) -> float:
@@ -182,11 +182,11 @@ class TSMixerxModel(BaseModel):
         return f"""dict(
             input_size=range(20, 1000+1),
             n_block=range(2, 256+1),
-            ff_dim=[2**w for w in range(4, 9+1)],
+            ff_dim=range(2, 256+1),
             dropout=uniform(0, 0.5),
             revin=[True, False],
             learning_rate=loguniform(0.0001, 0.002),
-            batch_size=[2**w for w in range(5, 7+1)],
+            batch_size=range(2, 128+1),
             local_scaler_type=[None, "standard", "robust", "robust-iqr", "minmax"],
             topk_covar=list(range(0, {kwargs["topk_covars"]}+1)),
             covar_dist=dirichlet([1.0]*{kwargs["max_covars"]}),
