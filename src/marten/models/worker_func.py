@@ -2267,7 +2267,8 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
 
     # scale-in to preserve more memory for hps
     if args.model != "NeuralProphet":
-        worker_size = int(math.sqrt(args.min_worker * args.max_worker))
+        # worker_size = int(math.sqrt(args.min_worker * args.max_worker))
+        worker_size = args.min_worker * args.max_worker
         logger.info("Scaling down dask cluster to %s", worker_size)
         # client.cluster.scale(worker_size)
         scale_cluster_and_wait(client, worker_size)
