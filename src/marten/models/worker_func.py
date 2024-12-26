@@ -1990,7 +1990,8 @@ def _search_space(model_name, model, max_covars, topk_covars):
             )"""
         case _:
             return model.search_space(
-                topk_covars=topk_covars if topk_covars > 0 else max_covars
+                topk_covars=topk_covars if topk_covars > 0 else max_covars,
+                max_covars=max_covars,
             )
     return ss
 
