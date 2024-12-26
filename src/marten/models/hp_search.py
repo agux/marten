@@ -758,7 +758,8 @@ def augment_anchor_df_with_covars(
     # covars_df contain these columns: cov_symbol, cov_table, feature
     by_table_feature = covars_df.groupby(["cov_table", "feature"])
     futures = []
-    start_date, end_date = min(merged_df["y"]), max(merged_df["y"])
+    start_date = merged_df["ds"].min().strftime("%Y-%m-%d")
+    end_date = merged_df["ds"].max().strftime("%Y-%m-%d")
     for group1, sdf1 in by_table_feature:
         ## load covariate time series from different tables and/or features
         cov_table = group1[0]
