@@ -389,12 +389,13 @@ class BaseModel(ABC):
         accelerator = self._select_accelerator()
         kwargs["accelerator"] = accelerator
         cpu_cores = None
-        if accelerator == "cpu":
-            cpu_cores = self.configure_torch()
+        if accelerator == "gpu":
+            kwargs["devices"] = "auto"
+        else:
+            if accelerator == "cpu":
+                cpu_cores = self.configure_torch()
             # NOTE: `devices` selected with `CPUAccelerator` should be an int > 0.
             kwargs["devices"] = 1
-        else:
-            kwargs["devices"] = "auto"
         self.model_args = kwargs
         start_time = time.time()
         try:

@@ -44,7 +44,7 @@ services:
       -c checkpoint_timeout=15min
       -c checkpoint_completion_target=0.5
       -c wal_buffers=16MB
-      -c max_wal_size=32GB
+      -c max_wal_size=16GB
       -c bgwriter_lru_maxpages=2000
       -c temp_file_limit=2GB
     networks:
