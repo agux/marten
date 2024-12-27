@@ -348,8 +348,14 @@ class BaseModel(ABC):
         #     if len(valid_losses) > 0
         #     else np.nan
         # )
-
+        if kwargs["accelerator"] == "gpu":
+            # without exclusive lock, it may fail due to insufficient GPU memory.
+            while self._lock_accelerator("gpu") != "gpu":
+                time.sleep(0.5)
+        
         forecast = self.nf.predict_insample()
+        self.release_accelerator_lock()
+        
         forecast.reset_index(inplace=True)
         loss = loss_val = eval_mae = eval_rmse = eval_mae_val = eval_rmse_val = np.nan
         if kwargs["validate"]:

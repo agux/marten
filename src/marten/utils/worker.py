@@ -515,7 +515,7 @@ def workload_stage():
         return stage
 
 
-def scale_cluster_and_wait(client, n_workers, timeout=60):
+def scale_cluster_and_wait(client: Client, n_workers: int, timeout: int=60):
     """
     Scale the Dask cluster to the specified number of workers and wait until all workers are ready.
 
