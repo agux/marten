@@ -7,6 +7,7 @@ import time
 import math
 import socket
 import psutil
+import asyncio
 import traceback
 import numpy as np
 import pandas as pd
@@ -168,16 +169,20 @@ class BaseModel(ABC):
             case _:
                 return True
 
-    def _lock_accelerator(self, accelerator) -> str:
+    async def _lock_accelerator(self, accelerator) -> str:
         if accelerator == "cpu":
             return accelerator
         # get_logger().info("locking accelerator: %s", self.locks)
+        loop = asyncio.get_running_loop()
 
-        def lock_device(device):
-            nonlocal accelerator
+        async def lock_device(device):
+            nonlocal accelerator, loop
             if self.accelerator_lock is None and accelerator in (device, "auto"):
                 lock = self.locks[device]
-                if lock.acquire(timeout=f"{self.lock_wait_time}"):
+                acquired = await loop.run_in_executor(
+                    None, lock.acquire, f"{self.lock_wait_time}"
+                )
+                if acquired:
                     self.accelerator_lock = lock
                     get_logger().debug("lock acquired: %s", self.accelerator_lock.name)
 
@@ -187,7 +192,7 @@ class BaseModel(ABC):
 
             if accelerator == "mps":
                 dam, cam = mps_util()
-                lock_device("mps")
+                await lock_device("mps")
             else:
                 gu, _ = gpu_util()
                 if gu > 0 and self._check_cpu():
@@ -195,7 +200,7 @@ class BaseModel(ABC):
                 else:
                     if self.locks and "gpu" in self.locks.keys():
                         get_logger().debug("GPU Util:%s, trying GPU lock first", gu)
-                        lock_device("gpu")
+                        await lock_device("gpu")
                     else:
                         return "gpu"
 
@@ -205,10 +210,10 @@ class BaseModel(ABC):
             stop_at = time.time() + self.resource_wait_time
             if accelerator == "mps":
                 while wait_mps(stop_at):
-                    time.sleep(0.5)
+                    await asyncio.sleep(0.5)
             else:
                 while wait_gpu(gpu_ut, gpu_rt, stop_at):
-                    time.sleep(0.2)
+                    await asyncio.sleep(0.2)
 
             now = time.time()
             if now <= stop_at:
@@ -239,7 +244,9 @@ class BaseModel(ABC):
         accelerator = "gpu" if accelerator == "auto" else accelerator
 
         self.release_accelerator_lock()
-        accelerator = self._lock_accelerator(accelerator)
+        accelerator = asyncio.get_running_loop().run_until_complete(
+            self._lock_accelerator(accelerator)
+        )
         self.release_accelerator_lock(
             self.device_lock_release_delay
             if self.is_baseline(**self.model_args)
@@ -272,14 +279,20 @@ class BaseModel(ABC):
         #     if len(valid_losses) > 0
         #     else np.nan
         # )
+        loop = asyncio.get_running_loop()
         if kwargs["accelerator"] == "gpu":
             # without exclusive lock, it may fail due to insufficient GPU memory.
-            while self._lock_accelerator("gpu") != "gpu":
-                time.sleep(0.5)
+            while True:
+                if loop.run_until_complete(self._lock_accelerator("gpu")) == "gpu":
+                    break
+                else:
+                    time.sleep(0.5)
         try:
-            forecast = self.nf.predict_insample()
+            forecast = loop.run_until_complete(self.nf.predict_insample())
         except Exception as e:
-            get_logger().error("failed to predict insample: %s\n%s", e, traceback.format_exc())
+            get_logger().error(
+                "failed to predict insample: %s\n%s", e, traceback.format_exc()
+            )
             raise e
         finally:
             self.release_accelerator_lock()
@@ -398,9 +411,10 @@ class BaseModel(ABC):
             kwargs["devices"] = 1
         self.model_args = kwargs
         start_time = time.time()
+        loop = asyncio.get_running_loop()
         try:
             get_logger().debug("training with kwargs: %s", kwargs)
-            model_config = self._train(df, **kwargs)
+            model_config = loop.run_until_complete(self._train(df, **kwargs))
         except Exception as e:
             self.release_accelerator_lock()
             if is_cuda_error(e):
@@ -415,7 +429,7 @@ class BaseModel(ABC):
                 kwargs["devices"] = 1
                 self.model_args = kwargs
                 start_time = time.time()
-                model_config = self._train(df, **kwargs)
+                model_config = loop.run_until_complete(self._train(df, **kwargs))
             else:
                 get_logger().warning("encountered error with train params: %s", kwargs)
                 raise e
@@ -563,6 +577,7 @@ class BaseModel(ABC):
 
         seed_logger = logging.getLogger("lightning_fabric.utilities.seed")
         from lightning_utilities.core.rank_zero import log as rank_zero_logger
+
         # rank_zero_logger = logging.getLogger("lightning_utilities.core.rank_zero")
         orig_seed_log_level = seed_logger.getEffectiveLevel()
         orig_log_level = rank_zero_logger.getEffectiveLevel()
@@ -671,7 +686,7 @@ class BaseModel(ABC):
         results = []
         for na_col in na_cols:
             df_na = df[["ds", na_col]].copy()
-            if df[na_col].isnull().all(): # all rows are null
+            if df[na_col].isnull().all():  # all rows are null
                 df_na["ds"] = df_na["ds"].dt.date
                 results.append(df_na)
             else:
