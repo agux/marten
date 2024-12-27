@@ -24,7 +24,7 @@ from tenacity import (
 )
 
 from marten.data.worker_func import impute
-from marten.utils.worker import await_futures, scale_cluster_and_wait
+from marten.utils.worker import await_futures, scale_cluster_and_wait, restart_all_workers
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
 from marten.utils.trainer import select_device, get_accelerator_locks
@@ -2089,7 +2089,8 @@ def fast_bayesopt(
                 base_loss,
                 min_loss,
             )
-            client.restart()
+            # client.restart()
+            restart_all_workers(client)
 
 
 def update_covar_set_id(alchemyEngine, hps_id, covar_set_id):

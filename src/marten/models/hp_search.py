@@ -31,6 +31,7 @@ from marten.utils.worker import (
     init_client,
     num_workers,
     hps_task_callback,
+    restart_all_workers,
 )
 from marten.utils.neuralprophet import select_topk_features
 from marten.utils.softs import is_large_model
@@ -1078,7 +1079,8 @@ def _bayesopt_run(
         logger.info("Elapsed: %s, Successful results: %s", elapsed, len(results))
         # restart client here to free up memory
         if args.restart_workers:
-            client.restart()
+            restart_all_workers(client)
+            # client.restart()
         return params, loss
 
     warmstart_tuples = None
@@ -1921,7 +1923,8 @@ def main(_args):
             if not args.covar_only:
                 ## wait for all tasks to be completed before restarting
                 await_futures(futures)
-                client.restart()
+                restart_all_workers(client)
+                # client.restart()
             logger.info(
                 "%s covariate baseline metric computation completed. Time taken: %s seconds",
                 args.symbol,

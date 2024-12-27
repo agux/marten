@@ -6,6 +6,7 @@ import psutil
 import multiprocessing
 import threading
 import torch
+import traceback
 import dask
 import dask.config
 from dask.distributed import (
@@ -390,6 +391,15 @@ def hps_task_callback(future: Future):
 
 #     future.client.restart_workers()
 
+def restart_all_workers(client: Client):
+    try:
+        client.restart(timeout="30s")
+    except Exception as e:
+        get_logger().warning("client.restart() failed: %s\nTraceback:\n%s", e, traceback.format_exc())
+        workers = client.scheduler_info()["workers"]
+        worker_names = [worker_info["name"] for worker_info in workers.values()]
+        client.restart_workers(worker_names, timeout=45, raise_for_error=False)
+
 
 def restart_worker(exception):
     worker = get_worker()
@@ -522,7 +532,7 @@ def workload_stage():
         return stage
 
 
-def scale_cluster_and_wait(client, n_workers, timeout=60):
+def scale_cluster_and_wait(client: Client, n_workers: int, timeout: int=60):
     """
     Scale the Dask cluster to the specified number of workers and wait until all workers are ready.
 

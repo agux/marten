@@ -7,6 +7,7 @@ import time
 import math
 import socket
 import psutil
+import traceback
 import numpy as np
 import pandas as pd
 import logging
@@ -271,8 +272,18 @@ class BaseModel(ABC):
         #     if len(valid_losses) > 0
         #     else np.nan
         # )
+        if kwargs["accelerator"] == "gpu":
+            # without exclusive lock, it may fail due to insufficient GPU memory.
+            while self._lock_accelerator("gpu") != "gpu":
+                time.sleep(0.5)
+        try:
+            forecast = self.nf.predict_insample()
+        except Exception as e:
+            get_logger().error("failed to predict insample: %s\n%s", e, traceback.format_exc())
+            raise e
+        finally:
+            self.release_accelerator_lock()
 
-        forecast = self.nf.predict_insample()
         forecast.reset_index(inplace=True)
         loss = loss_val = eval_mae = eval_rmse = eval_mae_val = eval_rmse_val = np.nan
         if kwargs["validate"]:

@@ -180,7 +180,7 @@ class TSMixerxModel(BaseModel):
         # TODO: add random_seed to search space?
         # "boxcox" local_scaler_type supports positive variables only
         return f"""dict(
-            input_size=range(20, 1000+1),
+            input_size=range(5, 500+1),
             n_block=range(2, 256+1),
             ff_dim=range(2, 256+1),
             dropout=uniform(0, 0.5),

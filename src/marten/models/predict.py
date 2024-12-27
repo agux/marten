@@ -1,3 +1,6 @@
+import faulthandler
+faulthandler.enable()
+
 import time
 import os
 # OPENBLAS_NUM_THREADS = 1
