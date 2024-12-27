@@ -35,11 +35,13 @@ from marten.utils.trainer import optimize_torch_on_cpu, is_cuda_error
 from marten.utils.worker import (
     release_lock,
     wait_gpu,
+    wait_mps,
     wait_cpu,
     restart_worker,
     workload_stage,
     cpu_util,
     gpu_util,
+    mps_util,
     num_workers,
 )
 
@@ -170,10 +172,10 @@ class BaseModel(ABC):
             return accelerator
         # get_logger().info("locking accelerator: %s", self.locks)
 
-        def lock_gpu():
+        def lock_device(device):
             nonlocal accelerator
-            if self.accelerator_lock is None and accelerator in ("gpu", "auto"):
-                lock = self.locks["gpu"]
+            if self.accelerator_lock is None and accelerator in (device, "auto"):
+                lock = self.locks[device]
                 if lock.acquire(timeout=f"{self.lock_wait_time}"):
                     self.accelerator_lock = lock
                     get_logger().debug("lock acquired: %s", self.accelerator_lock.name)
@@ -182,127 +184,48 @@ class BaseModel(ABC):
         while True:
             self.accelerator_lock = None
 
-            gu, _ = gpu_util()
-
-            if gu > 0 and self._check_cpu():
-                return "cpu"
+            if accelerator == "mps":
+                dam, cam = mps_util()
+                lock_device("mps")
             else:
-                if self.locks and "gpu" in self.locks.keys():
-                    get_logger().debug("GPU Util:%s, trying GPU lock first", gu)
-                    lock_gpu()
+                gu, _ = gpu_util()
+                if gu > 0 and self._check_cpu():
+                    return "cpu"
                 else:
-                    return "gpu"
+                    if self.locks and "gpu" in self.locks.keys():
+                        get_logger().debug("GPU Util:%s, trying GPU lock first", gu)
+                        lock_device("gpu")
+                    else:
+                        return "gpu"
 
             if not self.accelerator_lock and self._check_cpu():
                 return "cpu"
 
             stop_at = time.time() + self.resource_wait_time
-            while wait_gpu(gpu_ut, gpu_rt, stop_at):
-                time.sleep(0.2)
+            if accelerator == "mps":
+                while wait_mps(stop_at):
+                    time.sleep(0.5)
+            else:
+                while wait_gpu(gpu_ut, gpu_rt, stop_at):
+                    time.sleep(0.2)
 
             now = time.time()
             if now <= stop_at:
-                return "gpu"
+                return accelerator
 
             # wait GPU idleness timeout. see if we can try CPU
-            if self._check_cpu(): 
+            if accelerator != "mps" and self._check_cpu():
                 return "cpu"
             else:
                 release_lock(self.accelerator_lock, 0)
-
-    # def _lock_accelerator(self, accelerator) -> str:
-    #     # get_logger().info("locking accelerator: %s", self.locks)
-    #     is_baseline = self.is_baseline(**self.model_args)
-    #     gpu_ut, gpu_rt = self.gpu_threshold()
-    #     cpu_ut, cpu_rt = self.cpu_threshold()
-    #     mod_accelerator = None
-
-    #     def lock_cpu():
-    #         nonlocal mod_accelerator
-    #         if self.accelerator_lock is None and self._check_cpu():
-    #             lock = self.locks["cpu"]
-    #             if lock.acquire(timeout=f"{self.lock_wait_time}"):
-    #                 self.accelerator_lock = lock
-    #                 mod_accelerator = "cpu"
-    #                 get_logger().debug("lock acquired: %s", self.accelerator_lock.name)
-
-    #     def lock_gpu():
-    #         nonlocal mod_accelerator, accelerator
-    #         if self.accelerator_lock is None and accelerator in ("gpu", "auto"):
-    #             lock = self.locks["gpu"]
-    #             if lock.acquire(timeout=f"{self.lock_wait_time}"):
-    #                 self.accelerator_lock = lock
-    #                 mod_accelerator = "gpu"
-    #                 get_logger().debug("lock acquired: %s", self.accelerator_lock.name)
-
-    #     while True:
-    #         self.accelerator_lock = None
-    #         mod_accelerator = None
-
-    #         if accelerator == "cpu":
-    #             if self.locks and "cpu" in self.locks.keys():
-    #                 get_logger().debug("enforcing CPU lock")
-    #                 lock_cpu()
-    #             else:
-    #                 return "cpu"
-    #         else:
-    #             cu, _ = cpu_util()
-    #             gu, _ = gpu_util()
-    #             if is_baseline or cu >= gu:
-    #                 if self.locks and "gpu" in self.locks.keys():
-    #                     get_logger().debug("%s >= %s, trying GPU lock first", cu, gu)
-    #                     lock_gpu()
-    #                     if is_baseline and not self.accelerator_lock:
-    #                         return "cpu"
-    #                     lock_cpu()
-    #                 else:
-    #                     return "gpu"
-    #             else:
-    #                 if self.locks and "cpu" in self.locks.keys():
-    #                     get_logger().debug("%s < %s, trying CPU lock first", cu, gu)
-    #                     lock_cpu()
-    #                     lock_gpu()
-    #                 else:
-    #                     return "cpu"
-
-    #         if self.accelerator_lock is None:
-    #             continue
-
-    #         stop_at = time.time() + self.resource_wait_time
-    #         if mod_accelerator == "gpu":
-    #             while wait_gpu(gpu_ut, gpu_rt, stop_at):
-    #                 time.sleep(0.2)
-    #         elif self._check_cpu():  # CPU
-    #             stop_at += self.resource_wait_time  # double wait time for CPU
-    #             while wait_cpu(cpu_ut, cpu_rt, stop_at, 1):
-    #                 time.sleep(0.2)
-    #         else:
-    #             release_lock(self.accelerator_lock, 0)
-    #             continue
-
-    #         now = time.time()
-    #         if now <= stop_at:
-    #             break
-
-    #         get_logger().debug(
-    #             "resource wait timeout (%ss): %s > %s, %s",
-    #             self.resource_wait_time,
-    #             now,
-    #             stop_at,
-    #             self.accelerator_lock.name if self.accelerator_lock else "no-lock",
-    #         )
-    #         release_lock(self.accelerator_lock, 0)
-
-    #         if is_baseline:
-    #             return "cpu"
-
-    #     return mod_accelerator
 
     def _select_accelerator(self) -> str:
         accelerator = self.model_args["accelerator"].lower()
         # if accelerator == "cpu":
         #     return accelerator
-        if accelerator in ("gpu", "auto") and not torch.cuda.is_available():
+        if accelerator in ("mps", "auto") and torch.mps.is_available():
+            accelerator = "mps"
+        elif accelerator in ("gpu", "auto") and not torch.cuda.is_available():
             accelerator = "cpu"
 
         # gpu or auto

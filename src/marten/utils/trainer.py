@@ -8,8 +8,8 @@ from dask.distributed import get_worker, Semaphore
 from marten.utils.logger import get_logger
 
 
-def get_accelerator_locks(cpu_leases=1, gpu_leases=1, timeout="10s"):
-    if cpu_leases > 0 or gpu_leases > 0:
+def get_accelerator_locks(cpu_leases=1, gpu_leases=1, mps_leases=1, timeout="10s"):
+    if cpu_leases > 0 or gpu_leases > 0 or mps_leases > 0:
         dask.config.set({"distributed.scheduler.locks.lease-timeout": timeout})
     locks = {}
     if cpu_leases > 0:
@@ -19,6 +19,10 @@ def get_accelerator_locks(cpu_leases=1, gpu_leases=1, timeout="10s"):
     if gpu_leases > 0:
         locks["gpu"] = Semaphore(
             max_leases=gpu_leases, name=f"""{socket.gethostname()}::GPU-auto"""
+        )
+    if mps_leases > 0:
+        locks["mps"] = Semaphore(
+            max_leases=mps_leases, name=f"""{socket.gethostname()}::MPS"""
         )
     return locks
 

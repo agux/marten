@@ -2043,7 +2043,7 @@ def fast_bayesopt(
     if args.model == "SOFTS" or (model is not None and not model.accept_missing_data()):
         df, _ = impute(df, args.random_seed, client)
 
-    locks = get_accelerator_locks(cpu_leases=0, gpu_leases=1, timeout="60s")
+    locks = get_accelerator_locks(cpu_leases=0, timeout="60s")
     # split large iterations into smaller runs to avoid OOM / memory leak
     for i in range(args.max_itr):
         logger.info(
@@ -2197,7 +2197,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
         ),
         name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
     )
-    locks = get_accelerator_locks(0, 1, "20s")
+    locks = get_accelerator_locks(0, timeout="20s")
 
     args = init_hps(hps, model, symbol, args, client, alchemyEngine, logger)
     cutoff_date = _get_cutoff_date(args)

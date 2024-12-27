@@ -438,6 +438,10 @@ def gpu_util():
     mu = torch.cuda.memory_usage()
     return util, mu
 
+def mps_util():
+    dam = torch.mps.driver_allocated_memory()
+    cam = torch.mps.current_allocated_memory()
+    return dam, cam
 
 def wait_gpu(util_threshold=80, vram_threshold=80, stop_at=None):
     if stop_at is not None and time.time() > stop_at:
@@ -450,6 +454,19 @@ def wait_gpu(util_threshold=80, vram_threshold=80, stop_at=None):
         util_threshold,
         mu,
         vram_threshold,
+        keep_waiting,
+    )
+    return keep_waiting
+
+
+def wait_mps(stop_at=None):
+    if stop_at is not None and time.time() > stop_at:
+        return False
+    dam, cam = mps_util()
+    keep_waiting = cam > 0
+    get_logger().debug(
+        "mps driver allocated memory: %s, current allocated memory: %s, keep_waiting: %s",
+        dam, cam,
         keep_waiting,
     )
     return keep_waiting
