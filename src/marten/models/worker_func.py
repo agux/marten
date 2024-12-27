@@ -5,6 +5,7 @@ import hashlib
 import traceback
 import math
 import os
+import asyncio
 
 # OPENBLAS_NUM_THREADS = 1
 # os.environ["OPENBLAS_NUM_THREADS"] = f"{OPENBLAS_NUM_THREADS}"
@@ -24,7 +25,11 @@ from tenacity import (
 )
 
 from marten.data.worker_func import impute
-from marten.utils.worker import await_futures, scale_cluster_and_wait, restart_all_workers
+from marten.utils.worker import (
+    await_futures,
+    scale_cluster_and_wait,
+    restart_all_workers,
+)
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
 from marten.utils.trainer import select_device, get_accelerator_locks
@@ -544,28 +549,26 @@ def reg_search_params(params):
         params["trend_reg"] = round(params["trend_reg"], 5)
 
 
-def validate_hyperparams(args, df, covar_set_id, hps_id, params, locks):
+async def validate_hyperparams(args, df, covar_set_id, hps_id, params, locks):
     reg_params = params.copy()
     if args.model == "NeuralProphet":
         reg_search_params(reg_params)
+    loop = asyncio.get_running_loop()
     try:
-        loss_val = log_metrics_for_hyper_params(
-            args.symbol,
-            df,
-            reg_params,
-            args.epochs,
-            args.random_seed,
-            # select_device(
-            #     args.accelerator,
-            #     getattr(args, "gpu_util_threshold", None),
-            #     getattr(args, "gpu_ram_threshold", None),
-            # ),
-            args.accelerator,
-            covar_set_id,
-            hps_id,
-            args.early_stopping,
-            args.infer_holiday,
-            locks,
+        loss_val = loop.run_until_complete(
+            log_metrics_for_hyper_params(
+                args.symbol,
+                df,
+                reg_params,
+                args.epochs,
+                args.random_seed,
+                args.accelerator,
+                covar_set_id,
+                hps_id,
+                args.early_stopping,
+                args.infer_holiday,
+                locks,
+            )
         )
     except Exception as e:
         get_logger().error(
