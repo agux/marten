@@ -283,11 +283,12 @@ class BaseModel(ABC):
                 else:
                     time.sleep(0.5)
         try:
-            forecast = (
-                get_worker()
-                .loop.run_in_executor(None, self.nf.predict_insample)
-                .result()
-            )
+            forecast = self.nf.predict_insample()
+            # forecast = (
+            #     get_worker()
+            #     .loop.run_in_executor(None, self.nf.predict_insample)
+            #     .result()
+            # )
             # forecast = asyncio.wait_for(
             #     asyncio.get_running_loop().run_in_executor(
             #         None, self.nf.predict_insample
@@ -379,6 +380,12 @@ class BaseModel(ABC):
         return torch.get_num_threads()
         # return optimize_torch_on_cpu(self.torch_cpu_ratio())
 
+    async def _train_async(self, df: pd.DataFrame, **kwargs: Any) -> dict:
+        future = get_worker().io_loop.run_in_executor(
+            None, functools.partial(self._train, df, **kwargs)
+        )
+        return await future
+
     def train(self, df: pd.DataFrame, **kwargs: Any) -> dict:
         """
         Select the proper accelerator and train the model with the given data.
@@ -417,15 +424,13 @@ class BaseModel(ABC):
         self.model_args = kwargs
         start_time = time.time()
         # loop = asyncio.get_running_loop()
-        loop = get_worker().io_loop
+        # loop = get_worker().io_loop
         try:
             get_logger().debug("training with kwargs: %s", kwargs)
             # model_config = asyncio.wait_for(
             #     loop.run_in_executor(None, self._train, df, **kwargs), None
             # )
-            model_config = loop.run_in_executor(
-                None, functools.partial(self._train, df, **kwargs)
-            ).result()
+            model_config = self._train(df, **kwargs)
         except Exception as e:
             self.release_accelerator_lock()
             if is_cuda_error(e):
@@ -443,9 +448,10 @@ class BaseModel(ABC):
                 # model_config = asyncio.wait_for(
                 #     loop.run_in_executor(None, self._train, df, **kwargs), None
                 # )
-                model_config = loop.run_in_executor(
-                    None, functools.partial(self._train, df, **kwargs)
-                ).result()
+                # model_config = loop.run_in_executor(
+                #     None, functools.partial(self._train, df, **kwargs)
+                # ).result()
+                model_config = self._train(df, **kwargs)
             else:
                 get_logger().warning("encountered error with train params: %s", kwargs)
                 raise e
