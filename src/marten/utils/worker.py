@@ -48,6 +48,9 @@ class LocalWorkerPlugin(WorkerPlugin):
         DB_PORT = os.getenv("DB_PORT")
         DB_NAME = os.getenv("DB_NAME")
 
+        worker.io_loop
+        worker.loop.
+
         db_url = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
         worker.alchemyEngine = get_database_engine(db_url)

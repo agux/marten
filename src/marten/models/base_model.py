@@ -282,12 +282,17 @@ class BaseModel(ABC):
                 else:
                     time.sleep(0.5)
         try:
-            forecast = asyncio.wait_for(
-                asyncio.get_running_loop().run_in_executor(
-                    None, self.nf.predict_insample
-                ),
-                None,
+            forecast = (
+                get_worker()
+                .loop.run_in_executor(None, self.nf.predict_insample)
+                .result()
             )
+            # forecast = asyncio.wait_for(
+            #     asyncio.get_running_loop().run_in_executor(
+            #         None, self.nf.predict_insample
+            #     ),
+            #     None,
+            # )
         except Exception as e:
             get_logger().error(
                 "failed to predict insample: %s\n%s", e, traceback.format_exc()
@@ -410,12 +415,16 @@ class BaseModel(ABC):
             kwargs["devices"] = 1
         self.model_args = kwargs
         start_time = time.time()
-        loop = asyncio.get_running_loop()
+        # loop = asyncio.get_running_loop()
+        loop = get_worker().io_loop
         try:
             get_logger().debug("training with kwargs: %s", kwargs)
-            model_config = asyncio.wait_for(
-                loop.run_in_executor(None, self._train, df, **kwargs), None
-            )
+            # model_config = asyncio.wait_for(
+            #     loop.run_in_executor(None, self._train, df, **kwargs), None
+            # )
+            model_config = loop.run_in_executor(
+                None, self._train, df, **kwargs
+            ).result()
         except Exception as e:
             self.release_accelerator_lock()
             if is_cuda_error(e):
@@ -430,9 +439,12 @@ class BaseModel(ABC):
                 kwargs["devices"] = 1
                 self.model_args = kwargs
                 start_time = time.time()
-                model_config = asyncio.wait_for(
-                    loop.run_in_executor(None, self._train, df, **kwargs), None
-                )
+                # model_config = asyncio.wait_for(
+                #     loop.run_in_executor(None, self._train, df, **kwargs), None
+                # )
+                model_config = loop.run_in_executor(
+                    None, self._train, df, **kwargs
+                ).result()
             else:
                 get_logger().warning("encountered error with train params: %s", kwargs)
                 raise e
