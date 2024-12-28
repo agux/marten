@@ -549,11 +549,10 @@ def reg_search_params(params):
         params["trend_reg"] = round(params["trend_reg"], 5)
 
 
-async def validate_hyperparams(args, df, covar_set_id, hps_id, params, locks):
+def validate_hyperparams(args, df, covar_set_id, hps_id, params, locks):
     reg_params = params.copy()
     if args.model == "NeuralProphet":
         reg_search_params(reg_params)
-    # loop = asyncio.get_running_loop()
     try:
         loss_val = log_metrics_for_hyper_params(
             args.symbol,
@@ -643,14 +642,6 @@ def log_metrics_for_hyper_params(
     topk_covar = None
     if "topk_covar" in params:
         topk_covar = params["topk_covar"]
-        # params.pop("topk_covar")
-
-    # if topk_covar is not None:
-    # if "covar_dist" in params:
-    # df = select_randk_covars(df, ranked_features, params["covar_dist"], topk_covar)
-    # params.pop("covar_dist")
-    # else:
-    # df = select_topk_features(df, ranked_features, topk_covar)
 
     start_time = time.time()
     tag = None
@@ -689,26 +680,8 @@ def log_metrics_for_hyper_params(
                     if covar_set_id == 0
                     else "baseline,multivariate"
                 )
-            # dataset settings
-            # 'root_path': './dataset/ETT-small/',
-            # 'data_path': 'ETTm1.csv',
-            # 'data': 'ETTm1',
-            # 'seq_len': 200,
             params["pred_len"] = args.future_steps
-            # model settings
             params["train_epochs"] = epochs
-            # 'd_model': 128,
-            # 'd_core': 64,
-            # 'd_ff': 128,
-            # 'e_layers': 2,
-            # 'learning_rate': 0.0003,
-            # 'lradj': 'cosine',
-            # 'patience': 3,
-            # 'batch_size': 16,
-            # 'dropout': 0.0,
-            # 'activation': 'gelu',
-            # 'use_norm': True,
-            # system settings
             params["use_gpu"] = accelerator == True or accelerator == "gpu"
             m, last_metric = SOFTSPredictor.train(df, params, hpid, random_seed, True)
             m.cleanup()
