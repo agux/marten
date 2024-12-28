@@ -553,22 +553,20 @@ async def validate_hyperparams(args, df, covar_set_id, hps_id, params, locks):
     reg_params = params.copy()
     if args.model == "NeuralProphet":
         reg_search_params(reg_params)
-    loop = asyncio.get_running_loop()
+    # loop = asyncio.get_running_loop()
     try:
-        loss_val = loop.run_until_complete(
-            log_metrics_for_hyper_params(
-                args.symbol,
-                df,
-                reg_params,
-                args.epochs,
-                args.random_seed,
-                args.accelerator,
-                covar_set_id,
-                hps_id,
-                args.early_stopping,
-                args.infer_holiday,
-                locks,
-            )
+        loss_val = log_metrics_for_hyper_params(
+            args.symbol,
+            df,
+            reg_params,
+            args.epochs,
+            args.random_seed,
+            args.accelerator,
+            covar_set_id,
+            hps_id,
+            args.early_stopping,
+            args.infer_holiday,
+            locks,
         )
     except Exception as e:
         get_logger().error(

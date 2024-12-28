@@ -169,19 +169,16 @@ class BaseModel(ABC):
             case _:
                 return True
 
-    async def _lock_accelerator(self, accelerator) -> str:
+    def _lock_accelerator(self, accelerator) -> str:
         if accelerator == "cpu":
             return accelerator
         # get_logger().info("locking accelerator: %s", self.locks)
-        loop = asyncio.get_running_loop()
 
-        async def lock_device(device):
-            nonlocal accelerator, loop
+        def lock_device(device):
+            nonlocal accelerator
             if self.accelerator_lock is None and accelerator in (device, "auto"):
                 lock = self.locks[device]
-                acquired = await loop.run_in_executor(
-                    None, lock.acquire, f"{self.lock_wait_time}"
-                )
+                acquired = lock.acquire(f"{self.lock_wait_time}")
                 if acquired:
                     self.accelerator_lock = lock
                     get_logger().debug("lock acquired: %s", self.accelerator_lock.name)
@@ -192,7 +189,7 @@ class BaseModel(ABC):
 
             if accelerator == "mps":
                 dam, cam = mps_util()
-                await lock_device("mps")
+                lock_device("mps")
             else:
                 gu, _ = gpu_util()
                 if gu > 0 and self._check_cpu():
@@ -200,7 +197,7 @@ class BaseModel(ABC):
                 else:
                     if self.locks and "gpu" in self.locks.keys():
                         get_logger().debug("GPU Util:%s, trying GPU lock first", gu)
-                        await lock_device("gpu")
+                        lock_device("gpu")
                     else:
                         return "gpu"
 
@@ -210,10 +207,10 @@ class BaseModel(ABC):
             stop_at = time.time() + self.resource_wait_time
             if accelerator == "mps":
                 while wait_mps(stop_at):
-                    await asyncio.sleep(0.5)
+                    time.sleep(0.5)
             else:
                 while wait_gpu(gpu_ut, gpu_rt, stop_at):
-                    await asyncio.sleep(0.2)
+                    time.sleep(0.2)
 
             now = time.time()
             if now <= stop_at:
@@ -244,9 +241,7 @@ class BaseModel(ABC):
         accelerator = "gpu" if accelerator == "auto" else accelerator
 
         self.release_accelerator_lock()
-        accelerator = asyncio.get_running_loop().run_until_complete(
-            self._lock_accelerator(accelerator)
-        )
+        accelerator = self._lock_accelerator(accelerator)
         self.release_accelerator_lock(
             self.device_lock_release_delay
             if self.is_baseline(**self.model_args)
@@ -279,16 +274,20 @@ class BaseModel(ABC):
         #     if len(valid_losses) > 0
         #     else np.nan
         # )
-        loop = asyncio.get_running_loop()
         if kwargs["accelerator"] == "gpu":
             # without exclusive lock, it may fail due to insufficient GPU memory.
             while True:
-                if loop.run_until_complete(self._lock_accelerator("gpu")) == "gpu":
+                if self._lock_accelerator("gpu") == "gpu":
                     break
                 else:
                     time.sleep(0.5)
         try:
-            forecast = loop.run_until_complete(self.nf.predict_insample())
+            forecast = asyncio.wait_for(
+                asyncio.get_running_loop().run_in_executor(
+                    None, self.nf.predict_insample
+                ),
+                None,
+            )
         except Exception as e:
             get_logger().error(
                 "failed to predict insample: %s\n%s", e, traceback.format_exc()
@@ -414,7 +413,9 @@ class BaseModel(ABC):
         loop = asyncio.get_running_loop()
         try:
             get_logger().debug("training with kwargs: %s", kwargs)
-            model_config = loop.run_until_complete(self._train(df, **kwargs))
+            model_config = asyncio.wait_for(
+                loop.run_in_executor(None, self._train, df, **kwargs), None
+            )
         except Exception as e:
             self.release_accelerator_lock()
             if is_cuda_error(e):
@@ -429,7 +430,9 @@ class BaseModel(ABC):
                 kwargs["devices"] = 1
                 self.model_args = kwargs
                 start_time = time.time()
-                model_config = loop.run_until_complete(self._train(df, **kwargs))
+                model_config = asyncio.wait_for(
+                    loop.run_in_executor(None, self._train, df, **kwargs), None
+                )
             else:
                 get_logger().warning("encountered error with train params: %s", kwargs)
                 raise e

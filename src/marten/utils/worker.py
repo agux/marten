@@ -143,6 +143,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     power = local_machine_power()
     dask.config.set(
         {
+            "distributed.client.heartbeat": "1 minutes",
             "distributed.worker.memory.terminate": False,
             # NOTE restarting worker may cause distributed.lock to malfunction, setting None to its client.scheduler
             "distributed.worker.lifetime.duration": "1 hour",
