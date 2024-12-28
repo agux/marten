@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import logging
 import warnings
+import functools
 
 from neuralprophet import (
     set_random_seed as np_random_seed,
@@ -423,7 +424,7 @@ class BaseModel(ABC):
             #     loop.run_in_executor(None, self._train, df, **kwargs), None
             # )
             model_config = loop.run_in_executor(
-                None, self._train, df, **kwargs
+                None, functools.partial(self._train, df, **kwargs)
             ).result()
         except Exception as e:
             self.release_accelerator_lock()
@@ -443,7 +444,7 @@ class BaseModel(ABC):
                 #     loop.run_in_executor(None, self._train, df, **kwargs), None
                 # )
                 model_config = loop.run_in_executor(
-                    None, self._train, df, **kwargs
+                    None, functools.partial(self._train, df, **kwargs)
                 ).result()
             else:
                 get_logger().warning("encountered error with train params: %s", kwargs)
