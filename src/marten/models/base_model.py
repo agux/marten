@@ -583,6 +583,13 @@ class BaseModel(ABC):
         """
         df = df.copy()
         df.insert(0, "unique_id", "0")
+        if self.model_args["accelerator"] == "gpu":
+            # without exclusive lock, it may fail due to insufficient GPU memory.
+            while True:
+                if self._lock_accelerator("gpu") == "gpu":
+                    break
+                else:
+                    time.sleep(0.5)
         forecast = self._predict(df, **kwargs)
         # convert np.float32 type columns in forecast dataframe to native float,
         # to avoid `psycopg2.ProgrammingError: can't adapt type 'numpy.float32'`

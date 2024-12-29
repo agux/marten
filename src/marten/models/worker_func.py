@@ -493,6 +493,7 @@ def train(
     country=None,
     validate=True,
     save_model_file=False,
+    locks=None,
     **kwargs,
 ):
     worker = get_worker()
@@ -535,7 +536,7 @@ def train(
             config["max_steps"] = epochs
             config["h"] = args.future_steps
             metrics = model.train(
-                df, random_seed=random_seed, validate=validate, **config
+                df, random_seed=random_seed, validate=validate, locks=locks, **config
             )
             return (None, metrics)
 
@@ -1331,6 +1332,7 @@ def train_predict(
     country,
     validate,
     future_steps,
+    locks,
     **kwargs,
 ):
     try:
@@ -1344,6 +1346,7 @@ def train_predict(
             validate=validate,
             n_forecasts=future_steps,
             save_model_file=True,
+            locks=locks,
             **kwargs,
         )
 
@@ -1394,7 +1397,7 @@ def measure_needed_mem(df, hp):
 
 
 def forecast(
-    model, symbol, df, ranked_features, hps_metric, region, cutoff_date, group_id
+    model, symbol, df, ranked_features, hps_metric, region, cutoff_date, group_id, locks
 ):
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
@@ -1451,10 +1454,15 @@ def forecast(
         "dataframe augmented with covar_set_id %s: %s", covar_set_id, new_df.shape
     )
 
+    covar_columns = [col for col in new_df.columns if col not in ("ds", "y")]
+    n_covars = len(covar_columns)
+
     if "topk_covar" in hyperparams:
         hyperparams.pop("topk_covar")
     if "random_seed" not in hyperparams:
         hyperparams["random_seed"] = args.random_seed
+    if "num_covars" not in hyperparams:
+        hyperparams["num_covars"] = n_covars
 
     start_time = time.time()
     with worker_client() as client:
@@ -1475,8 +1483,9 @@ def forecast(
                 validate=True,
                 country=region,
                 changepoints_range=1.0,
+                locks=locks
                 # save_model_file=True,
-                **hyperparams,
+                ** hyperparams,
             )
         )
         # train with full dataset without validation split
@@ -1508,9 +1517,6 @@ def forecast(
     forecast, metrics_final = results[1][0], results[1][1]
 
     avg_loss = round((metrics["Loss_val"] + metrics_final["Loss"]) / 2.0, 5)
-
-    covar_columns = [col for col in new_df.columns if col not in ("ds", "y")]
-    n_covars = len(covar_columns)
 
     snapshot_id, horizons = save_forecast_snapshot(
         alchemyEngine,
@@ -1588,7 +1594,7 @@ def ensemble_topk_prediction(
     logger.info("Scaling dask cluster to %s", args.min_worker)
     scale_cluster_and_wait(client, args.min_worker)
     # client.cluster.scale(args.min_worker)
-
+    locks = get_accelerator_locks(cpu_leases=0, timeout="60s")
     futures = []
     for _, row in settings.iterrows():
         futures.append(
@@ -1602,6 +1608,7 @@ def ensemble_topk_prediction(
                 region,
                 cutoff_date,
                 group_id,
+                locks,
             )
         )
 
