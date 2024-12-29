@@ -755,10 +755,11 @@ def etf_list(etf_spot_df):
                 table_def_fund_etf_list_sina(), conn, df, ["exch", "symbol"]
             )
 
-        etf_spot_df.loc[etf_spot_df["code"].str.startswith("5"), "exch"] = "sh"
-        etf_spot_df.loc[etf_spot_df["code"].str.startswith("1"), "exch"] = "sz"
+        etf_spot_df.rename(columns={"code": "symbol"}, inplace=True)
+        etf_spot_df.loc[etf_spot_df["symbol"].str.startswith("5"), "exch"] = "sh"
+        etf_spot_df.loc[etf_spot_df["symbol"].str.startswith("1"), "exch"] = "sz"
 
-        df = df.merge(etf_spot_df, on=["code"], how="outer")
+        df = df.merge(etf_spot_df, on=["symbol"], how="outer")
 
         ## get historical data and holdings for each ETF
         futures = []
