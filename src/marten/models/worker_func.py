@@ -302,12 +302,12 @@ def fit_with_covar(
         return _func()
     except Exception as e:
         logger.error(
-            "failed to fit covar (locks:%s) %s @ %s.%s:\n%s",
+            "failed to fit covar (locks:%s) %s @ %s.%s",
             locks,
             cov_symbol,
             cov_table,
             feature,
-            traceback.format_exc(),
+            exc_info=True,
         )
         raise e
 
@@ -569,9 +569,7 @@ def validate_hyperparams(args, df, covar_set_id, hps_id, params, locks):
         )
     except Exception as e:
         get_logger().error(
-            "encountered error with train params: %s\n%s",
-            reg_params,
-            traceback.format_exc(),
+            "encountered error with train params: %s", reg_params, exc_info=True
         )
         raise e
     return (params, loss_val)
@@ -1360,7 +1358,7 @@ def train_predict(
                     df, random_seed=random_seed, h=future_steps
                 )
     except Exception as e:
-        get_logger().error(traceback.format_exc())
+        get_logger().error(e, exc_info=True)
         raise e
 
     return forecast, metrics

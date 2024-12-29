@@ -42,6 +42,7 @@ from marten.data.tabledef import (
     table_def_hk_index_spot_em,
     table_def_fund_etf_spot_em,
     table_def_index_spot_em,
+    table_def_index_spot_sina,
     table_def_fund_etf_perf_em,
     table_def_fund_etf_list_sina,
     table_def_fund_etf_daily_em,
@@ -375,7 +376,18 @@ def cn_index_daily(future_cn_index_list):
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
     cn_index_fulllist = pd.read_sql(
-        "SELECT symbol, src FROM index_spot_em", alchemyEngine
+        """
+            select
+                symbol, src
+            from
+                index_spot_em ise
+            union
+            select
+                right(symbol, length(symbol)-2) symbol,
+                left(symbol, 2) src
+            from
+                index_spot_sina iss
+        """, alchemyEngine
     )
     logger.info(
         "starting tasks on function stock_zh_index_daily_em(), length: %s",
@@ -478,17 +490,45 @@ def stock_zh_index_spot_em(symbol, src):
 def get_cn_index_list(cn_index_types):
     worker = get_worker()
     logger = worker.logger
-    logger.info("starting task on function stock_zh_index_spot_em()...")
+    logger.info(
+        "starting task on function stock_zh_index_spot_em() and stock_zh_index_spot_sina()..."
+    )
     ##loop thru cn_index_types and send off further tasks to client
     futures = []
     with worker_client() as client:
         for symbol, src in cn_index_types:
             futures.append(client.submit(stock_zh_index_spot_em, symbol, src))
             await_futures(futures, False)
-
+        futures.append(client.submit(stock_zh_index_spot_sina))
         await_futures(futures)
     return True
 
+def stock_zh_index_spot_sina():
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+    try:
+        sziss = ak.stock_zh_index_spot_sina()
+        sziss = sziss.rename(
+            columns={
+                "代码": "symbol",
+                "名称": "name",
+                "最新价": "close",
+                "涨跌幅": "change_rate",
+                "涨跌额": "change_amount",
+                "成交量": "volume",
+                "成交额": "amount",
+                "最高": "high",
+                "最低": "low",
+                "今开": "open",
+                "昨收": "prev_close",
+            }
+        )
+        with alchemyEngine.begin() as conn:
+            update_on_conflict(table_def_index_spot_sina(), conn, sziss, ["symbol"])
+        return len(sziss)
+    except Exception as e:
+        logger.error(f"failed to update index_spot_sina", exc_info=True)
+        raise e
 
 def calc_etf_metrics(symbol, end_date):
     worker = get_worker()

@@ -296,9 +296,7 @@ class BaseModel(ABC):
             #     None,
             # )
         except Exception as e:
-            get_logger().error(
-                "failed to predict insample: %s\n%s", e, traceback.format_exc()
-            )
+            get_logger().error("failed to predict insample: %s", e, exc_info=True)
             raise e
         finally:
             self.release_accelerator_lock()

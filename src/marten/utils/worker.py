@@ -402,7 +402,7 @@ def restart_all_workers(client: Client):
     try:
         client.restart(timeout="30s")
     except Exception as e:
-        get_logger().warning("client.restart() failed: %s\nTraceback:\n%s", e, traceback.format_exc())
+        get_logger().warning("client.restart() failed: %s", e, exc_info=True)
         workers = client.scheduler_info()["workers"]
         worker_names = [worker_info["name"] for worker_info in workers.values()]
         client.restart_workers(worker_names, timeout=45, raise_for_error=False)

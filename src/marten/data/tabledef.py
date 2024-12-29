@@ -629,6 +629,31 @@ def table_def_index_spot_em():
     )
 
 
+def table_def_index_spot_sina():
+    return Table(
+        "index_spot_sina",
+        MetaData(),
+        Column("symbol", Text, nullable=False),
+        Column("name", Text, nullable=False),
+        Column("open", Numeric),
+        Column("close", Numeric),
+        Column("prev_close", Numeric),
+        Column("high", Numeric),
+        Column("low", Numeric),
+        Column("change_rate", Numeric),
+        Column("change_amount", Numeric),
+        Column("volume", Numeric),
+        Column("amount", Numeric),
+        Column(
+            "last_modified",
+            DateTime(timezone=True),
+            default=func.current_timestamp(),
+            nullable=False,
+        ),
+        PrimaryKeyConstraint("symbol", name="index_spot_sina_pkey"),
+    )
+
+
 def table_def_fund_etf_perf_em():
     return Table(
         "fund_etf_perf_em",
