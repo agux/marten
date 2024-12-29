@@ -111,7 +111,7 @@ def select_randk_covars(df, ranked_features, covar_dist, k):
     #     df.columns,
     #     columns_to_keep,
     # )
-    return df[columns_to_keep]
+    return df[columns_to_keep].copy()
 
 
 def optimize_torch_on_gpu():

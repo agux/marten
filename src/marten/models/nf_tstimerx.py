@@ -74,18 +74,21 @@ class TSMixerxModel(BaseModel):
             return 40, 60
 
     def trainable_on_cpu(self, **kwargs: Any) -> bool:
-        if "topk_covar" not in kwargs:
+        if "num_covars" not in kwargs:
             return True
-        return math.pow(
-            (
-                kwargs["ff_dim"]
-                * kwargs["n_block"]
-                * kwargs["batch_size"]
-                * kwargs["input_size"]
-                * kwargs["topk_covar"]
-            ),
-            0.2,
-        ) < 70
+        return (
+            math.pow(
+                (
+                    kwargs["ff_dim"]
+                    * kwargs["n_block"]
+                    * kwargs["batch_size"]
+                    * kwargs["input_size"]
+                    * kwargs["num_covars"]
+                ),
+                0.2,
+            )
+            < 70
+        )
         # return True
 
     def torch_cpu_ratio(self) -> float:

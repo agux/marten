@@ -1029,22 +1029,28 @@ def _bayesopt_run(
         client.set_metadata(["workload_info", "workers"], nworker)
         client.set_metadata(["workload_info", "finished"], 0)
         for i, params in enumerate(params_batch):
-            new_df = df
+            new_df = df.copy()
             hpid, _ = get_hpid(params)
             priority = 1
+            if "topk_covar" in params:
+                if "covar_dist" in params:
+                    new_df = select_randk_covars(
+                        new_df,
+                        ranked_features,
+                        params["covar_dist"],
+                        params["topk_covar"],
+                    )
+                else:
+                    new_df = select_topk_features(
+                        new_df, ranked_features, params["topk_covar"]
+                    )
+            params["num_covars"] = len(
+                [c for c in new_df.columns if c not in ("ds", "y")]
+            )
             if model:
                 priority = (
                     priority + 1 if model.trainable_on_cpu(**params) else priority
                 )
-            if "topk_covar" in params:
-                if "covar_dist" in params:
-                    new_df = select_randk_covars(
-                        df, ranked_features, params["covar_dist"], params["topk_covar"]
-                    )
-                else:
-                    new_df = select_topk_features(
-                        df, ranked_features, params["topk_covar"]
-                    )
             future = client.submit(
                 validate_hyperparams,
                 args,
