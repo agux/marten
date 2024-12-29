@@ -1485,7 +1485,7 @@ def forecast(
                 changepoints_range=1.0,
                 locks=locks,
                 # save_model_file=True,
-                ** hyperparams,
+                **hyperparams,
             )
         )
         # train with full dataset without validation split
@@ -1506,6 +1506,7 @@ def forecast(
                 future_steps=args.future_steps,
                 changepoints_range=1.0,
                 accelerator="gpu" if args.accelerator else None,
+                locks=locks,
                 **hyperparams,
                 # resources={"MEMORY": worker_mem_needed},
             )
