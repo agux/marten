@@ -760,6 +760,9 @@ def etf_list(etf_spot_df):
         etf_spot_df.loc[etf_spot_df["symbol"].str.startswith("1"), "exch"] = "sz"
 
         df = df.merge(etf_spot_df, on=["symbol"], how="outer")
+        # Using combine_first() to merge columns
+        df.loc[:, "exch"] = df["exch_x"].combine_first(df["exch_y"])
+        df.drop(["exch_x", "exch_y"], axis=1, inplace=True)
 
         ## get historical data and holdings for each ETF
         futures = []
