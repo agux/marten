@@ -52,7 +52,6 @@ def merge_covar_df(
     feature,
     min_date,
     alchemyEngine,
-    sem,
 ):
 
     if anchor_symbol == cov_symbol and not cov_table.startswith("ta_"):
@@ -176,7 +175,6 @@ def fit_with_covar(
             feature,
             min_date,
             alchemyEngine,
-            sem,
         )
 
         if merged_df is None:
