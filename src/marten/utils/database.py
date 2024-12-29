@@ -26,7 +26,7 @@ def get_database_engine(url=None, pool_size=None) -> Engine:
         pool_recycle=3600,
         pool_size=pool_size if pool_size else 1,
         pool_pre_ping=True,
-        use_lifo=True,
+        pool_use_lifo=True,
     )
     # if pool_size is None or pool_size==1:
     #     return create_engine(url, poolclass=NullPool, pool_pre_ping=True)
