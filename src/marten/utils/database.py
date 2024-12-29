@@ -10,6 +10,7 @@ from sqlalchemy import (
     text,
 )
 
+
 def get_database_engine(url=None, pool_size=None) -> Engine:
     if url is None:
         load_dotenv()  # take environment variables from .env.
@@ -20,17 +21,20 @@ def get_database_engine(url=None, pool_size=None) -> Engine:
         DB_NAME = os.getenv("DB_NAME")
         url = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-    if pool_size is None or pool_size==1:
-        return create_engine(
-            url,
-            poolclass=NullPool,
-        )
-    else:
-        return create_engine(
-            url,
-            pool_recycle=3600,
-            pool_size=pool_size,
-        )
+    return create_engine(
+        url,
+        pool_recycle=3600,
+        pool_size=pool_size if pool_size else 1,
+        pool_pre_ping=True,
+        use_lifo=True,
+    )
+    # if pool_size is None or pool_size==1:
+    #     return create_engine(url, poolclass=NullPool, pool_pre_ping=True)
+    # else:
+    #     return create_engine(
+    #         url, pool_recycle=3600, pool_size=pool_size, pool_pre_ping=True
+    #     )
+
 
 from sqlalchemy import text
 

@@ -60,6 +60,16 @@ def calc_ta():
         logger.info("%s US indices", len(us_index_list))
         total += len(us_index_list)
     with worker_client() as client:
+        for symbol in bond_list["symbol"]:
+            futures.append(
+                client.submit(
+                    calc_ta_for,
+                    symbol,
+                    "bond_zh_hs_daily",
+                    key=f"{calc_ta_for.__name__}_BOND--{symbol.lower()}",
+                )
+            )
+            await_futures(futures, False, multiplier=1.5)
         for symbol in etf_list["symbol"]:
             futures.append(
                 client.submit(
@@ -87,16 +97,6 @@ def calc_ta():
                     symbol,
                     "us_index_daily_sina",
                     key=f"{calc_ta_for.__name__}_US_INDEX--{symbol.lower()}",
-                )
-            )
-            await_futures(futures, False, multiplier=1.5)
-        for symbol in bond_list["symbol"]:
-            futures.append(
-                client.submit(
-                    calc_ta_for,
-                    symbol,
-                    "bond_zh_hs_daily",
-                    key=f"{calc_ta_for.__name__}_BOND--{symbol.lower()}",
                 )
             )
             await_futures(futures, False, multiplier=1.5)
