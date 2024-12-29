@@ -731,7 +731,7 @@ def get_etf_daily(symbol):
         raise e
 
 
-def etf_list():
+def etf_list(etf_spot_df):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
     try:
@@ -754,6 +754,11 @@ def etf_list():
             update_on_conflict(
                 table_def_fund_etf_list_sina(), conn, df, ["exch", "symbol"]
             )
+
+        etf_spot_df.loc[etf_spot_df["code"].str.startswith("5"), "exch"] = "sh"
+        etf_spot_df.loc[etf_spot_df["code"].str.startswith("1"), "exch"] = "sz"
+
+        df = df.merge(etf_spot_df, on=["code"], how="outer")
 
         ## get historical data and holdings for each ETF
         futures = []
@@ -898,7 +903,7 @@ def etf_spot():
         with alchemyEngine.begin() as conn:
             update_on_conflict(table_def_fund_etf_spot_em(), conn, df, ["code", "date"])
 
-        return len(df)
+        return df[["code", "name", "date"]]
     except Exception as e:
         logger.exception("failed to get ETF spot data")
 
@@ -1521,7 +1526,8 @@ def fund_holding(symbol):
     while year >= last_year:
         try:
             if fund_type == "指数型-固收":  ## Bonds
-                df = EastMoneyAPI.fund_portfolio_bond_hold_em(symbol=symbol, date=year)
+                # df = EastMoneyAPI.fund_portfolio_bond_hold_em(symbol=symbol, date=year)
+                df = ak.fund_portfolio_bond_hold_em(symbol=symbol, date=year)
                 df.rename(
                     columns={
                         "序号": "serial_number",
@@ -1667,7 +1673,9 @@ def impute(df, random_seed, client=None):
         futures = []
         for na_col in na_cols:
             df_na = df[["ds", na_col]]
-            futures.append(client.submit(_neural_impute, df_na, random_seed, priority=100))
+            futures.append(
+                client.submit(_neural_impute, df_na, random_seed, priority=100)
+            )
         return client.gather(futures)
 
     if client is not None:

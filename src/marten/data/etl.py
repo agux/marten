@@ -134,10 +134,10 @@ def main(_args):
 
     run(get_fund_dividend_events, priority=1)
 
-    run(etf_spot)
+    future_etf_spot = run(etf_spot)
     run(etf_perf)
 
-    future_etf_list = run(etf_list, priority=1)
+    future_etf_list = run(etf_list, future_etf_spot, priority=1)
     future_bond_ir = run(bond_ir, priority=1)
 
     run(update_etf_metrics, future_etf_list, future_bond_ir)
