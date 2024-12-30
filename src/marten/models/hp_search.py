@@ -420,8 +420,8 @@ def _pair_covar_metrics(
         )
         # if too much pending task, then slow down for the tasks to be digested
         # await_futures(covar_fut, False)
-    wait(covar_fut)
-    # await_futures(covar_fut, hard_wait=True)
+    # wait(covar_fut)
+    await_futures(covar_fut, hard_wait=True)
 
 
 def _load_covar_set(covar_set_id, model, alchemyEngine):
