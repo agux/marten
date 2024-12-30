@@ -39,6 +39,7 @@ from marten.data.worker_func import (
     get_stock_bond_ratio_index,
     get_fund_dividend_events,
     interbank_rate,
+    option_qvix,
 )
 
 # module_path = os.getenv("LOCAL_AKSHARE_DEV_MODULE")
@@ -165,6 +166,8 @@ def main(_args):
     run(cn_bond_index)
 
     run(interbank_rate)
+
+    run(option_qvix)
 
     await_futures(futures)
     logger.info("ETL Time taken: %s seconds", time.time() - t_start)

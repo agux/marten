@@ -232,8 +232,8 @@ class spot_symbol_table_sge(Base):
     product = Column(Text, primary_key=True)
 
 
-class spot_hist_sge(Base):
-    __tablename__ = "spot_hist_sge"
+class table_def_option_qvix(Base):
+    __tablename__ = "option_qvix"
     __table_args__ = (
         PrimaryKeyConstraint("symbol", "date"),
         Index(
@@ -241,11 +241,26 @@ class spot_hist_sge(Base):
             desc("date"),
             postgresql_using="btree",
         ),
+    )
+
+    symbol = Column(Text)
+    date = Column(Date)
+    open = Column(Numeric, nullable=True)
+    close = Column(Numeric, nullable=True)
+    high = Column(Numeric, nullable=True)
+    low = Column(Numeric, nullable=True)
+    last_modified = Column(
+        DateTime(timezone=True), default=func.current_timestamp(), nullable=True
+    )
+
+
+class spot_hist_sge(Base):
+    __tablename__ = "spot_hist_sge"
+    __table_args__ = (
+        PrimaryKeyConstraint("symbol", "date"),
         Index(
-            "spot_hist_sge_symbol_idx",
-            "symbol",
-            "date",
-            unique=True,
+            "spot_hist_sge_date_idx",
+            desc("date"),
             postgresql_using="btree",
         ),
     )

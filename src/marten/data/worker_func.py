@@ -47,6 +47,7 @@ from marten.data.tabledef import (
     table_def_fund_etf_list_sina,
     table_def_fund_etf_daily_em,
     table_def_bond_metrics_em,
+    table_def_option_qvix,
     bond_zh_hs_spot,
     bond_zh_hs_daily,
     stock_zh_a_spot_em,
@@ -195,6 +196,47 @@ def update_us_indices(symbol):
         )
         raise e
 
+def option_qvix():
+    worker = get_worker()
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
+
+    def get_qvix(qvix_func):
+        nonlocal logger
+        try:
+            return qvix_func()
+        except Exception:
+            logger.warning(
+                "failed to get qvix %s: %s", qvix_func.__name__, e, exc_info=True
+            )
+            return pd.DataFrame()
+
+    try:
+        qvix50 = get_qvix(ak.index_option_50etf_qvix)
+        if not qvix50.empty:
+            with alchemyEngine.connect() as conn:
+                latest_date = get_max_for_column(conn, "50etf", "option_qvix")
+            if latest_date:
+                ## keep rows only with `date` later than the latest record in database.
+                qvix50 = qvix50[qvix50["date"] > (latest_date - timedelta(days=10))]
+            qvix50.insert(0, "symbol", "50etf")
+
+        qvix300 = get_qvix(ak.index_option_300etf_qvix)
+        if not qvix300.empty:
+            with alchemyEngine.connect() as conn:
+                latest_date = get_max_for_column(conn, "300etf", "option_qvix")
+            if latest_date:
+                qvix300 = qvix300[qvix300["date"] > (latest_date - timedelta(days=10))]
+            qvix300.insert(0, "symbol", "300etf")
+
+        qvix = pd.concat([qvix50, qvix300], ignore_index=True)
+        qvix.replace({np.nan: None}, inplace=True)
+
+        with alchemyEngine.begin() as conn:
+            update_on_conflict(table_def_option_qvix, conn, qvix, ["symbol", "date"])
+        return len(qvix)
+    except Exception as e:
+        logger.error("failed to get option qvix: %s", e, exc_info=True)
+        raise e
 
 def bond_spot():
     worker = get_worker()
