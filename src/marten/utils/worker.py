@@ -324,12 +324,12 @@ def await_futures(
     if until_all_completed:
         if task_timeout is not None and shared_vars is not None:
             while num is not None and num > 0:
-                time.sleep(random_seconds(2 ** (num - 1), 2**num, 128))
+                time.sleep(random_seconds(num>>5, num>>4, 30))
                 num = handle_task_timeout(futures, task_timeout, shared_vars)
         else:
             get_logger().debug("waiting until all futures complete: %s", num)
             while num > 0:
-                time.sleep(random_seconds(2 ** (num - 1), 2**num, 128))
+                time.sleep(random_seconds(num>>5, num>>4, 30))
                 if hard_wait:
                     get_results(futures)
                 num = num_undone(futures, shared_vars)
