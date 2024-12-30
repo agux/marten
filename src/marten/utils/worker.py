@@ -197,7 +197,8 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     #     maximum=max_worker if max_worker > 0 else multiprocessing.cpu_count(),
     # )
     client = Client(
-        cluster, direct_to_workers=True, connection_limit=4096, security=False
+        cluster, direct_to_workers=True, connection_limit=4096, 
+        # security=False
     )
     client.register_plugin(LocalWorkerPlugin(name, args))
     client.forward_logging()
