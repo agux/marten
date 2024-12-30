@@ -143,7 +143,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     power = local_machine_power()
     dask.config.set(
         {
-            # "distributed.client.heartbeat": "1 minutes",
+            "distributed.client.heartbeat": "5s",
             "distributed.worker.memory.terminate": False,
             # NOTE restarting worker may cause distributed.lock to malfunction, setting None to its client.scheduler
             # "distributed.worker.lifetime.duration": "1 hour",
@@ -161,7 +161,8 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
             "distributed.scheduler.worker-saturation": 0.0001,
             "distributed.scheduler.locks.lease-timeout": "15 minutes",
             "distributed.comm.retry.count": 10,
-            "distributed.comm.timeouts.connect": 120,
+            "distributed.comm.timeouts.connect": "120s",
+            "distributed.comm.timeouts.tcp": "600s",
             "distributed.nanny.pre-spawn-environ.MALLOC_TRIM_THRESHOLD_": 0,
             "distributed.nanny.environ.MALLOC_TRIM_THRESHOLD_": 0,
             "distributed.admin.log-length": 0,
@@ -195,7 +196,9 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     #     ),
     #     maximum=max_worker if max_worker > 0 else multiprocessing.cpu_count(),
     # )
-    client = Client(cluster)
+    client = Client(
+        cluster, direct_to_workers=True, connection_limit=4096, security=False
+    )
     client.register_plugin(LocalWorkerPlugin(name, args))
     client.forward_logging()
     get_logger(name).info(
@@ -398,6 +401,7 @@ def hps_task_callback(future: Future):
 
 #     future.client.restart_workers()
 
+
 def restart_all_workers(client: Client):
     try:
         client.restart(timeout="30s")
@@ -455,10 +459,12 @@ def gpu_util():
     mu = torch.cuda.memory_usage()
     return util, mu
 
+
 def mps_util():
     dam = torch.mps.driver_allocated_memory()
     cam = torch.mps.current_allocated_memory()
     return dam, cam
+
 
 def wait_gpu(util_threshold=80, vram_threshold=80, stop_at=None):
     if stop_at is not None and time.time() > stop_at:
@@ -483,7 +489,8 @@ def wait_mps(stop_at=None):
     keep_waiting = cam > 0
     get_logger().debug(
         "mps driver allocated memory: %s, current allocated memory: %s, keep_waiting: %s",
-        dam, cam,
+        dam,
+        cam,
         keep_waiting,
     )
     return keep_waiting
@@ -539,7 +546,7 @@ def workload_stage():
         return stage
 
 
-def scale_cluster_and_wait(client: Client, n_workers: int, timeout: int=60):
+def scale_cluster_and_wait(client: Client, n_workers: int, timeout: int = 60):
     """
     Scale the Dask cluster to the specified number of workers and wait until all workers are ready.
 

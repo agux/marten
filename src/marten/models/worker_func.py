@@ -52,6 +52,7 @@ def merge_covar_df(
     feature,
     min_date,
     alchemyEngine,
+    sem=None,
 ):
 
     if anchor_symbol == cov_symbol and not cov_table.startswith("ta_"):
@@ -125,15 +126,15 @@ def merge_covar_df(
                 "cutoff_date": cutoff_date,
             }
 
-    # if sem:
-    #     with sem:
-    #         with alchemyEngine.connect() as conn:
-    #             cov_symbol_df = pd.read_sql(
-    #                 query, conn, params=params, parse_dates=["ds"]
-    #             )
-    # else:
-    #     with alchemyEngine.connect() as conn:
-    #         cov_symbol_df = pd.read_sql(query, conn, params=params, parse_dates=["ds"])
+    if sem:
+        with sem:
+            with alchemyEngine.connect() as conn:
+                cov_symbol_df = pd.read_sql(
+                    query, conn, params=params, parse_dates=["ds"]
+                )
+    else:
+        with alchemyEngine.connect() as conn:
+            cov_symbol_df = pd.read_sql(query, conn, params=params, parse_dates=["ds"])
 
     with alchemyEngine.connect() as conn:
         cov_symbol_df = pd.read_sql(query, conn, params=params, parse_dates=["ds"])
@@ -175,6 +176,7 @@ def fit_with_covar(
             feature,
             min_date,
             alchemyEngine,
+            sem,
         )
 
         if merged_df is None:
@@ -1395,7 +1397,7 @@ def measure_needed_mem(df, hp):
 
 
 def forecast(
-    model, symbol, df, ranked_features, hps_metric, region, cutoff_date, group_id, locks
+    model, symbol, df, ranked_features, hps_metric, region, cutoff_date, group_id, sem, locks
 ):
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
@@ -1435,6 +1437,7 @@ def forecast(
             hps_metric["feature"],
             df["ds"].min().strftime("%Y-%m-%d"),
             alchemyEngine,
+            sem,
         )
     else:
         if hps_metric["sub_topk"] is None:
@@ -1607,7 +1610,8 @@ def ensemble_topk_prediction(
                 region,
                 cutoff_date,
                 group_id,
-                locks,
+                sem=None,
+                locks=locks,
             )
         )
 
