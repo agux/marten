@@ -262,7 +262,12 @@ def configure_parser(parser):
         default=0,
         help=("Port number for the scheduler. " "Defaults to 0 (a random port will be selected)"),
     )
-
+    parser.add_argument(
+        "--asset_type",
+        choices=["stock", "index", "ETF"],
+        default="ETF",
+        help="Asset type of the symbol(s). Defaults to ETF.",
+    )
     parser.add_argument(
         "symbols", type=str, nargs="+", help="Array of asset symbols to be predicted."
     )

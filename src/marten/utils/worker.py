@@ -336,7 +336,7 @@ def await_futures(
                 get_logger().debug("undone futures: %s", num)
                 log_futures(futures)
     elif num > multiprocessing.cpu_count() * multiplier:
-        delta = num - multiprocessing.cpu_count() * multiplier
+        delta = int(num - multiprocessing.cpu_count() * multiplier)
         time.sleep(random_seconds(delta>>6, delta>>5, 30))
 
         if task_timeout is not None and shared_vars is not None:
