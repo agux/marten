@@ -160,6 +160,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
             "distributed.scheduler.worker-ttl": "8 hours",
             "distributed.scheduler.worker-saturation": 0.0001,
             "distributed.scheduler.locks.lease-timeout": "15 minutes",
+            "distributed.scheduler.validate": True,
             "distributed.comm.retry.count": 10,
             "distributed.comm.timeouts.connect": "120s",
             "distributed.comm.timeouts.tcp": "600s",
@@ -167,6 +168,8 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
             "distributed.nanny.environ.MALLOC_TRIM_THRESHOLD_": 0,
             "distributed.admin.log-length": 0,
             "distributed.admin.low-level-log-length": 0,
+            "distributed.admin.system-monitor.log-length": 0,
+            "distributed.admin.event-loop": "asyncio",  # tornado, asyncio, or uvloop
         }
     )
     mem_limit = os.getenv("dask_worker_memory_limit")
@@ -197,7 +200,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     #     maximum=max_worker if max_worker > 0 else multiprocessing.cpu_count(),
     # )
     client = Client(
-        cluster, direct_to_workers=True, connection_limit=4096, 
+        cluster, direct_to_workers=False, connection_limit=4096, 
         # security=False
     )
     client.register_plugin(LocalWorkerPlugin(name, args))
@@ -210,7 +213,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     return client
 
 
-def get_result(future):
+def get_result(future: Future):
     try:
         r = future.result()
         return r
