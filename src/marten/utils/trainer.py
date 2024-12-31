@@ -148,3 +148,13 @@ def optimize_torch_on_cpu(
 
     # Enable cuDNN auto-tuner
     # torch.backends.cudnn.benchmark = True
+
+
+def remove_singular_variables(df):
+    # Identify variables with singular values
+    singular_vars = [col for col in df.columns if df[col].nunique() == 1]
+    if singular_vars:
+        get_logger().debug("Removing variables with singular values: %s", singular_vars)
+        # Drop singular variables
+        df = df.drop(columns=singular_vars)
+    return df

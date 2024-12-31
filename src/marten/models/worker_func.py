@@ -32,7 +32,11 @@ from marten.utils.worker import (
 )
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
-from marten.utils.trainer import select_device, get_accelerator_locks
+from marten.utils.trainer import (
+    select_device,
+    get_accelerator_locks,
+    remove_singular_variables,
+)
 from marten.utils.softs import SOFTSPredictor, baseline_config
 from marten.utils.database import columns_with_prefix
 from marten.utils.neuralprophet import (
@@ -261,6 +265,7 @@ def fit_with_covar(
                             cov_table,
                             feature,
                         )
+                        merged_df = remove_singular_variables(merged_df)
                         merged_df, impute_df = model.impute(merged_df, **config)
                         merged_df.dropna(axis=1, how="any", inplace=True)
                         impute_df.dropna(axis=1, how="all", inplace=True)
