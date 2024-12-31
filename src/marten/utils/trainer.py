@@ -157,4 +157,4 @@ def remove_singular_variables(df):
         get_logger().debug("Removing variables with singular values: %s", singular_vars)
         # Drop singular variables
         df = df.drop(columns=singular_vars)
-    return df
+    return df, singular_vars

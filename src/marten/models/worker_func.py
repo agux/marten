@@ -265,7 +265,15 @@ def fit_with_covar(
                             cov_table,
                             feature,
                         )
-                        merged_df = remove_singular_variables(merged_df)
+                        merged_df, singular_vars = remove_singular_variables(merged_df)
+                        if len(singular_vars) > 0:
+                            logger.warning(
+                                "%s @ %s.%s: these singular variables cannot be imputed: %s",
+                                cov_symbol,
+                                cov_table,
+                                feature,
+                                singular_vars,
+                            )
                         merged_df, impute_df = model.impute(merged_df, **config)
                         merged_df.dropna(axis=1, how="any", inplace=True)
                         impute_df.dropna(axis=1, how="all", inplace=True)
@@ -1402,7 +1410,16 @@ def measure_needed_mem(df, hp):
 
 
 def forecast(
-    model, symbol, df, ranked_features, hps_metric, region, cutoff_date, group_id, sem, locks
+    model,
+    symbol,
+    df,
+    ranked_features,
+    hps_metric,
+    region,
+    cutoff_date,
+    group_id,
+    sem,
+    locks,
 ):
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
