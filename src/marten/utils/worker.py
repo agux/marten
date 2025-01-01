@@ -141,6 +141,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     # setting worker resources in environment variable for restarted workers
     # os.environ["DASK_DISTRIBUTED__WORKER__RESOURCES__POWER"] = str(local_machine_power())
     power = local_machine_power()
+    dask.config.set(scheduler="processes")
     dask.config.set(
         {
             "distributed.client.heartbeat": "5s",
