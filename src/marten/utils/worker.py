@@ -186,7 +186,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
         processes=True,
         dashboard_address=":8787" if dashboard_port is None else f":{dashboard_port}",
         worker_dashboard_address=":0",
-        silence_logs=logging.info,
+        silence_logs=logging.INFO,
         # memory_limit="2GB",
         memory_limit=mem_limit if mem_limit else 0,  # 0=no limit
     )
