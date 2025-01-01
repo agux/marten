@@ -1713,6 +1713,15 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
                 "pvo",
             ],
         ),
+        "Option_QVIX": (
+            "option_qvix_view",
+            [
+                "open",
+                "high",
+                "low",
+                "close",
+            ],
+        ),
     }
 
     # TODO prep options

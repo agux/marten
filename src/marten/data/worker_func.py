@@ -228,7 +228,82 @@ def option_qvix():
                 qvix300 = qvix300[qvix300["date"] > (latest_date - timedelta(days=10))]
             qvix300.insert(0, "symbol", "300etf")
 
-        qvix = pd.concat([qvix50, qvix300], ignore_index=True)
+        qvix1000 = get_qvix(ak.index_option_1000index_qvix)
+        if not qvix1000.empty:
+            with alchemyEngine.connect() as conn:
+                latest_date = get_max_for_column(conn, "1000index", "option_qvix")
+            if latest_date:
+                qvix1000 = qvix1000[
+                    qvix1000["date"] > (latest_date - timedelta(days=10))
+                ]
+            qvix1000.insert(0, "symbol", "1000index")
+
+        qvix100 = get_qvix(ak.index_option_100etf_qvix)
+        if not qvix100.empty:
+            with alchemyEngine.connect() as conn:
+                latest_date = get_max_for_column(conn, "100etf", "option_qvix")
+            if latest_date:
+                qvix100 = qvix100[qvix100["date"] > (latest_date - timedelta(days=10))]
+            qvix100.insert(0, "symbol", "100etf")
+
+        qvix300index = get_qvix(ak.index_option_300index_qvix)
+        if not qvix300index.empty:
+            with alchemyEngine.connect() as conn:
+                latest_date = get_max_for_column(conn, "300index", "option_qvix")
+            if latest_date:
+                qvix300index = qvix300index[
+                    qvix300index["date"] > (latest_date - timedelta(days=10))
+                ]
+            qvix300index.insert(0, "symbol", "300index")
+
+        qvix500 = get_qvix(ak.index_option_500etf_qvix)
+        if not qvix500.empty:
+            with alchemyEngine.connect() as conn:
+                latest_date = get_max_for_column(conn, "500etf", "option_qvix")
+            if latest_date:
+                qvix500 = qvix500[qvix500["date"] > (latest_date - timedelta(days=10))]
+            qvix500.insert(0, "symbol", "500etf")
+
+        qvix50index = get_qvix(ak.index_option_50index_qvix)
+        if not qvix50index.empty:
+            with alchemyEngine.connect() as conn:
+                latest_date = get_max_for_column(conn, "50index", "option_qvix")
+            if latest_date:
+                qvix50index = qvix50index[
+                    qvix50index["date"] > (latest_date - timedelta(days=10))
+                ]
+            qvix50index.insert(0, "symbol", "50index")
+
+        cyb = get_qvix(ak.index_option_cyb_qvix)
+        if not cyb.empty:
+            with alchemyEngine.connect() as conn:
+                latest_date = get_max_for_column(conn, "cyb", "option_qvix")
+            if latest_date:
+                cyb = cyb[cyb["date"] > (latest_date - timedelta(days=10))]
+            cyb.insert(0, "symbol", "cyb")
+
+        kcb = get_qvix(ak.index_option_kcb_qvix)
+        if not kcb.empty:
+            with alchemyEngine.connect() as conn:
+                latest_date = get_max_for_column(conn, "kcb", "option_qvix")
+            if latest_date:
+                kcb = kcb[kcb["date"] > (latest_date - timedelta(days=10))]
+            kcb.insert(0, "symbol", "kcb")
+
+        qvix = pd.concat(
+            [
+                qvix50,
+                qvix300,
+                qvix1000,
+                qvix100,
+                qvix300index,
+                qvix500,
+                qvix50index,
+                cyb,
+                kcb,
+            ],
+            ignore_index=True,
+        )
         qvix.replace({np.nan: None}, inplace=True)
 
         with alchemyEngine.begin() as conn:

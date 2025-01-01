@@ -184,6 +184,8 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
         threads_per_worker=threads,
         processes=True,
         dashboard_address=":8787" if dashboard_port is None else f":{dashboard_port}",
+        worker_dashboard_address=":0",
+        silence_logs=logging.info,
         # memory_limit="2GB",
         memory_limit=mem_limit if mem_limit else 0,  # 0=no limit
     )
@@ -200,7 +202,9 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     #     maximum=max_worker if max_worker > 0 else multiprocessing.cpu_count(),
     # )
     client = Client(
-        cluster, direct_to_workers=False, connection_limit=4096, 
+        cluster,
+        direct_to_workers=False,
+        connection_limit=4096,
         # security=False
     )
     client.register_plugin(LocalWorkerPlugin(name, args))
@@ -327,12 +331,12 @@ def await_futures(
     if until_all_completed:
         if task_timeout is not None and shared_vars is not None:
             while num is not None and num > 0:
-                time.sleep(random_seconds(num>>5, num>>4, 30))
+                time.sleep(random_seconds(num >> 5, num >> 4, 30))
                 num = handle_task_timeout(futures, task_timeout, shared_vars)
         else:
             get_logger().debug("waiting until all futures complete: %s", num)
             while num > 0:
-                time.sleep(random_seconds(num>>5, num>>4, 30))
+                time.sleep(random_seconds(num >> 5, num >> 4, 30))
                 if hard_wait:
                     get_results(futures)
                 num = num_undone(futures, shared_vars)
@@ -340,7 +344,7 @@ def await_futures(
                 log_futures(futures)
     elif num > multiprocessing.cpu_count() * multiplier:
         delta = int(num - multiprocessing.cpu_count() * multiplier)
-        time.sleep(random_seconds(delta>>6, delta>>5, 30))
+        time.sleep(random_seconds(delta >> 6, delta >> 5, 30))
 
         if task_timeout is not None and shared_vars is not None:
             handle_task_timeout(futures, task_timeout, shared_vars)
