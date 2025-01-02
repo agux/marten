@@ -19,7 +19,10 @@ from dask.distributed import (
     Future,
     Lock,
     Semaphore,
+    as_completed,
 )
+
+from typing import List
 
 from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
@@ -233,7 +236,7 @@ def get_results(futures):
         get_result(f)
 
 
-def num_undone(futures, shared_vars):
+def num_undone(futures: List[Future], shared_vars):
     undone = 0
     len_before = len(futures)
     if isinstance(futures, list):
@@ -245,7 +248,6 @@ def num_undone(futures, shared_vars):
                 futures.remove(f)
             else:
                 undone += 1
-
     elif isinstance(futures, dict):
         keys_to_remove = []
         for k in futures.keys():
@@ -320,7 +322,7 @@ def log_futures(futures):
 
 
 def await_futures(
-    futures,
+    futures: List[Future],
     until_all_completed=True,
     task_timeout=None,
     shared_vars=None,
@@ -336,13 +338,17 @@ def await_futures(
                 num = handle_task_timeout(futures, task_timeout, shared_vars)
         else:
             get_logger().debug("waiting until all futures complete: %s", num)
-            while num > 0:
-                time.sleep(random_seconds(num >> 5, num >> 4, 30))
-                if hard_wait:
-                    get_results(futures)
-                num = num_undone(futures, shared_vars)
-                get_logger().debug("undone futures: %s", num)
-                log_futures(futures)
+            for batch in as_completed(futures[:]).batches():
+                for future in batch:
+                    get_result(future)
+                    futures.remove(future)
+            # while num > 0:
+            #     time.sleep(random_seconds(num >> 5, num >> 4, 30))
+            #     if hard_wait:
+            #         get_results(futures)
+            #     num = num_undone(futures, shared_vars)
+            #     get_logger().debug("undone futures: %s", num)
+            #     log_futures(futures)
     elif num > multiprocessing.cpu_count() * multiplier:
         delta = int(num - multiprocessing.cpu_count() * multiplier)
         time.sleep(random_seconds(delta >> 6, delta >> 5, 30))

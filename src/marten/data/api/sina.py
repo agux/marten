@@ -1,7 +1,7 @@
 import requests
 import pandas as pd
 import datetime
-from py_mini_racer import py_mini_racer
+import py_mini_racer
 
 from akshare.stock.cons import hk_js_decode
 

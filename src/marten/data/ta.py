@@ -9,6 +9,7 @@ from stock_indicators.indicators.common.quote import Quote
 from stock_indicators.indicators.common.enums import PeriodSize
 
 from marten.utils.worker import await_futures
+from marten.utils.database import has_column
 from marten.data.db import update_on_conflict
 from marten.data.tabledef import (
     ta_ma,
@@ -45,20 +46,41 @@ def calc_ta():
         etf_list = pd.read_sql("select distinct symbol from fund_etf_daily_em", conn)
         logger.info("%s ETF", len(etf_list))
         total += len(etf_list)
+
         cn_index_list = pd.read_sql("SELECT distinct symbol FROM index_daily_em", conn)
         logger.info("%s CN indices", len(cn_index_list))
         total += len(cn_index_list)
+
         bond_list = pd.read_sql("select distinct symbol from bond_zh_hs_daily", conn)
         logger.info("%s bonds", len(bond_list))
         total += len(bond_list)
+
         stock_list = pd.read_sql("select distinct symbol from stock_zh_a_hist_em", conn)
         logger.info("%s stocks", len(stock_list))
         total += len(stock_list)
+
         us_index_list = pd.read_sql(
             "select distinct symbol from us_index_daily_sina", conn
         )
         logger.info("%s US indices", len(us_index_list))
         total += len(us_index_list)
+
+        hk_index_list = pd.read_sql(
+            "select distinct symbol from hk_index_daily_em", conn
+        )
+        logger.info("%s HK indices", len(hk_index_list))
+        total += len(hk_index_list)
+
+        option_qvix_list = pd.read_sql("select distinct symbol from option_qvix", conn)
+        logger.info("%s Option QVIX", len(option_qvix_list))
+        total += len(option_qvix_list)
+
+        spot_hist_sge_list = pd.read_sql(
+            "select distinct symbol from spot_hist_sge", conn
+        )
+        logger.info("%s Spot SGE", len(spot_hist_sge_list))
+        total += len(spot_hist_sge_list)
+
     with worker_client() as client:
         for symbol in bond_list["symbol"]:
             futures.append(
@@ -100,6 +122,16 @@ def calc_ta():
                 )
             )
             await_futures(futures, False, multiplier=1.5)
+        for symbol in hk_index_list:
+            futures.append(
+                client.submit(
+                    calc_ta_for,
+                    symbol,
+                    "hk_index_daily_em",
+                    key=f"{calc_ta_for.__name__}_HK_INDEX--{symbol.lower()}",
+                )
+            )
+            await_futures(futures, False, multiplier=1.5)
         for symbol in stock_list["symbol"]:
             futures.append(
                 client.submit(
@@ -107,6 +139,26 @@ def calc_ta():
                     symbol,
                     "stock_zh_a_hist_em",
                     key=f"{calc_ta_for.__name__}_STOCK--{symbol.lower()}",
+                )
+            )
+            await_futures(futures, False, multiplier=1.5)
+        for symbol in option_qvix_list["symbol"]:
+            futures.append(
+                client.submit(
+                    calc_ta_for,
+                    symbol,
+                    "option_qvix",
+                    key=f"{calc_ta_for.__name__}_Option_QVIX--{symbol.lower()}",
+                )
+            )
+            await_futures(futures, False, multiplier=1.5)
+        for symbol in spot_hist_sge_list["symbol"]:
+            futures.append(
+                client.submit(
+                    calc_ta_for,
+                    symbol,
+                    "spot_hist_sge",
+                    key=f"{calc_ta_for.__name__}_Spot_SGE--{symbol.lower()}",
                 )
             )
             await_futures(futures, False, multiplier=1.5)
@@ -121,15 +173,9 @@ def calc_ta():
 def calc_ta_for(symbol, table):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
-
+    has_volume = has_column(alchemyEngine, table, "volume")
     # load historical data
-    df = load_historical(symbol, alchemyEngine, table)
-    quotes_list = [
-        Quote(d, o, h, l, c, v)
-        for d, o, h, l, c, v in zip(
-            df["ds"], df["open"], df["high"], df["low"], df["close"], df["volume"]
-        )
-    ]
+    quotes_list = load_historical(symbol, alchemyEngine, table, has_volume)
     # calculate all the TAs using common function, organized by TA genre
     price_trends(quotes_list, symbol, table)
     price_channel(quotes_list, symbol, table)
@@ -1031,18 +1077,31 @@ def price_trends(quotes_list, symbol, table):
     save_ta(ta_price_trends, df)
 
 
-def load_historical(symbol, alchemyEngine, anchor_table):
-    query = f"""
-        SELECT date DS, open, high, low, close, volume
-        FROM {anchor_table}
-        where symbol = %(symbol)s
-        and date is not null
-        and open <> 'nan' and open is not null
-        and high <> 'nan' and high is not null
-        and low <> 'nan' and low is not null
-        and close <> 'nan' and close is not null
-        and volume <> 'nan' and volume is not null
-    """
+def load_historical(symbol, alchemyEngine, anchor_table, has_volume):
+    if has_volume:
+        query = f"""
+            SELECT date DS, open, high, low, close, volume
+            FROM {anchor_table}
+            where symbol = %(symbol)s
+            and date is not null
+            and open <> 'nan' and open is not null
+            and high <> 'nan' and high is not null
+            and low <> 'nan' and low is not null
+            and close <> 'nan' and close is not null
+            and volume <> 'nan' and volume is not null
+        """
+    else:
+        query = f"""
+            SELECT date DS, open, high, low, close
+            FROM {anchor_table}
+            where symbol = %(symbol)s
+            and date is not null
+            and open <> 'nan' and open is not null
+            and high <> 'nan' and high is not null
+            and low <> 'nan' and low is not null
+            and close <> 'nan' and close is not null
+        """
+
     params = {"symbol": symbol}
 
     query += " order by DS"
@@ -1055,4 +1114,19 @@ def load_historical(symbol, alchemyEngine, anchor_table):
             parse_dates=["ds"],
         )
 
-    return df
+    if has_volume:
+        quotes_list = [
+            Quote(d, o, h, l, c, v)
+            for d, o, h, l, c, v in zip(
+                df["ds"], df["open"], df["high"], df["low"], df["close"], df["volume"]
+            )
+        ]
+    else:
+        quotes_list = [
+            Quote(d, o, h, l, c, None)
+            for d, o, h, l, c in zip(
+                df["ds"], df["open"], df["high"], df["low"], df["close"]
+            )
+        ]
+
+    return quotes_list

@@ -19,7 +19,7 @@ from sklearn.preprocessing import StandardScaler
 from statsmodels.tsa.statespace.varmax import VARMAX
 
 # from statsmodels.tsa.arima.model import ARIMA
-from softs.exp.exp_custom import Exp_Custom
+# from softs.exp.exp_custom import Exp_Custom
 
 from marten.data.worker_func import impute
 from marten.utils.logger import get_logger
@@ -261,6 +261,13 @@ def _statsmodels_impute(df, model_fit, in_sample):
     #             )
     return data_filled
 
+class Exp_Custom:
+
+    def __init__(self):
+        # FIXME: for now, it's only dummy class to temporarily disable the SOFTS model.
+        # to support this model in new environment, download the source from
+        # https://github.com/carusyte/SOFTS.git and install the package using 'packaging' branch.
+        pass
 
 def _train(config, setting, train, val, save_model_file):
     torch.cuda.empty_cache()
@@ -421,7 +428,7 @@ class SOFTSPredictor:
         large_model = is_large_model(model_config, n_feat)
         cpu_trainable = trainable_with_cpu(model_config, n_feat)
         ratio = 0.9 if large_model else 0.33
-        _optimize_torch(ratio)
+        optimize_torch_on_cpu(ratio)
 
         train, val, _ = _prep_df(
             df, validate, model_config["seq_len"], model_config["pred_len"], random_seed

@@ -1,13 +1,13 @@
 import os
 
 from dotenv import load_dotenv
-
-from sqlalchemy.pool import NullPool
+from sqlalchemy.exc import NoSuchTableError
 
 from sqlalchemy import (
     create_engine,
     Engine,
     text,
+    MetaData, Table
 )
 
 
@@ -36,7 +36,33 @@ def get_database_engine(url=None, pool_size=None) -> Engine:
     #     )
 
 
-from sqlalchemy import text
+def has_column(conn, table_name, *args):
+    """
+    Checks whether the given table has the specified column(s).
+
+    Parameters:
+    conn (sqlalchemy.engine.base.Connection or Engine): The connection or engine to the database.
+    table_name (str): The name of the table to inspect.
+    *args (str): One or more column names to check for existence in the table.
+
+    Returns:
+    bool: True if all specified columns exist in the table, False otherwise.
+
+    Example:
+    >>> has_column(conn, 'users', 'id', 'name', 'email')
+    True
+    >>> has_column(conn, 'users', 'id', 'name', 'nonexistent_column')
+    False
+    """
+
+    metadata = MetaData()
+    try:
+        table = Table(table_name, metadata, autoload_with=conn)
+        columns_in_table = set(table.columns.keys())
+        return all(column in columns_in_table for column in args)
+    except NoSuchTableError:
+        # The table does not exist
+        return False
 
 
 def columns_with_prefix(conn, table, prefix):
