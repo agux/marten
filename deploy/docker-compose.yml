@@ -46,7 +46,7 @@ services:
       -c wal_buffers=16MB
       -c max_wal_size=16GB
       -c bgwriter_lru_maxpages=2000
-      -c temp_file_limit=2GB
+      -c temp_file_limit=8GB
     networks:
       - pchn_network
 

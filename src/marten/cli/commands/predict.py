@@ -195,6 +195,11 @@ def configure_parser(parser):
         help="Use early stopping during model fitting",
     )
     parser.add_argument(
+        "--dask_log",
+        action="store_true",
+        help="Switch log level to INFO for dask components. Default is WARN.",
+    )
+    parser.add_argument(
         "--restart_workers",
         action="store_true",
         help="Restart all workers in the dask cluster at each end of mini-iteration.",

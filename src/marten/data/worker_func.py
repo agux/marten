@@ -185,6 +185,7 @@ def update_us_indices(symbol):
             latest_date = get_max_for_column(conn, symbol, "us_index_daily_sina")
         if latest_date is not None:
             iuss = iuss[iuss["date"] > (latest_date - timedelta(days=10))]
+        iuss.replace({np.nan: None}, inplace=True)
         with alchemyEngine.begin() as conn:
             update_on_conflict(
                 table_def_us_index_daily_sina(), conn, iuss, ["symbol", "date"]

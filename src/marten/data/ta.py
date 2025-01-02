@@ -1,4 +1,5 @@
 import time
+import math
 import pandas as pd
 import numpy as np
 from sqlalchemy import text
@@ -1116,16 +1117,41 @@ def load_historical(symbol, alchemyEngine, anchor_table, has_volume):
 
     if has_volume:
         quotes_list = [
-            Quote(d, o, h, l, c, v)
+            Quote(
+                d,
+                None if math.isnan(o) else o,
+                None if math.isnan(h) else h,
+                None if math.isnan(l) else l,
+                None if math.isnan(c) else c,
+                None if math.isnan(v) else v,
+                #   o, h, l, c, v
+            )
             for d, o, h, l, c, v in zip(
-                df["ds"], df["open"], df["high"], df["low"], df["close"], df["volume"]
+                df["ds"],
+                df["open"],
+                df["high"],
+                df["low"],
+                df["close"],
+                df["volume"],
             )
         ]
     else:
         quotes_list = [
-            Quote(d, o, h, l, c, None)
-            for d, o, h, l, c in zip(
-                df["ds"], df["open"], df["high"], df["low"], df["close"]
+            Quote(
+                d,
+                None if math.isnan(o) else o,
+                None if math.isnan(h) else h,
+                None if math.isnan(l) else l,
+                None if math.isnan(c) else c,
+                None,
+                #   o, h, l, c, None
+            )
+            for d, o, h, l, c, v in zip(
+                df["ds"],
+                df["open"],
+                df["high"],
+                df["low"],
+                df["close"],
             )
         ]
 
