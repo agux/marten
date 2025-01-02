@@ -334,7 +334,7 @@ def await_futures(
     if until_all_completed:
         if task_timeout is not None and shared_vars is not None:
             while num is not None and num > 0:
-                time.sleep(random_seconds(num >> 5, num >> 4, 30))
+                time.sleep(random_seconds(num >> 5, num >> 4, 15))
                 num = handle_task_timeout(futures, task_timeout, shared_vars)
         else:
             get_logger().debug("waiting until all futures complete: %s", num)
@@ -351,7 +351,7 @@ def await_futures(
             #     log_futures(futures)
     elif num > multiprocessing.cpu_count() * multiplier:
         delta = int(num - multiprocessing.cpu_count() * multiplier)
-        time.sleep(random_seconds(delta >> 6, delta >> 5, 30))
+        time.sleep(random_seconds(delta >> 6, delta >> 5, 15))
 
         if task_timeout is not None and shared_vars is not None:
             handle_task_timeout(futures, task_timeout, shared_vars)
