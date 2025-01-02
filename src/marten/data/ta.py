@@ -92,7 +92,7 @@ def calc_ta():
                     key=f"{calc_ta_for.__name__}_BOND--{symbol.lower()}",
                 )
             )
-            await_futures(futures, False, multiplier=2)
+            await_futures(futures, False, multiplier=3)
         for symbol in etf_list["symbol"]:
             futures.append(
                 client.submit(
@@ -102,7 +102,7 @@ def calc_ta():
                     key=f"{calc_ta_for.__name__}_ETF--{symbol.lower()}",
                 )
             )
-            await_futures(futures, False, multiplier=2)
+            await_futures(futures, False, multiplier=3)
         for symbol in cn_index_list["symbol"]:
             futures.append(
                 client.submit(
@@ -112,8 +112,8 @@ def calc_ta():
                     key=f"{calc_ta_for.__name__}_INDEX--{symbol.lower()}",
                 )
             )
-            await_futures(futures, False, multiplier=2)
-        for symbol in us_index_list:
+            await_futures(futures, False, multiplier=3)
+        for symbol in us_index_list["symbol"]:
             futures.append(
                 client.submit(
                     calc_ta_for,
@@ -122,8 +122,8 @@ def calc_ta():
                     key=f"{calc_ta_for.__name__}_US_INDEX--{symbol.lower()}",
                 )
             )
-            await_futures(futures, False, multiplier=2)
-        for symbol in hk_index_list:
+            await_futures(futures, False, multiplier=3)
+        for symbol in hk_index_list["symbol"]:
             futures.append(
                 client.submit(
                     calc_ta_for,
@@ -132,7 +132,7 @@ def calc_ta():
                     key=f"{calc_ta_for.__name__}_HK_INDEX--{symbol.lower()}",
                 )
             )
-            await_futures(futures, False, multiplier=2)
+            await_futures(futures, False, multiplier=3)
         for symbol in stock_list["symbol"]:
             futures.append(
                 client.submit(
@@ -142,7 +142,7 @@ def calc_ta():
                     key=f"{calc_ta_for.__name__}_STOCK--{symbol.lower()}",
                 )
             )
-            await_futures(futures, False, multiplier=2)
+            await_futures(futures, False, multiplier=3)
         for symbol in option_qvix_list["symbol"]:
             futures.append(
                 client.submit(
@@ -152,7 +152,7 @@ def calc_ta():
                     key=f"{calc_ta_for.__name__}_Option_QVIX--{symbol.lower()}",
                 )
             )
-            await_futures(futures, False, multiplier=2)
+            await_futures(futures, False, multiplier=3)
         for symbol in spot_hist_sge_list["symbol"]:
             futures.append(
                 client.submit(
@@ -162,7 +162,7 @@ def calc_ta():
                     key=f"{calc_ta_for.__name__}_Spot_SGE--{symbol.lower()}",
                 )
             )
-            await_futures(futures, False, multiplier=2)
+            await_futures(futures, False, multiplier=3)
 
         await_futures(futures)
 
