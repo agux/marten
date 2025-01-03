@@ -144,6 +144,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     # setting worker resources in environment variable for restarted workers
     # os.environ["DASK_DISTRIBUTED__WORKER__RESOURCES__POWER"] = str(local_machine_power())
     power = local_machine_power()
+    dask_admin_logs = getattr(args, "dask_admin_logs", False)
     dask.config.set(scheduler="processes")
     dask.config.set(
         {
@@ -157,7 +158,9 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
             "distributed.worker.resources.POWER": power,
             "distributed.worker.connections.outgoing": 100,
             "distributed.worker.connections.incoming": 100,
-            "distributed.worker.multiprocessing-method": "forkserver",
+            "distributed.worker.multiprocessing-method": getattr(
+                args, "dask_multiprocessing", "spawn"
+            ),
             "distributed.worker.memory.recent-to-old-time": "45 minutes",
             "distributed.deploy.lost-worker-timeout": "2 hours",
             "distributed.scheduler.work-stealing-interval": "5 seconds",
@@ -170,9 +173,11 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
             "distributed.comm.timeouts.tcp": "600s",
             "distributed.nanny.pre-spawn-environ.MALLOC_TRIM_THRESHOLD_": 0,
             "distributed.nanny.environ.MALLOC_TRIM_THRESHOLD_": 0,
-            "distributed.admin.log-length": 0,
-            "distributed.admin.low-level-log-length": 0,
-            "distributed.admin.system-monitor.log-length": 0,
+            "distributed.admin.log-length": 10000 if dask_admin_logs else 0,
+            "distributed.admin.low-level-log-length": 1000 if dask_admin_logs else 0,
+            "distributed.admin.system-monitor.log-length": (
+                7200 if dask_admin_logs else 0
+            ),
             "distributed.admin.event-loop": "asyncio",  # tornado, asyncio, or uvloop
         }
     )

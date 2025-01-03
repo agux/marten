@@ -41,10 +41,7 @@ def configure_parser(parser):
         action="store",
         type=int,
         default=1,
-        help=(
-            "Number of threads per worker (python processes)"
-            "Defaults to 1"
-        ),
+        help=("Number of threads per worker (python processes)" "Defaults to 1"),
     )
     parser.add_argument(
         "--timestep_limit",
@@ -194,10 +191,30 @@ def configure_parser(parser):
         action="store_true",
         help="Use early stopping during model fitting",
     )
+
+    parser.add_argument(
+        "--dask_multiprocessing",
+        choices=["spawn", "forkserver", "fork"],
+        default="spawn",
+        help=(
+            "Dask multiprocessing method determines how we create new workers, "
+            'one of "spawn", "forkserver", or "fork". Default to "spawn".'
+            "This is passed to the ``multiprocessing.get_context`` function."
+        ),
+    )
     parser.add_argument(
         "--dask_log",
         action="store_true",
         help="Switch log level to INFO for dask components. Default is WARN.",
+    )
+    parser.add_argument(
+        "--dask_admin_logs",
+        action="store_true",
+        help=(
+            "Keep dask admin logs, low-level logs, and system monitor logs with the default length. "
+            "Enabling admin logs may incur more memory usage for each worker processes, "
+            "while disabling admin logs may affect the dashboard."
+        ),
     )
     parser.add_argument(
         "--restart_workers",
@@ -265,7 +282,10 @@ def configure_parser(parser):
         action="store",
         type=int,
         default=0,
-        help=("Port number for the scheduler. " "Defaults to 0 (a random port will be selected)"),
+        help=(
+            "Port number for the scheduler. "
+            "Defaults to 0 (a random port will be selected)"
+        ),
     )
     parser.add_argument(
         "--asset_type",
