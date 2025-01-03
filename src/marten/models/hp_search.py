@@ -150,7 +150,7 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None, anchor_table=
         ),
         "stock_zh_a_hist_em_view": (
             "date DS, change_rate y, open, close, high, low, volume, turnover, amplitude, change_amt, turnover_rate, turnover_change_rate, "
-            "open_preclose_rate, high_preclose_rate, low_preclose_rate, vol_change_rate, amt_change_rate"
+            "open_preclose_rate, high_preclose_rate, low_preclose_rate, vol_change_rate"
         ),
     }
     if anchor_table is None:
@@ -1455,7 +1455,6 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
             "fund_etf_daily_em_view",
             [
                 "change_rate",
-                "amt_change_rate",
                 "vol_change_rate",
                 "turnover_rate",
                 "turnover_change_rate",
@@ -1476,6 +1475,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
                 "us_yield_30y",
                 "us_yield_spread_10y_2y",
                 "quantile",
+                "performance_benchmark", 
                 "china_yield_2y_change_rate",
                 "china_yield_5y_change_rate",
                 "china_yield_10y_change_rate",
@@ -1548,7 +1548,6 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
                 "high_preclose_rate",
                 "low_preclose_rate",
                 "vol_change_rate",
-                "amt_change_rate",
             ],
         ),
         "Currency": (

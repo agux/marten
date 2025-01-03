@@ -137,11 +137,49 @@ def update_hk_indices(symbol):
         )
         # Convert the 'date' column to datetime
         shide.loc[:, "date"] = pd.to_datetime(shide["date"]).dt.date
+
         with alchemyEngine.connect() as conn:
-            latest_date = get_max_for_column(conn, symbol, "hk_index_daily_em")
+            # latest_date = get_max_for_column(conn, symbol, "hk_index_daily_em")
+            latest_dates = [
+                get_max_for_column(conn, symbol, "hk_index_daily_em", non_null_col=c)
+                for c in [
+                    "change_rate",
+                    "open_preclose_rate",
+                    "high_preclose_rate",
+                    "low_preclose_rate",
+                ]
+            ]
+
+        latest_date = None if None in latest_dates else min(latest_dates)
+
         if latest_date is not None:
             ## keep rows only with `date` later than the latest record in database.
             shide = shide[shide["date"] > (latest_date - timedelta(days=10))]
+
+        # calculate all change rates
+        shide.sort_values(["symbol", "date"], inplace=True)
+        shide["lag_close"] = shide["close"].shift(1)
+        shide["change_rate"] = (
+            (shide["close"] - shide["lag_close"]) / shide["lag_close"] * 100
+        ).round(5)
+        shide["open_preclose_rate"] = (
+            (shide["open"] - shide["lag_close"]) / shide["lag_close"] * 100
+        ).round(5)
+        shide["high_preclose_rate"] = (
+            (shide["high"] - shide["lag_close"]) / shide["lag_close"] * 100
+        ).round(5)
+        shide["low_preclose_rate"] = (
+            (shide["low"] - shide["lag_close"]) / shide["lag_close"] * 100
+        ).round(5)
+
+        shide.drop(["lag_close"], axis=1, inplace=True)
+
+        shide.replace([np.inf, -np.inf, np.nan], None, inplace=True)
+
+        # if latest_date is not None, drop the first row
+        if latest_date is not None:
+            shide.drop(shide.index[0], inplace=True)
+
         with alchemyEngine.begin() as conn:
             update_on_conflict(
                 table_def_hk_index_daily_em(), conn, shide, ["symbol", "date"]
@@ -182,10 +220,62 @@ def update_us_indices(symbol):
         # Convert iuss["date"] to datetime and normalize to date only
         iuss.loc[:, "date"] = pd.to_datetime(iuss["date"]).dt.date
         with alchemyEngine.connect() as conn:
-            latest_date = get_max_for_column(conn, symbol, "us_index_daily_sina")
+            # latest_date = get_max_for_column(conn, symbol, "us_index_daily_sina")
+            latest_dates = [
+                get_max_for_column(conn, symbol, "us_index_daily_sina", non_null_col=c)
+                for c in [
+                    "change_rate",
+                    "open_preclose_rate",
+                    "high_preclose_rate",
+                    "low_preclose_rate",
+                    "vol_change_rate",
+                    "amt_change_rate",
+                ]
+            ]
+
+        latest_date = None if None in latest_dates else min(latest_dates)
+
         if latest_date is not None:
             iuss = iuss[iuss["date"] > (latest_date - timedelta(days=10))]
-        iuss.replace({np.nan: None}, inplace=True)
+
+        # calculate all change rates
+        iuss.sort_values(["symbol", "date"], inplace=True)
+        iuss["lag_close"] = iuss["close"].shift(1)
+        iuss["lag_volume"] = iuss["volume"].shift(1)
+        iuss["lag_amount"] = iuss["amount"].shift(1)
+        iuss["change_rate"] = (
+            (iuss["change_rate"] - iuss["lag_change_rate"])
+            / iuss["lag_change_rate"]
+            * 100
+        ).round(5)
+        iuss["open_preclose_rate"] = (
+            (iuss["open"] - iuss["lag_close"]) / iuss["lag_close"] * 100
+        ).round(5)
+        iuss["high_preclose_rate"] = (
+            (iuss["high"] - iuss["lag_close"]) / iuss["lag_close"] * 100
+        ).round(5)
+        iuss["low_preclose_rate"] = (
+            (iuss["low"] - iuss["lag_close"]) / iuss["lag_close"] * 100
+        ).round(5)
+        iuss["vol_change_rate"] = (
+            (iuss["volume"] - iuss["lag_volume"]) / iuss["lag_volume"] * 100
+        ).round(5)
+        iuss["amt_change_rate"] = (
+            (iuss["amount"] - iuss["lag_amount"]) / iuss["lag_amount"] * 100
+        ).round(5)
+
+        iuss.drop(
+            ["lag_close", "lag_volume", "lag_amount"],
+            axis=1,
+            inplace=True,
+        )
+
+        iuss.replace([np.inf, -np.inf, np.nan], None, inplace=True)
+
+        # if latest_date is not None, drop the first row
+        if latest_date is not None:
+            iuss.drop(iuss.index[0], inplace=True)
+
         with alchemyEngine.begin() as conn:
             update_on_conflict(
                 table_def_us_index_daily_sina(), conn, iuss, ["symbol", "date"]
@@ -381,7 +471,18 @@ def get_bond_zh_hs_daily(symbol, shared_dict):
             return None
 
         with alchemyEngine.connect() as conn:
-            latest_date = get_max_for_column(conn, symbol, "bond_zh_hs_daily")
+            latest_dates = [
+                get_max_for_column(conn, symbol, "bond_zh_hs_daily", non_null_col=c)
+                for c in [
+                    "change_rate",
+                    "open_preclose_rate",
+                    "high_preclose_rate",
+                    "low_preclose_rate",
+                    "vol_change_rate",
+                ]
+            ]
+
+        latest_date = None if None in latest_dates else min(latest_dates)
 
         if latest_date is not None:
             ## keep rows only with `date` later than the latest record in database.
@@ -389,8 +490,36 @@ def get_bond_zh_hs_daily(symbol, shared_dict):
 
         bzhd.insert(0, "symbol", symbol)
 
+        # calculate all change rates
+        bzhd.sort_values(["symbol", "date"], inplace=True)
+        bzhd["lag_close"] = bzhd["close"].shift(1)
+        bzhd["lag_volume"] = bzhd["volume"].shift(1)
+        bzhd["change_rate"] = (
+            (bzhd["close"] - bzhd["lag_close"]) / bzhd["lag_close"] * 100
+        ).round(5)
+        bzhd["open_preclose_rate"] = (
+            (bzhd["open"] - bzhd["lag_close"]) / bzhd["lag_close"] * 100
+        ).round(5)
+        bzhd["high_preclose_rate"] = (
+            (bzhd["high"] - bzhd["lag_close"]) / bzhd["lag_close"] * 100
+        ).round(5)
+        bzhd["low_preclose_rate"] = (
+            (bzhd["low"] - bzhd["lag_close"]) / bzhd["lag_close"] * 100
+        ).round(5)
+        bzhd["vol_change_rate"] = (
+            (bzhd["volume"] - bzhd["lag_volume"]) / bzhd["lag_volume"] * 100
+        ).round(5)
+
+        bzhd.drop(["lag_close", "lag_volume"], axis=1, inplace=True)
+
+        bzhd.replace([np.inf, -np.inf, np.nan], None, inplace=True)
+
+        # if latest_date is not None, drop the first row
+        if latest_date is not None:
+            bzhd.drop(bzhd.index[0], inplace=True)
+
         with alchemyEngine.begin() as conn:
-            ignore_on_conflict(bond_zh_hs_daily, conn, bzhd, ["symbol", "date"])
+            update_on_conflict(bond_zh_hs_daily, conn, bzhd, ["symbol", "date"])
         return len(bzhd)
     except KeyError as e:
         if "'date'" in str(e):
@@ -535,7 +664,20 @@ def stock_zh_index_daily_em(symbol, src):
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
     try:
         with alchemyEngine.connect() as conn:
-            latest_date = get_max_for_column(conn, symbol, "index_daily_em")
+            # latest_date = get_max_for_column(conn, symbol, "index_daily_em")
+            latest_dates = [
+                get_max_for_column(conn, symbol, "index_daily_em", non_null_col=c)
+                for c in [
+                    "open_preclose_rate",
+                    "high_preclose_rate",
+                    "low_preclose_rate",
+                    "vol_change_rate",
+                    "change_rate",
+                    "amt_change_rate",
+                ]
+            ]
+
+        latest_date = None if None in latest_dates else min(latest_dates)
 
         start_date = "19900101"  # For entire history.
         if latest_date is not None:
@@ -554,6 +696,39 @@ def stock_zh_index_daily_em(symbol, src):
             return None
 
         szide.insert(0, "symbol", symbol)
+
+        # calculate all change rates
+        szide.sort_values(["symbol", "date"], inplace=True)
+        szide["lag_amount"] = szide["amount"].shift(1)
+        szide["lag_close"] = szide["close"].shift(1)
+        szide["lag_volume"] = szide["volume"].shift(1)
+
+        szide["amt_change_rate"] = (
+            (szide["amount"] - szide["lag_amount"]) / szide["lag_amount"] * 100
+        ).round(5)
+        szide["open_preclose_rate"] = (
+            (szide["open"] - szide["lag_close"]) / szide["lag_close"] * 100
+        ).round(5)
+        szide["high_preclose_rate"] = (
+            (szide["high"] - szide["lag_close"]) / szide["lag_close"] * 100
+        ).round(5)
+        szide["low_preclose_rate"] = (
+            (szide["low"] - szide["lag_close"]) / szide["lag_close"] * 100
+        ).round(5)
+        szide["vol_change_rate"] = (
+            (szide["volume"] - szide["lag_volume"]) / szide["lag_volume"] * 100
+        ).round(5)
+        szide["change_rate"] = (
+            (szide["close"] - szide["lag_close"]) / szide["lag_close"] * 100
+        ).round(5)
+
+        szide.drop(["lag_amount", "lag_close", "lag_volume"], axis=1, inplace=True)
+
+        szide.replace([np.inf, -np.inf, np.nan], None, inplace=True)
+
+        # if latest_date is not None, drop the first row
+        if latest_date is not None:
+            szide.drop(szide.index[0], inplace=True)
 
         with alchemyEngine.begin() as conn:
             update_on_conflict(
@@ -788,9 +963,28 @@ def bond_ir():
     try:
         start_date = None  # For entire history.
         with alchemyEngine.connect() as conn:
-            latest_date = get_max_for_column(conn, None, "bond_metrics_em")
+            # latest_date = get_max_for_column(conn, None, "bond_metrics_em")
+            latest_dates = [
+                get_max_for_column(conn, None, "bond_metrics_em", non_null_col=c)
+                for c in [
+                    "china_yield_2y_change_rate",
+                    "china_yield_5y_change_rate",
+                    "china_yield_10y_change_rate",
+                    "china_yield_30y_change_rate",
+                    "china_yield_spread_10y_2y_change_rate",
+                    "us_yield_2y_change_rate",
+                    "us_yield_5y_change_rate",
+                    "us_yield_10y_change_rate",
+                    "us_yield_30y_change_rate",
+                    "us_yield_spread_10y_2y_change_rate",
+                ]
+            ]
+
+        latest_date = None if None in latest_dates else min(latest_dates)
+
         if latest_date is not None:
             start_date = (latest_date - timedelta(days=20)).strftime("%Y%m%d")
+
         bzur = ak.bond_zh_us_rate(start_date)
         bzur.rename(
             columns={
@@ -810,8 +1004,97 @@ def bond_ir():
             },
             inplace=True,
         )
-        # Convert NaN to None
-        bzur.replace({np.nan: None}, inplace=True)
+
+        # calculate all change rates
+        bzur.sort_values(["date"], inplace=True)
+
+        bzur["lag_china_yield_2y"] = bzur["china_yield_2y"].shift(1)
+        bzur["lag_china_yield_5y"] = bzur["china_yield_5y"].shift(1)
+        bzur["lag_china_yield_10y"] = bzur["china_yield_10y"].shift(1)
+        bzur["lag_china_yield_30y"] = bzur["china_yield_30y"].shift(1)
+        bzur["lag_china_yield_spread_10y_2y"] = bzur["china_yield_spread_10y_2y"].shift(
+            1
+        )
+        bzur["lag_us_yield_2y"] = bzur["us_yield_2y"].shift(1)
+        bzur["lag_us_yield_5y"] = bzur["us_yield_5y"].shift(1)
+        bzur["lag_us_yield_10y"] = bzur["us_yield_10y"].shift(1)
+        bzur["lag_us_yield_30y"] = bzur["us_yield_30y"].shift(1)
+        bzur["lag_us_yield_spread_10y_2y"] = bzur["us_yield_spread_10y_2y"].shift(1)
+
+        bzur["china_yield_2y_change_rate"] = (
+            (bzur["china_yield_2y"] - bzur["lag_china_yield_2y"])
+            / bzur["lag_china_yield_2y"]
+            * 100
+        ).round(5)
+        bzur["china_yield_5y_change_rate"] = (
+            (bzur["china_yield_5y"] - bzur["lag_china_yield_5y"])
+            / bzur["lag_china_yield_5y"]
+            * 100
+        ).round(5)
+        bzur["china_yield_10y_change_rate"] = (
+            (bzur["china_yield_10y"] - bzur["lag_china_yield_10y"])
+            / bzur["lag_china_yield_10y"]
+            * 100
+        ).round(5)
+        bzur["china_yield_30y_change_rate"] = (
+            (bzur["china_yield_30y"] - bzur["lag_china_yield_30y"])
+            / bzur["lag_china_yield_30y"]
+            * 100
+        ).round(5)
+        bzur["china_yield_spread_10y_2y_change_rate"] = (
+            (bzur["china_yield_spread_10y_2y"] - bzur["lag_china_yield_spread_10y_2y"])
+            / bzur["lag_china_yield_spread_10y_2yy"]
+            * 100
+        ).round(5)
+        bzur["us_yield_2y_change_rate"] = (
+            (bzur["us_yield_2y"] - bzur["lag_us_yield_2y"])
+            / bzur["lag_us_yield_2y"]
+            * 100
+        ).round(5)
+        bzur["us_yield_5y_change_rate"] = (
+            (bzur["us_yield_5y"] - bzur["lag_us_yield_5y"])
+            / bzur["lag_us_yield_5y"]
+            * 100
+        ).round(5)
+        bzur["us_yield_10y_change_rate"] = (
+            (bzur["us_yield_10y"] - bzur["lag_us_yield_10y"])
+            / bzur["lag_us_yield_10y"]
+            * 100
+        ).round(5)
+        bzur["us_yield_30y_change_rate"] = (
+            (bzur["us_yield_30y"] - bzur["lag_us_yield_30y"])
+            / bzur["lag_us_yield_30y"]
+            * 100
+        ).round(5)
+        bzur["us_yield_spread_10y_2y_change_rate"] = (
+            (bzur["us_yield_spread_10y_2y"] - bzur["lag_us_yield_spread_10y_2y"])
+            / bzur["lag_us_yield_spread_10y_2yy"]
+            * 100
+        ).round(5)
+
+        bzur.drop(
+            [
+                "lag_china_yield_2y",
+                "lag_china_yield_5y",
+                "lag_china_yield_10y",
+                "lag_china_yield_30y",
+                "lag_china_yield_spread_10y_2y",
+                "lag_us_yield_2y",
+                "lag_us_yield_5y",
+                "lag_us_yield_10y",
+                "lag_us_yield_30y",
+                "lag_us_yield_spread_10y_2y",
+            ],
+            axis=1,
+            inplace=True,
+        )
+
+        bzur.replace([np.inf, -np.inf, np.nan], None, inplace=True)
+
+        # if latest_date is not None, drop the first row
+        if latest_date is not None:
+            bzur.drop(bzur.index[0], inplace=True)
+
         with alchemyEngine.begin() as conn:
             update_on_conflict(table_def_bond_metrics_em(), conn, bzur, ["date"])
         return len(bzur)
@@ -828,7 +1111,18 @@ def get_etf_daily(symbol):
         logger.debug(f"running fund_etf_hist_em({symbol})...")
         with alchemyEngine.connect() as conn:
             # check latest date on fund_etf_daily_em
-            latest_date = get_max_for_column(conn, symbol, "fund_etf_daily_em")
+            # latest_date = get_max_for_column(conn, symbol, "fund_etf_daily_em")
+            latest_dates = [
+                get_max_for_column(conn, symbol, "fund_etf_daily_em", non_null_col=c)
+                for c in [
+                    "turnover_change_rate",
+                    "open_preclose_rate",
+                    "high_preclose_rate",
+                    "low_preclose_rate",
+                    "vol_change_rate",
+                ]
+            ]
+        latest_date = None if None in latest_dates else min(latest_dates)
 
         start_date = "19700101"  # For entire history.
         if latest_date is not None:
@@ -880,6 +1174,35 @@ def get_etf_daily(symbol):
                 "turnover_rate",
             ]
         ]
+
+        # calculate all change rates
+        df.sort_values(["symbol", "date"], inplace=True)
+        df["lag_turnover"] = df["turnover"].shift(1)
+        df["lag_close"] = df["close"].shift(1)
+        df["lag_volume"] = df["volume"].shift(1)
+        df["turnover_change_rate"] = (
+            (df["turnover"] - df["lag_turnover"]) / df["lag_turnover"] * 100
+        ).round(5)
+        df["open_preclose_rate"] = (
+            (df["open"] - df["lag_close"]) / df["lag_close"] * 100
+        ).round(5)
+        df["high_preclose_rate"] = (
+            (df["high"] - df["lag_close"]) / df["lag_close"] * 100
+        ).round(5)
+        df["low_preclose_rate"] = (
+            (df["low"] - df["lag_close"]) / df["lag_close"] * 100
+        ).round(5)
+        df["vol_change_rate"] = (
+            (df["volume"] - df["lag_volume"]) / df["lag_volume"] * 100
+        ).round(5)
+
+        df.drop(["lag_turnover", "lag_close", "lag_volume"], axis=1, inplace=True)
+
+        df.replace([np.inf, -np.inf, np.nan], None, inplace=True)
+
+        # if latest_date is not None, drop the first row
+        if latest_date is not None:
+            df.drop(df.index[0], inplace=True)
 
         with alchemyEngine.begin() as conn:
             update_on_conflict(
@@ -1145,7 +1468,8 @@ def get_stock_daily(symbol):
                 "vol_change_rate",
             ]
         ]
-        latest_date = None if None in latest_dates else min(latest_dates)
+
+    latest_date = None if None in latest_dates else min(latest_dates)
 
     start_date = "19700101"  # For entire history.
     if latest_date is not None:
@@ -1211,7 +1535,9 @@ def get_stock_daily(symbol):
         * 100
     ).round(5)
 
-    stock_zh_a_hist_df.drop(["lag_turnover", "lag_close", "lag_volume"], axis=1, inplace=True)
+    stock_zh_a_hist_df.drop(
+        ["lag_turnover", "lag_close", "lag_volume"], axis=1, inplace=True
+    )
 
     stock_zh_a_hist_df.replace([np.inf, -np.inf, np.nan], None, inplace=True)
 
@@ -1249,7 +1575,18 @@ def get_sge_spot_daily(symbol):
     alchemyEngine = worker.alchemyEngine
 
     with alchemyEngine.connect() as conn:
-        latest_date = get_max_for_column(conn, symbol, "spot_hist_sge")
+        # latest_date = get_max_for_column(conn, symbol, "spot_hist_sge")
+        latest_dates = [
+            get_max_for_column(conn, symbol, "spot_hist_sge", non_null_col=c)
+            for c in [
+                "change_rate",
+                "open_preclose_rate",
+                "high_preclose_rate",
+                "low_preclose_rate",
+            ]
+        ]
+
+    latest_date = None if None in latest_dates else min(latest_dates)
 
     spot_hist_sge_df = ak.spot_hist_sge(symbol=symbol)
     if spot_hist_sge_df.empty:
@@ -1260,6 +1597,40 @@ def get_sge_spot_daily(symbol):
         spot_hist_sge_df = spot_hist_sge_df[spot_hist_sge_df["date"] >= start_date]
 
     spot_hist_sge_df.insert(0, "symbol", symbol)
+
+    # calculate all change rates
+    spot_hist_sge_df.sort_values(["symbol", "date"], inplace=True)
+    spot_hist_sge_df["lag_close"] = spot_hist_sge_df["close"].shift(1)
+    spot_hist_sge_df["change_rate"] = (
+        (spot_hist_sge_df["close"] - spot_hist_sge_df["lag_close"])
+        / spot_hist_sge_df["lag_close"]
+        * 100
+    ).round(5)
+    spot_hist_sge_df["open_preclose_rate"] = (
+        (spot_hist_sge_df["open"] - spot_hist_sge_df["lag_close"])
+        / spot_hist_sge_df["lag_close"]
+        * 100
+    ).round(5)
+    spot_hist_sge_df["high_preclose_rate"] = (
+        (spot_hist_sge_df["high"] - spot_hist_sge_df["lag_close"])
+        / spot_hist_sge_df["lag_close"]
+        * 100
+    ).round(5)
+    spot_hist_sge_df["low_preclose_rate"] = (
+        (spot_hist_sge_df["low"] - spot_hist_sge_df["lag_close"])
+        / spot_hist_sge_df["lag_close"]
+        * 100
+    ).round(5)
+
+    spot_hist_sge_df.drop(
+        ["lag_close"], axis=1, inplace=True
+    )
+
+    spot_hist_sge_df.replace([np.inf, -np.inf, np.nan], None, inplace=True)
+
+    # if latest_date is not None, drop the first row
+    if latest_date is not None:
+        spot_hist_sge_df.drop(spot_hist_sge_df.index[0], inplace=True)
 
     with alchemyEngine.begin() as conn:
         update_on_conflict(spot_hist_sge, conn, spot_hist_sge_df, ["symbol", "date"])
@@ -1337,7 +1708,93 @@ def rmb_exchange_rates():
         },
         inplace=True,
     )
-    currency_boc_safe_df.replace({np.nan: None}, inplace=True)
+
+    with alchemyEngine.connect() as conn:
+        # latest_date = get_max_for_column(conn, symbol, "stock_zh_a_hist_em")
+        latest_dates = [
+            get_max_for_column(conn, None, "currency_boc_safe", non_null_col=c)
+            for c in [
+                "usd_change_rate",
+                "eur_change_rate",
+                "jpy_change_rate",
+                "hkd_change_rate",
+                "gbp_change_rate",
+                "aud_change_rate",
+                "nzd_change_rate",
+                "sgd_change_rate",
+                "chf_change_rate",
+                "cad_change_rate",
+                "myr_change_rate",
+                "rub_change_rate",
+                "zar_change_rate",
+                "krw_change_rate",
+                "aed_change_rate",
+                "qar_change_rate",
+                "huf_change_rate",
+                "pln_change_rate",
+                "dkk_change_rate",
+                "sek_change_rate",
+                "nok_change_rate",
+                "try_change_rate",
+                "php_change_rate",
+                "thb_change_rate",
+                "mop_change_rate",
+            ]
+        ]
+
+    latest_date = None if None in latest_dates else min(latest_dates)
+
+    if latest_date is not None:
+        start_date = latest_date - timedelta(days=20)
+        currency_boc_safe_df = currency_boc_safe_df[
+            currency_boc_safe_df["date"] >= start_date
+        ]
+
+    cols = [
+        "usd",
+        "eur",
+        "jpy",
+        "hkd",
+        "gbp",
+        "aud",
+        "nzd",
+        "sgd",
+        "chf",
+        "cad",
+        "myr",
+        "rub",
+        "zar",
+        "krw",
+        "aed",
+        "qar",
+        "huf",
+        "pln",
+        "dkk",
+        "sek",
+        "nok",
+        "try",
+        "php",
+        "thb",
+        "mop",
+    ]
+
+    # calculate all change rates
+    currency_boc_safe_df.sort_values(["date"], inplace=True)
+    for col in cols:
+        lag_col = f"lag_{currency_boc_safe_df}"
+        currency_boc_safe_df[lag_col] = currency_boc_safe_df[col].shift(1)
+        currency_boc_safe_df[f"{col}_change_rate"] = (
+            (currency_boc_safe_df[col] - currency_boc_safe_df[lag_col])
+            / currency_boc_safe_df[lag_col]
+            * 100
+        ).round(5)
+        currency_boc_safe_df.drop([lag_col], axis=1, inplace=True)
+
+    currency_boc_safe_df.replace([np.inf, -np.inf, np.nan], None, inplace=True)
+
+    # if latest_date is not None, drop the first row
+    if latest_date is not None:
+        currency_boc_safe_df.drop(currency_boc_safe_df.index[0], inplace=True)
 
     with alchemyEngine.begin() as conn:
         update_on_conflict(currency_boc_safe, conn, currency_boc_safe_df, ["date"])
@@ -1368,6 +1825,19 @@ def get_cn_bond_index_metrics(symbol, symbol_cn):
         "净价指数涨跌幅": "cleanpriceindex_change",
         "现券结算量": "spotsettlementvolume",
     }
+    change_rates = [
+        "avgmv_duration_change_rate",
+        "avgcf_duration_change_rate",
+        "avgmv_convexity_change_rate",
+        "avgcf_convexity_change_rate",
+        "avgcf_ytm_change_rate",
+        "avgmv_ytm_change_rate",
+        "avgbpv_change_rate",
+        "avgmaturity_change_rate",
+        "avgcouponrate_change_rate",
+        "indexprevdaymv_change_rate",
+        "spotsettlementvolume_change_rate",
+    ]
 
     for indicator in list(column_mapping.keys()):
         try:
@@ -1396,9 +1866,15 @@ def get_cn_bond_index_metrics(symbol, symbol_cn):
         df.rename(columns={"value": value_col_name}, inplace=True)
 
         start_date = None
+        change_rate_col = next(
+            (s for s in change_rates if s.startswith(value_col_name)), None
+        )
         with alchemyEngine.connect() as conn:
             latest_date = get_max_for_column(
-                conn, symbol, "cn_bond_indices", non_null_col=value_col_name
+                conn,
+                symbol,
+                "cn_bond_indices",
+                non_null_col=(change_rate_col if change_rate_col else value_col_name),
             )
 
         if latest_date is not None:
@@ -1406,6 +1882,20 @@ def get_cn_bond_index_metrics(symbol, symbol_cn):
             df = df[df["date"] >= start_date]
 
         df.insert(0, "symbol", symbol)
+
+        # calculate change rate
+        if change_rate_col:
+            lag_col = f"lag_{value_col_name}"
+            df.sort_values(["symbol", "date"], inplace=True)
+            df[lag_col] = df[value_col_name].shift(1)
+            df[change_rate_col] = (
+                (df[value_col_name] - df[lag_col]) / df[lag_col] * 100
+            ).round(5)
+            df.drop([lag_col], axis=1, inplace=True)
+            df.replace([np.inf, -np.inf, np.nan], None, inplace=True)
+            # if latest_date is not None, drop the first row
+            if latest_date is not None:
+                df.drop(df.index[0], inplace=True)
 
         with alchemyEngine.begin() as conn:
             update_on_conflict(cn_bond_indices, conn, df, ["symbol", "date"])
@@ -1706,13 +2196,33 @@ def get_stock_bond_ratio_index():
 
     with alchemyEngine.connect() as conn:
         latest_date = get_max_for_column(
-            conn, symbol=None, table="bond_metrics_em", non_null_col="quantile"
+            conn,
+            symbol=None,
+            table="bond_metrics_em",
+            non_null_col="performance_benchmark_change_rate",
         )
 
     if latest_date is not None:
         start_date = latest_date - timedelta(days=20)
         df = df[df["date"] >= start_date]
-    df.replace({np.nan: None}, inplace=True)
+
+    # calculate all change rates
+    df.sort_values(["date"], inplace=True)
+    df["lag_performance_benchmark"] = df["performance_benchmark"].shift(1)
+    df["performance_benchmark_change_rate"] = (
+        (df["performance_benchmark"] - df["lag_performance_benchmark"])
+        / df["lag_performance_benchmark"]
+        * 100
+    ).round(5)
+
+    df.drop(["lag_performance_benchmark"], axis=1, inplace=True)
+
+    df.replace([np.inf, -np.inf, np.nan], None, inplace=True)
+
+    # if latest_date is not None, drop the first row
+    if latest_date is not None:
+        df.drop(df.index[0], inplace=True)
+
     with alchemyEngine.begin() as conn:
         update_on_conflict(table_def_bond_metrics_em(), conn, df, ["date"])
 

@@ -158,13 +158,9 @@ class fund_dividend_events(Base):
     rights_registration_date = Column(
         Date, nullable=False, comment="权益登记日 - 权益登记的日期"
     )
-    ex_dividend_date = Column(
-        Date, comment="除息日期 - 股票或基金除息的日期"
-    )
+    ex_dividend_date = Column(Date, comment="除息日期 - 股票或基金除息的日期")
     dividend = Column(Numeric, nullable=False, comment="分红 - 基金分红的金额")
-    dividend_payment_date = Column(
-        Date, comment="分红发放日 - 分红款项发放的日期"
-    )
+    dividend_payment_date = Column(Date, comment="分红发放日 - 分红款项发放的日期")
     last_modified = Column(
         DateTime(timezone=True),
         nullable=False,
@@ -215,6 +211,17 @@ class cn_bond_indices(Base):
         default=func.current_timestamp(),
         comment="Last Modified Timestamp",
     )
+    avgmv_duration_change_rate = Column(Numeric)
+    avgcf_duration_change_rate = Column(Numeric)
+    avgmv_convexity_change_rate = Column(Numeric)
+    avgcf_convexity_change_rate = Column(Numeric)
+    avgcf_ytm_change_rate = Column(Numeric)
+    avgmv_ytm_change_rate = Column(Numeric)
+    avgbpv_change_rate = Column(Numeric)
+    avgmaturity_change_rate = Column(Numeric)
+    avgcouponrate_change_rate = Column(Numeric)
+    indexprevdaymv_change_rate = Column(Numeric)
+    spotsettlementvolume_change_rate = Column(Numeric)
 
 
 class spot_symbol_table_sge(Base):
@@ -271,6 +278,10 @@ class spot_hist_sge(Base):
     close = Column(Numeric, nullable=True)
     high = Column(Numeric, nullable=True)
     low = Column(Numeric, nullable=True)
+    change_rate = Column(Numeric, nullable=True)
+    open_preclose_rate = Column(Numeric, nullable=True)
+    high_preclose_rate = Column(Numeric, nullable=True)
+    low_preclose_rate = Column(Numeric, nullable=True)
     last_modified = Column(
         DateTime(timezone=True), default=func.current_timestamp(), nullable=True
     )
@@ -309,6 +320,31 @@ class currency_boc_safe(Base):
     php = Column(Numeric, comment="PHP")
     thb = Column(Numeric, comment="THB")
     mop = Column(Numeric, comment="MOP")
+    usd_change_rate = Column(Numeric)
+    eur_change_rate = Column(Numeric)
+    jpy_change_rate = Column(Numeric)
+    hkd_change_rate = Column(Numeric)
+    gbp_change_rate = Column(Numeric)
+    aud_change_rate = Column(Numeric)
+    nzd_change_rate = Column(Numeric)
+    sgd_change_rate = Column(Numeric)
+    chf_change_rate = Column(Numeric)
+    cad_change_rate = Column(Numeric)
+    myr_change_rate = Column(Numeric)
+    rub_change_rate = Column(Numeric)
+    zar_change_rate = Column(Numeric)
+    krw_change_rate = Column(Numeric)
+    aed_change_rate = Column(Numeric)
+    qar_change_rate = Column(Numeric)
+    huf_change_rate = Column(Numeric)
+    pln_change_rate = Column(Numeric)
+    dkk_change_rate = Column(Numeric)
+    sek_change_rate = Column(Numeric)
+    nok_change_rate = Column(Numeric)
+    try_change_rate = Column(Numeric)
+    php_change_rate = Column(Numeric)
+    thb_change_rate = Column(Numeric)
+    mop_change_rate = Column(Numeric)
     last_modified = Column(
         DateTime(timezone=True),
         default=func.current_timestamp(),
@@ -406,6 +442,11 @@ class bond_zh_hs_daily(Base):
         default=func.current_timestamp(),
         comment="Last Modified Timestamp",
     )
+    open_preclose_rate = Column(Numeric)
+    high_preclose_rate = Column(Numeric)
+    low_preclose_rate = Column(Numeric)
+    change_rate = Column(Numeric)
+    vol_change_rate = Column(Numeric)
 
 
 class bond_zh_hs_spot(Base):
@@ -451,6 +492,12 @@ def table_def_index_daily_em():
             default=func.current_timestamp(),
         ),
         Column("amount", Numeric),
+        Column("open_preclose_rate", Numeric),
+        Column("high_preclose_rate", Numeric),
+        Column("low_preclose_rate", Numeric),
+        Column("vol_change_rate", Numeric),
+        Column("change_rate", Numeric),
+        Column("amt_change_rate", Numeric),
     )
 
 
@@ -464,6 +511,10 @@ def table_def_hk_index_daily_em():
         Column("close", Numeric),
         Column("high", Numeric),
         Column("low", Numeric),
+        Column("open_preclose_rate", Numeric),
+        Column("high_preclose_rate", Numeric),
+        Column("low_preclose_rate", Numeric),
+        Column("change_rate", Numeric),
         Column(
             "last_modified",
             DateTime(timezone=True),
@@ -486,6 +537,12 @@ def table_def_us_index_daily_sina():
         Column("low", Numeric),
         Column("volume", Numeric),
         Column("amount", Numeric),
+        Column("change_rate", Numeric),
+        Column("open_preclose_rate", Numeric),
+        Column("high_preclose_rate", Numeric),
+        Column("low_preclose_rate", Numeric),
+        Column("vol_change_rate", Numeric),
+        Column("amt_change_rate", Numeric),
         Column(
             "last_modified",
             DateTime(timezone=True),
@@ -800,6 +857,11 @@ def table_def_fund_etf_daily_em():
             nullable=False,
             comment="Last modified timestamp (最后修改时间)",
         ),
+        Column("turnover_change_rate", Numeric),
+        Column("open_preclose_rate", Numeric),
+        Column("high_preclose_rate", Numeric),
+        Column("low_preclose_rate", Numeric),
+        Column("vol_change_rate", Numeric),
         PrimaryKeyConstraint("symbol", "date", name="fund_etf_daily_em_pkey"),
     )
 
@@ -878,6 +940,17 @@ def table_def_bond_metrics_em():
         ),
         Column("quantile", Numeric, comment="雪球-股债性价比指数-百分位"),
         Column("performance_benchmark", Numeric, comment="雪球-股债性价比指数-分值"),
+        Column("china_yield_2y_change_rate", Numeric),
+        Column("china_yield_5y_change_rate", Numeric),
+        Column("china_yield_10y_change_rate", Numeric),
+        Column("china_yield_30y_change_rate", Numeric),
+        Column("china_yield_spread_10y_2y_change_rate", Numeric),
+        Column("us_yield_2y_change_rate", Numeric),
+        Column("us_yield_5y_change_rate", Numeric),
+        Column("us_yield_10y_change_rate", Numeric),
+        Column("us_yield_30y_change_rate", Numeric),
+        Column("us_yield_spread_10y_2y_change_rate", Numeric),
+        Column("performance_benchmark_change_rate", Numeric),
         PrimaryKeyConstraint("date", name="bond_metrics_em_pk"),
     )
 
