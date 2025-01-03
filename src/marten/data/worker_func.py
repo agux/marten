@@ -1211,7 +1211,7 @@ def get_stock_daily(symbol):
         * 100
     ).round(5)
 
-    stock_zh_a_hist_df.drop(["lag_turnover", "lag_close", "lag_volume"], axis=1, inplace=True))
+    stock_zh_a_hist_df.drop(["lag_turnover", "lag_close", "lag_volume"], axis=1, inplace=True)
 
     stock_zh_a_hist_df.replace([np.inf, -np.inf, np.nan], None, inplace=True)
 
