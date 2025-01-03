@@ -276,7 +276,7 @@ def fit_with_covar(
                             )
                         merged_df, impute_df = model.impute(merged_df, **config)
                         merged_df.dropna(axis=1, how="any", inplace=True)
-                        if impute_df:
+                        if impute_df is not None:
                             impute_df.dropna(axis=1, how="all", inplace=True)
                 metrics = model.train(merged_df, **config)
 
@@ -299,7 +299,7 @@ def fit_with_covar(
                 ts_cutoff_date,
                 conn,
             )
-        if not impute_df:
+        if impute_df is not None:
             logger.info(
                 "saving imputated data points for %s, %s.%s: %s",
                 cov_symbol,
