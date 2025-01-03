@@ -336,6 +336,11 @@ class stock_zh_a_hist_em(Base):
     change_rate = Column(Numeric, comment="涨跌幅 (Price Change Percentage)")
     change_amt = Column(Numeric, comment="涨跌额 (Price Change Amount)")
     turnover_rate = Column(Numeric, comment="换手率 (Turnover Rate)")
+    turnover_change_rate = Column(Numeric)
+    open_preclose_rate = Column(Numeric)
+    high_preclose_rate = Column(Numeric)
+    low_preclose_rate = Column(Numeric)
+    vol_change_rate = Column(Numeric)
     last_modified = Column(
         DateTime(timezone=True),
         default=func.current_timestamp(),

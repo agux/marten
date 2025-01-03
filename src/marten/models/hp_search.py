@@ -384,8 +384,10 @@ def _pair_covar_metrics(
     sem,
     locks,
     p_order=0,
+    covar_futures=None,
 ):
-    covar_fut = []
+    if not covar_futures:
+        covar_futures = []
     worker = get_worker()
     logger = worker.logger
     for symbol in cov_symbols:
@@ -395,7 +397,7 @@ def _pair_covar_metrics(
             cov_table,
             feature,
         )
-        covar_fut.append(
+        covar_futures.append(
             client.submit(
                 fit_with_covar,
                 anchor_symbol,
@@ -419,9 +421,9 @@ def _pair_covar_metrics(
             )
         )
         # if too much pending task, then slow down for the tasks to be digested
-        # await_futures(covar_fut, False)
+        await_futures(covar_futures, False)
     # wait(covar_fut)
-    await_futures(covar_fut, hard_wait=True)
+    await_futures(covar_futures)
 
 
 def _load_covar_set(covar_set_id, model, alchemyEngine):
@@ -1297,6 +1299,7 @@ def covar_metric(
     )
 
     cov_symbols_fut = []
+    covar_futures = []
     num_symbols = 0
     with worker_client() as client:
         for feature in features:
@@ -1315,6 +1318,7 @@ def covar_metric(
                         sem,
                         locks,
                         p_order,
+                        covar_futures,
                     )
                     num_symbols += 1
                 case "currency_boc_safe_view":
@@ -1330,6 +1334,7 @@ def covar_metric(
                         sem,
                         locks,
                         p_order,
+                        covar_futures,
                     )
                     num_symbols += 1
                 case _:
@@ -1383,6 +1388,7 @@ def covar_metric(
                         sem,
                         locks,
                         p_order,
+                        covar_futures,
                     )
                     num_symbols += len(cov_symbols)
     logger.info(

@@ -197,6 +197,7 @@ def update_us_indices(symbol):
         )
         raise e
 
+
 def option_qvix():
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
@@ -313,6 +314,7 @@ def option_qvix():
     except Exception as e:
         logger.error("failed to get option qvix: %s", e, exc_info=True)
         raise e
+
 
 def bond_spot():
     worker = get_worker()
@@ -505,7 +507,8 @@ def cn_index_daily(future_cn_index_list):
                 left(symbol, 2) src
             from
                 index_spot_sina iss
-        """, alchemyEngine
+        """,
+        alchemyEngine,
     )
     logger.info(
         "starting tasks on function stock_zh_index_daily_em(), length: %s",
@@ -621,6 +624,7 @@ def get_cn_index_list(cn_index_types):
         await_futures(futures)
     return True
 
+
 def stock_zh_index_spot_sina():
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
@@ -647,6 +651,7 @@ def stock_zh_index_spot_sina():
     except Exception as e:
         logger.error(f"failed to update index_spot_sina", exc_info=True)
         raise e
+
 
 def calc_etf_metrics(symbol, end_date):
     worker = get_worker()
@@ -1129,7 +1134,18 @@ def get_stock_daily(symbol):
     alchemyEngine = worker.alchemyEngine
 
     with alchemyEngine.connect() as conn:
-        latest_date = get_max_for_column(conn, symbol, "stock_zh_a_hist_em")
+        # latest_date = get_max_for_column(conn, symbol, "stock_zh_a_hist_em")
+        latest_dates = [
+            get_max_for_column(conn, symbol, "stock_zh_a_hist_em", non_null_col=c)
+            for c in [
+                "turnover_change_rate",
+                "open_preclose_rate",
+                "high_preclose_rate",
+                "low_preclose_rate",
+                "vol_change_rate",
+            ]
+        ]
+        latest_date = None if None in latest_dates else min(latest_dates)
 
     start_date = "19700101"  # For entire history.
     if latest_date is not None:
@@ -1163,6 +1179,43 @@ def get_stock_daily(symbol):
         },
         inplace=True,
     )
+
+    # calculate all change rates
+    stock_zh_a_hist_df.sort_values(["symbol", "date"], inplace=True)
+    stock_zh_a_hist_df["lag_turnover"] = stock_zh_a_hist_df["turnover"].shift(1)
+    stock_zh_a_hist_df["lag_close"] = stock_zh_a_hist_df["close"].shift(1)
+    stock_zh_a_hist_df["lag_volume"] = stock_zh_a_hist_df["volume"].shift(1)
+    stock_zh_a_hist_df["turnover_change_rate"] = (
+        (stock_zh_a_hist_df["turnover"] - stock_zh_a_hist_df["lag_turnover"])
+        / stock_zh_a_hist_df["lag_turnover"]
+        * 100
+    ).round(5)
+    stock_zh_a_hist_df["open_preclose_rate"] = (
+        (stock_zh_a_hist_df["open"] - stock_zh_a_hist_df["lag_close"])
+        / stock_zh_a_hist_df["lag_close"]
+        * 100
+    ).round(5)
+    stock_zh_a_hist_df["high_preclose_rate"] = (
+        (stock_zh_a_hist_df["high"] - stock_zh_a_hist_df["lag_close"])
+        / stock_zh_a_hist_df["lag_close"]
+        * 100
+    ).round(5)
+    stock_zh_a_hist_df["low_preclose_rate"] = (
+        (stock_zh_a_hist_df["low"] - stock_zh_a_hist_df["lag_close"])
+        / stock_zh_a_hist_df["lag_close"]
+        * 100
+    ).round(5)
+    stock_zh_a_hist_df["vol_change_rate"] = (
+        (stock_zh_a_hist_df["volume"] - stock_zh_a_hist_df["lag_volume"])
+        / stock_zh_a_hist_df["lag_volume"]
+        * 100
+    ).round(5)
+
+    stock_zh_a_hist_df.replace([np.inf, -np.inf, np.nan], None, inplace=True)
+
+    # if latest_date is not None, drop the first row
+    if latest_date is not None:
+        stock_zh_a_hist_df.drop(stock_zh_a_hist_df.index[0], inplace=True)
 
     with alchemyEngine.begin() as conn:
         update_on_conflict(
