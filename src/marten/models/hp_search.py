@@ -547,7 +547,7 @@ def _load_covars(
             """
             query = f"""
                 select DISTINCT ON (ts_date, loss_val, nan_count, cov_table, cov_symbol)
-                    cov_symbol, cov_table, feature
+                    cov_symbol, cov_table, feature, loss_val
                 from
                     paired_correlation
                 where
@@ -640,7 +640,7 @@ def _load_covars(
                 text("SELECT nextval('covar_set_sequence')")
             ).scalar()
             ## insert df into covar_set table
-            table_df = df.rename(columns={"feature": "cov_feature"})
+            table_df = df.rename(columns={"feature": "cov_feature", "loss_val": "score"})
             table_df["symbol"] = anchor_symbol
             table_df["id"] = covar_set_id
             table_df.to_sql("covar_set", con=conn, if_exists="append", index=False)
@@ -762,7 +762,7 @@ def augment_anchor_df_with_covars(
         for _, r in covars_df.iterrows()
     ]
 
-    # covars_df contain these columns: cov_symbol, cov_table, feature
+    # covars_df contain these columns: cov_symbol, cov_table, feature, loss_val
     by_table_feature = covars_df.groupby(["cov_table", "feature"])
     futures = []
     start_date = merged_df["ds"].min().strftime("%Y-%m-%d")

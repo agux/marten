@@ -1795,7 +1795,7 @@ def rmb_exchange_rates():
     ]
 
     # calculate all change rates
-    if len(currency_boc_safe) > 1:
+    if len(currency_boc_safe_df) > 1:
         currency_boc_safe_df.sort_values(["date"], inplace=True)
         for col in cols:
             lag_col = f"lag_{currency_boc_safe_df}"
