@@ -489,33 +489,34 @@ def get_bond_zh_hs_daily(symbol, shared_dict):
             ## keep rows only with `date` later than the latest record in database.
             bzhd = bzhd[bzhd["date"] > (latest_date - timedelta(days=10))]
 
-        # calculate all change rates
-        bzhd.sort_values(["date"], inplace=True)
-        bzhd["lag_close"] = bzhd["close"].shift(1)
-        bzhd["lag_volume"] = bzhd["volume"].shift(1)
-        bzhd["change_rate"] = (
-            (bzhd["close"] - bzhd["lag_close"]) / bzhd["lag_close"] * 100
-        ).round(5)
-        bzhd["open_preclose_rate"] = (
-            (bzhd["open"] - bzhd["lag_close"]) / bzhd["lag_close"] * 100
-        ).round(5)
-        bzhd["high_preclose_rate"] = (
-            (bzhd["high"] - bzhd["lag_close"]) / bzhd["lag_close"] * 100
-        ).round(5)
-        bzhd["low_preclose_rate"] = (
-            (bzhd["low"] - bzhd["lag_close"]) / bzhd["lag_close"] * 100
-        ).round(5)
-        bzhd["vol_change_rate"] = (
-            (bzhd["volume"] - bzhd["lag_volume"]) / bzhd["lag_volume"] * 100
-        ).round(5)
+        if len(bzhd) > 1:
+            # calculate all change rates
+            bzhd.sort_values(["date"], inplace=True)
+            bzhd["lag_close"] = bzhd["close"].shift(1)
+            bzhd["lag_volume"] = bzhd["volume"].shift(1)
+            bzhd["change_rate"] = (
+                (bzhd["close"] - bzhd["lag_close"]) / bzhd["lag_close"] * 100
+            ).round(5)
+            bzhd["open_preclose_rate"] = (
+                (bzhd["open"] - bzhd["lag_close"]) / bzhd["lag_close"] * 100
+            ).round(5)
+            bzhd["high_preclose_rate"] = (
+                (bzhd["high"] - bzhd["lag_close"]) / bzhd["lag_close"] * 100
+            ).round(5)
+            bzhd["low_preclose_rate"] = (
+                (bzhd["low"] - bzhd["lag_close"]) / bzhd["lag_close"] * 100
+            ).round(5)
+            bzhd["vol_change_rate"] = (
+                (bzhd["volume"] - bzhd["lag_volume"]) / bzhd["lag_volume"] * 100
+            ).round(5)
 
-        bzhd.drop(["lag_close", "lag_volume"], axis=1, inplace=True)
+            bzhd.drop(["lag_close", "lag_volume"], axis=1, inplace=True)
+
+            # if latest_date is not None, drop the first row
+            if latest_date is not None:
+                bzhd.drop(bzhd.index[0], inplace=True)
 
         bzhd.replace([np.inf, -np.inf, np.nan], None, inplace=True)
-
-        # if latest_date is not None, drop the first row
-        if latest_date is not None:
-            bzhd.drop(bzhd.index[0], inplace=True)
 
         bzhd.insert(0, "symbol", symbol)
 
@@ -1206,8 +1207,6 @@ def get_etf_daily(symbol):
         if latest_date is not None:
             df.drop(df.index[0], inplace=True)
 
-        df.insert(0, "symbol", symbol)
-
         with alchemyEngine.begin() as conn:
             update_on_conflict(
                 table_def_fund_etf_daily_em(), conn, df, ["symbol", "date"]
@@ -1576,7 +1575,7 @@ def stock_zh_daily_hist(stock_list, threads):
 
 def get_sge_spot_daily(symbol):
     worker = get_worker()
-    alchemyEngine = worker.alchemyEngine
+    alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
     with alchemyEngine.connect() as conn:
         # latest_date = get_max_for_column(conn, symbol, "spot_hist_sge")
@@ -1600,44 +1599,48 @@ def get_sge_spot_daily(symbol):
         start_date = latest_date - timedelta(days=20)
         spot_hist_sge_df = spot_hist_sge_df[spot_hist_sge_df["date"] >= start_date]
 
-    # calculate all change rates
-    spot_hist_sge_df.sort_values(["date"], inplace=True)
-    spot_hist_sge_df["lag_close"] = spot_hist_sge_df["close"].shift(1)
-    spot_hist_sge_df["change_rate"] = (
-        (spot_hist_sge_df["close"] - spot_hist_sge_df["lag_close"])
-        / spot_hist_sge_df["lag_close"]
-        * 100
-    ).round(5)
-    spot_hist_sge_df["open_preclose_rate"] = (
-        (spot_hist_sge_df["open"] - spot_hist_sge_df["lag_close"])
-        / spot_hist_sge_df["lag_close"]
-        * 100
-    ).round(5)
-    spot_hist_sge_df["high_preclose_rate"] = (
-        (spot_hist_sge_df["high"] - spot_hist_sge_df["lag_close"])
-        / spot_hist_sge_df["lag_close"]
-        * 100
-    ).round(5)
-    spot_hist_sge_df["low_preclose_rate"] = (
-        (spot_hist_sge_df["low"] - spot_hist_sge_df["lag_close"])
-        / spot_hist_sge_df["lag_close"]
-        * 100
-    ).round(5)
+    if len(spot_hist_sge_df) > 1:
+        # calculate all change rates
+        spot_hist_sge_df.sort_values(["date"], inplace=True)
+        spot_hist_sge_df["lag_close"] = spot_hist_sge_df["close"].shift(1)
+        spot_hist_sge_df["change_rate"] = (
+            (spot_hist_sge_df["close"] - spot_hist_sge_df["lag_close"])
+            / spot_hist_sge_df["lag_close"]
+            * 100
+        ).round(5)
+        spot_hist_sge_df["open_preclose_rate"] = (
+            (spot_hist_sge_df["open"] - spot_hist_sge_df["lag_close"])
+            / spot_hist_sge_df["lag_close"]
+            * 100
+        ).round(5)
+        spot_hist_sge_df["high_preclose_rate"] = (
+            (spot_hist_sge_df["high"] - spot_hist_sge_df["lag_close"])
+            / spot_hist_sge_df["lag_close"]
+            * 100
+        ).round(5)
+        spot_hist_sge_df["low_preclose_rate"] = (
+            (spot_hist_sge_df["low"] - spot_hist_sge_df["lag_close"])
+            / spot_hist_sge_df["lag_close"]
+            * 100
+        ).round(5)
 
-    spot_hist_sge_df.drop(
-        ["lag_close"], axis=1, inplace=True
-    )
+        spot_hist_sge_df.drop(
+            ["lag_close"], axis=1, inplace=True
+        )
+        # if latest_date is not None, drop the first row
+        if latest_date is not None:
+            spot_hist_sge_df.drop(spot_hist_sge_df.index[0], inplace=True)
 
     spot_hist_sge_df.replace([np.inf, -np.inf, np.nan], None, inplace=True)
 
-    # if latest_date is not None, drop the first row
-    if latest_date is not None:
-        spot_hist_sge_df.drop(spot_hist_sge_df.index[0], inplace=True)
-
     spot_hist_sge_df.insert(0, "symbol", symbol)
 
-    with alchemyEngine.begin() as conn:
-        update_on_conflict(spot_hist_sge, conn, spot_hist_sge_df, ["symbol", "date"])
+    try:
+        with alchemyEngine.begin() as conn:
+            update_on_conflict(spot_hist_sge, conn, spot_hist_sge_df, ["symbol", "date"])
+    except Exception as e:
+        logger.error("failed to save spot_hist_sge for symbol: %s, %s", symbol, e, exc_info=True)
+        raise e
 
     return len(spot_hist_sge_df)
 
