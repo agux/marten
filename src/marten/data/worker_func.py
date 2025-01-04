@@ -1625,7 +1625,7 @@ def get_sge_spot_daily(symbol):
     )
 
     spot_hist_sge_df.replace([np.inf, -np.inf, np.nan], None, inplace=True)
-    spot_hist_sge_df.dropna(subset=["symbol", "date"])
+    spot_hist_sge_df.dropna(subset=["symbol", "date"], inplace=True)
 
     # if latest_date is not None, drop the first row
     if latest_date is not None:

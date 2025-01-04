@@ -205,7 +205,7 @@ def save_ta(ta_table, df, symbol):
                 """
             ),
             {
-                "table": ta_table,
+                "table": ta_table.__tablename__,
                 "symbol": symbol,
             },
         )
