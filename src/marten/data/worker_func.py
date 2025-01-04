@@ -244,9 +244,7 @@ def update_us_indices(symbol):
         iuss["lag_volume"] = iuss["volume"].shift(1)
         iuss["lag_amount"] = iuss["amount"].shift(1)
         iuss["change_rate"] = (
-            (iuss["change_rate"] - iuss["lag_change_rate"])
-            / iuss["lag_change_rate"]
-            * 100
+            (iuss["close"] - iuss["lag_close"]) / iuss["lag_close"] * 100
         ).round(5)
         iuss["open_preclose_rate"] = (
             (iuss["open"] - iuss["lag_close"]) / iuss["lag_close"] * 100
