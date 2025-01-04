@@ -127,7 +127,7 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None, anchor_table=
             "open_preclose_rate, high_preclose_rate, low_preclose_rate"
         ),
         "fund_etf_daily_em_view": (
-            "date DS, change_rate y, vol_change_rate, amt_change_rate, open, close, high, low, volume, "
+            "date DS, change_rate y, vol_change_rate, open, close, high, low, volume, "
             "turnover, turnover_rate, turnover_change_rate, open_preclose_rate, high_preclose_rate, low_preclose_rate"
         ),
         "us_index_daily_sina_view": (
