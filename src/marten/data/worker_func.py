@@ -1957,7 +1957,7 @@ def cn_bond_index():
             )
             await_futures(futures, False)
 
-        await_futures(futures)
+        await_futures(futures, task_timeout=180)
 
     return len(df)
 
