@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import os
 import time
 import math
+import random
 import socket
 import psutil
 import numpy as np
@@ -373,11 +374,13 @@ class BaseModel(ABC):
         #     cpu_count = psutil.cpu_count(logical=True)
         #     num_threads = math.ceil(cpu_count / n_workers)
         #     torch.set_num_threads(num_threads)
-        n_workers = num_workers()
+        n_workers = num_workers() * 0.9
         cpu_count = psutil.cpu_count(logical=not is_baseline)
-        num_threads = math.ceil(cpu_count / n_workers)
+        quotient = cpu_count / n_workers
+        floor = cpu_count // n_workers
+        mod = cpu_count % n_workers
+        num_threads = math.ceil(quotient) if random.random() < mod / quotient else floor
         torch.set_num_threads(num_threads)
-
         return torch.get_num_threads()
         # return optimize_torch_on_cpu(self.torch_cpu_ratio())
 
