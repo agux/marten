@@ -244,7 +244,7 @@ class table_def_option_qvix(Base):
     __table_args__ = (
         PrimaryKeyConstraint("symbol", "date"),
         Index(
-            "spot_hist_sge_date_idx",
+            "option_qvix_date_idx",
             desc("date"),
             postgresql_using="btree",
         ),

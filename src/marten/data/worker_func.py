@@ -1041,7 +1041,7 @@ def bond_ir():
         ).round(5)
         bzur["china_yield_spread_10y_2y_change_rate"] = (
             (bzur["china_yield_spread_10y_2y"] - bzur["lag_china_yield_spread_10y_2y"])
-            / bzur["lag_china_yield_spread_10y_2yy"]
+            / bzur["lag_china_yield_spread_10y_2y"]
             * 100
         ).round(5)
         bzur["us_yield_2y_change_rate"] = (
@@ -1597,7 +1597,7 @@ def get_sge_spot_daily(symbol):
     spot_hist_sge_df.insert(0, "symbol", symbol)
 
     # calculate all change rates
-    spot_hist_sge_df.sort_values(["symbol", "date"], inplace=True)
+    spot_hist_sge_df.sort_values(["date"], inplace=True)
     spot_hist_sge_df["lag_close"] = spot_hist_sge_df["close"].shift(1)
     spot_hist_sge_df["change_rate"] = (
         (spot_hist_sge_df["close"] - spot_hist_sge_df["lag_close"])
