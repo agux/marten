@@ -128,7 +128,6 @@ def update_hk_indices(symbol):
         if shide.empty:
             return None
 
-        shide.insert(0, "symbol", symbol)
         shide.rename(
             columns={
                 "latest": "close",
@@ -157,7 +156,7 @@ def update_hk_indices(symbol):
             shide = shide[shide["date"] > (latest_date - timedelta(days=10))]
 
         # calculate all change rates
-        shide.sort_values(["symbol", "date"], inplace=True)
+        shide.sort_values(["date"], inplace=True)
         shide["lag_close"] = shide["close"].shift(1)
         shide["change_rate"] = (
             (shide["close"] - shide["lag_close"]) / shide["lag_close"] * 100
@@ -179,6 +178,8 @@ def update_hk_indices(symbol):
         # if latest_date is not None, drop the first row
         if latest_date is not None:
             shide.drop(shide.index[0], inplace=True)
+
+        shide.insert(0, "symbol", symbol)
 
         with alchemyEngine.begin() as conn:
             update_on_conflict(
@@ -216,7 +217,7 @@ def update_us_indices(symbol):
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
     try:
         iuss = ak.index_us_stock_sina(symbol=symbol)
-        iuss.insert(0, "symbol", symbol)
+
         # Convert iuss["date"] to datetime and normalize to date only
         iuss.loc[:, "date"] = pd.to_datetime(iuss["date"]).dt.date
         with alchemyEngine.connect() as conn:
@@ -239,7 +240,7 @@ def update_us_indices(symbol):
             iuss = iuss[iuss["date"] > (latest_date - timedelta(days=10))]
 
         # calculate all change rates
-        iuss.sort_values(["symbol", "date"], inplace=True)
+        iuss.sort_values(["date"], inplace=True)
         iuss["lag_close"] = iuss["close"].shift(1)
         iuss["lag_volume"] = iuss["volume"].shift(1)
         iuss["lag_amount"] = iuss["amount"].shift(1)
@@ -273,6 +274,8 @@ def update_us_indices(symbol):
         # if latest_date is not None, drop the first row
         if latest_date is not None:
             iuss.drop(iuss.index[0], inplace=True)
+
+        iuss.insert(0, "symbol", symbol)
 
         with alchemyEngine.begin() as conn:
             update_on_conflict(
@@ -486,10 +489,8 @@ def get_bond_zh_hs_daily(symbol, shared_dict):
             ## keep rows only with `date` later than the latest record in database.
             bzhd = bzhd[bzhd["date"] > (latest_date - timedelta(days=10))]
 
-        bzhd.insert(0, "symbol", symbol)
-
         # calculate all change rates
-        bzhd.sort_values(["symbol", "date"], inplace=True)
+        bzhd.sort_values(["date"], inplace=True)
         bzhd["lag_close"] = bzhd["close"].shift(1)
         bzhd["lag_volume"] = bzhd["volume"].shift(1)
         bzhd["change_rate"] = (
@@ -515,6 +516,8 @@ def get_bond_zh_hs_daily(symbol, shared_dict):
         # if latest_date is not None, drop the first row
         if latest_date is not None:
             bzhd.drop(bzhd.index[0], inplace=True)
+
+        bzhd.insert(0, "symbol", symbol)
 
         with alchemyEngine.begin() as conn:
             update_on_conflict(bond_zh_hs_daily, conn, bzhd, ["symbol", "date"])
@@ -693,10 +696,9 @@ def stock_zh_index_daily_em(symbol, src):
             logger.warning("index data is empty: %s", symbol)
             return None
 
-        szide.insert(0, "symbol", symbol)
 
         # calculate all change rates
-        szide.sort_values(["symbol", "date"], inplace=True)
+        szide.sort_values(["date"], inplace=True)
         szide["lag_amount"] = szide["amount"].shift(1)
         szide["lag_close"] = szide["close"].shift(1)
         szide["lag_volume"] = szide["volume"].shift(1)
@@ -727,6 +729,8 @@ def stock_zh_index_daily_em(symbol, src):
         # if latest_date is not None, drop the first row
         if latest_date is not None:
             szide.drop(szide.index[0], inplace=True)
+
+        szide.insert(0, "symbol", symbol)
 
         with alchemyEngine.begin() as conn:
             update_on_conflict(
@@ -1174,7 +1178,7 @@ def get_etf_daily(symbol):
         ]
 
         # calculate all change rates
-        df.sort_values(["symbol", "date"], inplace=True)
+        df.sort_values(["date"], inplace=True)
         df["lag_turnover"] = df["turnover"].shift(1)
         df["lag_close"] = df["close"].shift(1)
         df["lag_volume"] = df["volume"].shift(1)
@@ -1201,6 +1205,8 @@ def get_etf_daily(symbol):
         # if latest_date is not None, drop the first row
         if latest_date is not None:
             df.drop(df.index[0], inplace=True)
+
+        df.insert(0, "symbol", symbol)
 
         with alchemyEngine.begin() as conn:
             update_on_conflict(
@@ -1594,8 +1600,6 @@ def get_sge_spot_daily(symbol):
         start_date = latest_date - timedelta(days=20)
         spot_hist_sge_df = spot_hist_sge_df[spot_hist_sge_df["date"] >= start_date]
 
-    spot_hist_sge_df.insert(0, "symbol", symbol)
-
     # calculate all change rates
     spot_hist_sge_df.sort_values(["date"], inplace=True)
     spot_hist_sge_df["lag_close"] = spot_hist_sge_df["close"].shift(1)
@@ -1625,11 +1629,12 @@ def get_sge_spot_daily(symbol):
     )
 
     spot_hist_sge_df.replace([np.inf, -np.inf, np.nan], None, inplace=True)
-    spot_hist_sge_df.dropna(subset=["symbol", "date"], inplace=True)
 
     # if latest_date is not None, drop the first row
     if latest_date is not None:
         spot_hist_sge_df.drop(spot_hist_sge_df.index[0], inplace=True)
+
+    spot_hist_sge_df.insert(0, "symbol", symbol)
 
     with alchemyEngine.begin() as conn:
         update_on_conflict(spot_hist_sge, conn, spot_hist_sge_df, ["symbol", "date"])
@@ -1709,7 +1714,6 @@ def rmb_exchange_rates():
     )
 
     with alchemyEngine.connect() as conn:
-        # latest_date = get_max_for_column(conn, symbol, "stock_zh_a_hist_em")
         latest_dates = [
             get_max_for_column(conn, None, "currency_boc_safe", non_null_col=c)
             for c in [
@@ -1880,12 +1884,10 @@ def get_cn_bond_index_metrics(symbol, symbol_cn):
             start_date = latest_date - timedelta(days=20)
             df = df[df["date"] >= start_date]
 
-        df.insert(0, "symbol", symbol)
-
         # calculate change rate
         if change_rate_col:
             lag_col = f"lag_{value_col_name}"
-            df.sort_values(["symbol", "date"], inplace=True)
+            df.sort_values(["date"], inplace=True)
             df[lag_col] = df[value_col_name].shift(1)
             df[change_rate_col] = (
                 (df[value_col_name] - df[lag_col]) / df[lag_col] * 100
@@ -1895,6 +1897,8 @@ def get_cn_bond_index_metrics(symbol, symbol_cn):
             # if latest_date is not None, drop the first row
             if latest_date is not None:
                 df.drop(df.index[0], inplace=True)
+        
+        df.insert(0, "symbol", symbol)
 
         with alchemyEngine.begin() as conn:
             update_on_conflict(cn_bond_indices, conn, df, ["symbol", "date"])
