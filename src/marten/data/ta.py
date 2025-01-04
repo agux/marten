@@ -198,7 +198,7 @@ def save_ta(ta_table, df, symbol):
             text(
                 f"""
                     select max(date)
-                    from {ta_table}
+                    from {ta_table.__tablename__}
                     where 
                         "table" = :table
                         and symbol = :symbol
