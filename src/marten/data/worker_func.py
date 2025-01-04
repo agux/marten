@@ -1066,7 +1066,7 @@ def bond_ir():
         ).round(5)
         bzur["us_yield_spread_10y_2y_change_rate"] = (
             (bzur["us_yield_spread_10y_2y"] - bzur["lag_us_yield_spread_10y_2y"])
-            / bzur["lag_us_yield_spread_10y_2yy"]
+            / bzur["lag_us_yield_spread_10y_2y"]
             * 100
         ).round(5)
 
@@ -1625,6 +1625,7 @@ def get_sge_spot_daily(symbol):
     )
 
     spot_hist_sge_df.replace([np.inf, -np.inf, np.nan], None, inplace=True)
+    spot_hist_sge_df.dropna(subset=["symbol", "date"])
 
     # if latest_date is not None, drop the first row
     if latest_date is not None:
