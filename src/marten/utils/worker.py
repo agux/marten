@@ -90,6 +90,14 @@ class LocalWorkerPlugin(WorkerPlugin):
         # configure logging at the root level of Lightning
         logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
 
+        worker.logger.info(
+            "MALLOC_TRIM_THRESHOLD_: %s\nOMP_NUM_THREADS: %s\nMKL_NUM_THREADS: %s\nOPENBLAS_NUM_THREADS: %s\n",
+            os.getenv("MALLOC_TRIM_THRESHOLD_"),
+            os.getenv("OMP_NUM_THREADS"),
+            os.getenv("MKL_NUM_THREADS"),
+            os.getenv("OPENBLAS_NUM_THREADS"),
+        )
+
 
 class IgnorePLFilter(logging.Filter):
     def filter(self, record):
@@ -340,7 +348,7 @@ def await_futures(
     if until_all_completed:
         if task_timeout is not None and shared_vars is not None:
             while num is not None and num > 0:
-                time.sleep(random_seconds(num >> 3, num >> 1, max_delay))
+                time.sleep(random_seconds(num >> 2, num >> 1, max_delay))
                 num = handle_task_timeout(futures, task_timeout, shared_vars)
         else:
             get_logger().debug("waiting until all futures complete: %s", num)
@@ -360,7 +368,7 @@ def await_futures(
             #     log_futures(futures)
     elif num > multiprocessing.cpu_count() * multiplier:
         delta = int(num - multiprocessing.cpu_count() * multiplier)
-        time.sleep(random_seconds(delta >> 3, delta >> 1, max_delay))
+        time.sleep(random_seconds(delta >> 2, delta >> 1, max_delay))
 
         if task_timeout is not None and shared_vars is not None:
             handle_task_timeout(futures, task_timeout, shared_vars)
