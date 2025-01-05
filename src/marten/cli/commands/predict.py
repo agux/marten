@@ -228,7 +228,7 @@ def configure_parser(parser):
     )
     parser.add_argument(
         "--resume",
-        choices=["none", "covar", "hps"],
+        choices=["none", "covar", "hps", "predict"],
         default="none",
         help=(
             "Continue from the specified prediction process. "
@@ -289,9 +289,9 @@ def configure_parser(parser):
     )
     parser.add_argument(
         "--asset_type",
-        choices=["stock", "index", "ETF"],
-        default="ETF",
-        help="Asset type of the symbol(s). Defaults to ETF.",
+        choices=["unspecified", "stock", "index", "fund"],
+        default="unspecified",
+        help="Asset type of the symbol(s). Defaults to 'unspecified' and it will be inferred from symbol_dict table.",
     )
     parser.add_argument(
         "symbols", type=str, nargs="+", help="Array of asset symbols to be predicted."

@@ -2270,8 +2270,8 @@ def fund_holding(symbol):
     while year >= last_year:
         try:
             if fund_type == "指数型-固收":  ## Bonds
-                # df = EastMoneyAPI.fund_portfolio_bond_hold_em(symbol=symbol, date=year)
-                df = ak.fund_portfolio_bond_hold_em(symbol=symbol, date=year)
+                df = EastMoneyAPI.fund_portfolio_bond_hold_em(symbol=symbol, date=year)
+                # df = ak.fund_portfolio_bond_hold_em(symbol=symbol, date=year)
                 df.rename(
                     columns={
                         "序号": "serial_number",

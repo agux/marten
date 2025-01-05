@@ -119,7 +119,9 @@ def _init_local_resource():
         logger = get_logger(__name__)
 
 
-def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None, anchor_table=None):
+def load_anchor_ts(
+    symbol, limit, alchemyEngine, cutoff_date=None, anchor_table: str = None
+):
     ## support arbitrary types of symbol (could be from different tables, with different features available)
     tbl_cols_dict = {
         "index_daily_em_view": (
@@ -153,7 +155,7 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None, anchor_table=
             "open_preclose_rate, high_preclose_rate, low_preclose_rate, vol_change_rate"
         ),
     }
-    if anchor_table is None:
+    if anchor_table is None or anchor_table == "unspecified":
         # lookup which table the symbol's data is in
         anchor_table = "index_daily_em_view"  # Default table, replace with actual logic if necessary
         with alchemyEngine.connect() as conn:
@@ -166,6 +168,8 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None, anchor_table=
                 if table_name in tbl_cols_dict:
                     anchor_table = table_name
                     break
+    elif not anchor_table.endswith("_view"):
+        anchor_table = f"{anchor_table}_view"
 
     # load anchor TS
     query = f"""
@@ -206,6 +210,7 @@ def load_anchor_ts(symbol, limit, alchemyEngine, cutoff_date=None, anchor_table=
 def covar_symbols_from_table(
     model,
     anchor_symbol,
+    symbol_table,
     dates,
     table,
     feature,
@@ -247,11 +252,13 @@ def covar_symbols_from_table(
                 WHERE
                     pc.model = %(model)s
                     AND pc.symbol = %(anchor_symbol)s
+                    AND pc.symbol_table = %(symbol_table)s
                     AND pc.cov_table = %(table)s
                     AND pc.feature = %(feature)s
                     AND pc.ts_date = %(ts_date)s
             """
             params["model"] = model
+            params["symbol_table"] = symbol_table
 
     # get a list of symbols from the given table, of which metrics are not recorded yet
     if table.startswith("ta_"):
@@ -335,7 +342,13 @@ def _pair_endogenous_covar_metrics(
 
     # remove feature elements already exists in the neuralprophet_corel table.
     features = _remove_measured_features(
-        alchemyEngine, args.model, anchor_symbol, cov_table, features, cutoff_date
+        alchemyEngine,
+        args.model,
+        anchor_symbol,
+        args.symbol_table,
+        cov_table,
+        features,
+        cutoff_date,
     )
 
     if not features:
@@ -447,6 +460,7 @@ def _load_covar_set(covar_set_id, model, alchemyEngine):
                     paired_correlation t2
                 ON
                     t1.symbol = t2.symbol
+                    t1.symbol_table = t2.symbol_table
                     AND t1.cov_table = t2.cov_table
                     AND t1.cov_symbol = t2.cov_symbol
                     AND t1.cov_feature = t2.feature
@@ -463,7 +477,7 @@ def _load_covar_set(covar_set_id, model, alchemyEngine):
                 t2.loss_val,
                 t2.nan_count,
                 ROW_NUMBER() OVER (
-                    PARTITION BY t1.symbol, t1.cov_table, t1.cov_symbol, t1.cov_feature
+                    PARTITION BY t1.symbol, t1.symbol_table, t1.cov_table, t1.cov_symbol, t1.cov_feature
                     ORDER BY t2.ts_date DESC, t2.loss_val ASC, t2.nan_count ASC
                 ) AS rnk
             FROM
@@ -495,6 +509,7 @@ def _load_covars(
     alchemyEngine,
     max_covars,
     anchor_symbol,
+    symbol_table,
     nan_threshold=None,
     cov_table=None,
     feature=None,
@@ -504,6 +519,7 @@ def _load_covars(
     global logger
     params = {
         "anchor_symbol": anchor_symbol,
+        "symbol_table": symbol_table,
         "ts_date": cutoff_date,
     }
     match model:
@@ -539,6 +555,7 @@ def _load_covars(
                 where
                     model = %(model)s
                     and symbol = %(anchor_symbol)s
+                    and symbol_table = %(symbol_table)s
                     and cov_symbol = %(anchor_symbol)s
                     and feature = 'y'
                     and ts_date <= %(ts_date)s
@@ -553,6 +570,7 @@ def _load_covars(
                 where
                     model = %(model)s
                     and symbol = %(anchor_symbol)s
+                    and symbol_table = %(symbol_table)s
                     and loss_val < ({sub_query})
             """
             params["model"] = model
@@ -738,6 +756,7 @@ def augment_anchor_df_with_covars(
             alchemyEngine,
             args.max_covars,
             args.symbol,
+            args.symbol_table,
             nan_threshold,
             cutoff_date=cutoff_date,
             model=args.model,
@@ -925,7 +944,7 @@ def hp_deserializer(dct):
 
 
 def preload_warmstart_tuples(
-    model_name, anchor_symbol, covar_set_id, hps_id, limit, feat_size
+    model_name, anchor_symbol, symbol_table, covar_set_id, hps_id, limit, feat_size
 ):
     global alchemyEngine, logger, model
 
@@ -937,6 +956,7 @@ def preload_warmstart_tuples(
                 from hps_metrics
                 where model = :model
                     and anchor_symbol = :anchor_symbol
+                    and symbol_table = :symbol_table
                     and covar_set_id = :covar_set_id
                     and hps_id = :hps_id
                     and loss_val is not null
@@ -947,6 +967,7 @@ def preload_warmstart_tuples(
             {
                 "model": model_name,
                 "anchor_symbol": anchor_symbol,
+                "symbol_table": symbol_table,
                 "covar_set_id": covar_set_id,
                 "hps_id": hps_id,
                 # "limit": limit,
@@ -1098,6 +1119,7 @@ def _bayesopt_run(
         warmstart_tuples = preload_warmstart_tuples(
             args.model,
             args.symbol,
+            args.symbol_table,
             covar_set_id,
             hps_id,
             args.batch_size * iteration * 2,
@@ -1221,10 +1243,11 @@ def update_hps_sessions(id, method, search_params, search_space, covar_set_id):
 
 
 def _remove_measured_features(
-    alchemyEngine, model, anchor_symbol, cov_table, features, ts_date=None
+    alchemyEngine, model, anchor_symbol, symbol_table, cov_table, features, ts_date=None
 ):
     params = {
         "symbol": anchor_symbol,
+        "symbol_table": symbol_table,
         "cov_table": cov_table,
         "features": tuple(features),
     }
@@ -1244,6 +1267,7 @@ def _remove_measured_features(
                 where 
                     model = %(model)s
                     and symbol = %(symbol)s
+                    and symbol_table = %(symbol_table)s
                     and cov_table = %(cov_table)s
                     and feature in %(features)s
             """
@@ -1284,7 +1308,13 @@ def covar_metric(
         "currency_boc_safe"
     ):
         features = _remove_measured_features(
-            alchemyEngine, args.model, anchor_symbol, cov_table, features, cutoff_date
+            alchemyEngine,
+            args.model,
+            anchor_symbol,
+            args.symbol_table,
+            cov_table,
+            features,
+            cutoff_date,
         )
 
     if len(features) == 0:
@@ -1345,6 +1375,7 @@ def covar_metric(
                             covar_symbols_from_table,
                             args.model,
                             anchor_symbol,
+                            args.symbol_table,
                             dates,
                             cov_table,
                             feature,
@@ -1799,20 +1830,26 @@ def _covar_cutoff_date(symbol):
                 result = conn.execute(text(query), {"symbol": symbol})
                 return result.fetchone()[0]
             case _:
-                query = "SELECT max(ts_date) FROM paired_correlation where symbol=:symbol and model=:model"
+                query = "SELECT max(ts_date) FROM paired_correlation where symbol=:symbol and model=:model and symbol_table=:symbol_table"
                 result = conn.execute(
-                    text(query), {"symbol": symbol, "model": args.model}
+                    text(query),
+                    {
+                        "symbol": symbol,
+                        "model": args.model,
+                        "symbol_table": args.symbol_table,
+                    },
                 )
                 return result.fetchone()[0]
 
 
-def _hps_cutoff_date(symbol, model, method):
+def _hps_cutoff_date(symbol, symbol_table, model, method):
     global alchemyEngine
     with alchemyEngine.connect() as conn:
         query = """
             SELECT max(ts_date) 
             FROM hps_sessions 
             WHERE symbol=:symbol 
+                AND symbol_table=:symbol_table
                 AND model=:model 
                 AND (method=:method OR method is null)
         """
@@ -1820,6 +1857,7 @@ def _hps_cutoff_date(symbol, model, method):
             text(query),
             {
                 "symbol": symbol,
+                "symbol_table": symbol_table,
                 "model": model,
                 "method": method,
             },
@@ -1844,7 +1882,9 @@ def _get_cutoff_date(args):
         if cutoff_date is not None:
             covar_cutoff = cutoff_date
     if not args.covar_only:
-        cutoff_date = _hps_cutoff_date(args.symbol, args.model, args.method)
+        cutoff_date = _hps_cutoff_date(
+            args.symbol, args.symbol_table, args.model, args.method
+        )
         if cutoff_date is not None:
             hps_cutoff = cutoff_date
 
@@ -1852,7 +1892,7 @@ def _get_cutoff_date(args):
     return min(covar_cutoff, hps_cutoff)
 
 
-def get_hps_session(symbol, model, cutoff_date, resume, timesteps):
+def get_hps_session(symbol, symbol_table, model, cutoff_date, resume, timesteps):
     global alchemyEngine
 
     if resume:
@@ -1861,12 +1901,14 @@ def get_hps_session(symbol, model, cutoff_date, resume, timesteps):
                 select max(id) id
                 from hps_sessions
                 where symbol = :symbol
+                    and symbol_table = :symbol_table
                     and model = :model
                     and ts_date = :ts_date
                 union all
                 select max(id) id
                 from hps_sessions
                 where symbol = :symbol
+                    and symbol_table = :symbol_table
                     and model = :model
                     and search_space is null
             )
@@ -1876,6 +1918,7 @@ def get_hps_session(symbol, model, cutoff_date, resume, timesteps):
                 text(query),
                 {
                     "symbol": symbol,
+                    "symbol_table": symbol_table,
                     "ts_date": cutoff_date,
                     "model": model,
                 },
@@ -1900,13 +1943,14 @@ def get_hps_session(symbol, model, cutoff_date, resume, timesteps):
         result = conn.execute(
             text(
                 """
-                INSERT INTO hps_sessions (symbol, model, ts_date, timesteps) 
-                VALUES (:symbol, :model, :ts_date, :timesteps)
+                INSERT INTO hps_sessions (symbol, symbol_table, model, ts_date, timesteps) 
+                VALUES (:symbol, :symbol_table, :model, :ts_date, :timesteps)
                 RETURNING id
                 """
             ),
             {
                 "symbol": symbol,
+                "symbol_table": symbol_table,
                 "model": model,
                 "ts_date": cutoff_date,
                 "timesteps": timesteps,

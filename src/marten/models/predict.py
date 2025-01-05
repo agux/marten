@@ -30,6 +30,15 @@ model: BaseModel = None
 
 def init(args):
     global client, alchemyEngine, model
+    match args.asset_type:
+        case "stock":
+            args.symbol_table = "stock_zh_a_hist_em_view"
+        case "index":
+            args.symbol_table = "index_daily_em_view"
+        case "fund":
+            args.symbol_table = "fund_etf_daily_em_view"
+        case _:
+            args.symbol_table = "unspecified"
     load_dotenv()  # take environment variables from .env.
     client = init_client(
         __name__,

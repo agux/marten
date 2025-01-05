@@ -50,6 +50,7 @@ LOSS_CAP = 99.99
 
 def merge_covar_df(
     anchor_symbol,
+    symbol_table,
     anchor_df,
     cov_table,
     cov_symbol,
@@ -59,7 +60,7 @@ def merge_covar_df(
     sem=None,
 ):
 
-    if anchor_symbol == cov_symbol and not cov_table.startswith("ta_"):
+    if anchor_symbol == cov_symbol and symbol_table == cov_table and not cov_table.startswith("ta_"):
         if feature == "y":
             # no covariate is needed. this is a baseline metric
             merged_df = anchor_df[["ds", "y"]]
@@ -174,6 +175,7 @@ def fit_with_covar(
     def _func():
         merged_df = merge_covar_df(
             anchor_symbol,
+            args.symbol_table,
             anchor_df,
             cov_table,
             cov_symbol,
@@ -289,6 +291,7 @@ def fit_with_covar(
             save_covar_metrics(
                 args.model,
                 anchor_symbol,
+                args.symbol_table,
                 cov_table,
                 cov_symbol,
                 feature,
@@ -396,6 +399,7 @@ def save_impute_data(impute_df, cov_table, cov_symbol, feature, alchemyEngine, l
 def save_covar_metrics(
     model,
     anchor_symbol,
+    symbol_table,
     cov_table,
     cov_symbol,
     feature,
@@ -429,6 +433,7 @@ def save_covar_metrics(
 
     params = {
         "symbol": anchor_symbol,
+        "symbol_table": symbol_table,
         "cov_table": cov_table,
         "cov_symbol": cov_symbol,
         "feature": feature,
@@ -471,13 +476,13 @@ def save_covar_metrics(
         case _:
             sql = """
                 INSERT INTO paired_correlation 
-                (model, symbol, cov_table, cov_symbol, feature, mae_val, 
+                (model, symbol, symbol_table, cov_table, cov_symbol, feature, mae_val, 
                 rmse_val, loss_val, fit_time, timesteps, nan_count, 
                 ts_date, epochs, mae, rmse, loss, device_info) 
-                VALUES (:model, :symbol, :cov_table, :cov_symbol, :feature, :mae_val, 
+                VALUES (:model, :symbol, :symbol_table, :cov_table, :cov_symbol, :feature, :mae_val, 
                 :rmse_val, :loss_val, :fit_time, :timesteps, :nan_count, 
                 :ts_date, :epochs, :mae, :rmse, :loss, :device_info) 
-                ON CONFLICT (symbol, cov_symbol, feature, cov_table, ts_date, model) 
+                ON CONFLICT (symbol, symbol_table, cov_symbol, feature, cov_table, ts_date, model) 
                 DO UPDATE SET 
                     mae_val = EXCLUDED.mae_val, 
                     rmse_val = EXCLUDED.rmse_val, 
@@ -625,7 +630,7 @@ def log_metrics_for_hyper_params(
     # Otherwise we could proceed further code execution.
     hpid, param_str = get_hpid(params)
     if not new_metric_keys(
-        args.model, anchor_symbol, hpid, param_str, covar_set_id, hps_id, alchemyEngine
+        args.model, anchor_symbol, args.symbol_table, hpid, param_str, covar_set_id, hps_id, alchemyEngine
     ):
         logger.debug("Skip re-entry for %s: %s", anchor_symbol, param_str)
         with alchemyEngine.connect() as conn:
@@ -636,6 +641,7 @@ def log_metrics_for_hyper_params(
                         from hps_metrics
                         where model = :model
                         and anchor_symbol = :anchor_symbol
+                        and symbol_table = :symbol_table
                         and hpid = :hpid
                         and hps_id = :hps_id
                     """
@@ -643,6 +649,7 @@ def log_metrics_for_hyper_params(
                 {
                     "model": args.model,
                     "anchor_symbol": anchor_symbol,
+                    "symbol_table": args.symbol_table,
                     "hpid": hpid,
                     "hps_id": hps_id,
                 },
@@ -721,6 +728,7 @@ def log_metrics_for_hyper_params(
         alchemyEngine,
         args.model,
         anchor_symbol,
+        args.symbol_table,
         hpid,
         last_metric["epoch"] + 1,
         last_metric,
@@ -755,6 +763,7 @@ def update_metrics_table(
     alchemyEngine,
     model,
     anchor_symbol,
+    symbol_table,
     hpid,
     epochs,
     last_metric,
@@ -803,6 +812,7 @@ def update_metrics_table(
                     WHERE
                         model = :model
                         AND anchor_symbol = :anchor_symbol
+                        AND symbol_table = :symbol_table
                         AND hpid = :hpid
                         AND covar_set_id = :covar_set_id
                         AND hps_id = :hps_id
@@ -811,6 +821,7 @@ def update_metrics_table(
                 {
                     "model": model,
                     "anchor_symbol": anchor_symbol,
+                    "symbol_table": symbol_table,
                     "hpid": hpid,
                     "covar_set_id": covar_set_id,
                     "tag": tag,
@@ -837,7 +848,7 @@ def update_metrics_table(
 
 
 def new_metric_keys(
-    model, anchor_symbol, hpid, hyper_params, covar_set_id, hps_id, alchemyEngine
+    model, anchor_symbol, symbol_table, hpid, hyper_params, covar_set_id, hps_id, alchemyEngine
 ):
     def action():
         try:
@@ -845,13 +856,14 @@ def new_metric_keys(
                 conn.execute(
                     text(
                         """
-                        INSERT INTO hps_metrics (model, anchor_symbol, hpid, hyper_params, covar_set_id, hps_id) 
-                        VALUES (:model, :anchor_symbol, :hpid, :hyper_params, :covar_set_id, :hps_id)
+                        INSERT INTO hps_metrics (model, anchor_symbol, symbol_table, hpid, hyper_params, covar_set_id, hps_id) 
+                        VALUES (:model, :anchor_symbol, :symbol_table, :hpid, :hyper_params, :covar_set_id, :hps_id)
                         """
                     ),
                     {
                         "model": model,
                         "anchor_symbol": anchor_symbol,
+                        "symbol_table": symbol_table,
                         "hpid": hpid,
                         "hps_id": hps_id,
                         "hyper_params": hyper_params,
@@ -873,7 +885,7 @@ def new_metric_keys(
 
 
 def get_topk_foundation_settings(
-    alchemyEngine, model, symbol, hps_id, topk, ts_date, nan_limit
+    alchemyEngine, model, symbol, symbol_table, hps_id, topk, ts_date, nan_limit
 ):
     # worker = get_worker()
     # alchemyEngine = worker.alchemyEngine
@@ -900,6 +912,7 @@ def get_topk_foundation_settings(
                     where 
                         model = %(model)s
                         and symbol = %(symbol)s
+                        and symbol_table = %(symbol_table)s
                         and cov_symbol = symbol
                         and feature = 'y'
                         and ts_date = %(ts_date)s
@@ -918,9 +931,11 @@ def get_topk_foundation_settings(
             from hps_metrics hm
             inner join univ_baseline_nc nc
                 on hm.anchor_symbol = nc.symbol
+                and hm.symbol_table = nc.symbol_table
             where 
                 hm.model = %(model)s
                 and hm.anchor_symbol = %(symbol)s 
+                and hm.symbol_table = %(symbol_table)s
                 and hm.hps_id = %(hps_id)s
                 and hm.covar_set_id = 0
         ),
@@ -950,6 +965,7 @@ def get_topk_foundation_settings(
             INNER JOIN
                 univ_baseline ub
             ON nc.symbol = ub.symbol
+                and nc.symbol_table = ub.symbol_table
             where 1=1
                 {model_cond}
                 and nc.ts_date = %(ts_date)s
@@ -970,6 +986,7 @@ def get_topk_foundation_settings(
     params = {
         "model": model,
         "symbol": symbol,
+        "symbol_table": symbol_table,
         "hps_id": hps_id,
         "limit": topk,
         "ts_date": ts_date,
@@ -982,7 +999,7 @@ def get_topk_foundation_settings(
     return df
 
 
-def get_topk_prediction_settings(alchemyEngine, model, symbol, hps_id, topk):
+def get_topk_prediction_settings(alchemyEngine, model, symbol, symbol_table, hps_id, topk):
     # worker = get_worker()
     # alchemyEngine = worker.alchemyEngine
 
@@ -993,6 +1010,7 @@ def get_topk_prediction_settings(alchemyEngine, model, symbol, hps_id, topk):
             where 
                 model = %(model)s
                 and anchor_symbol = %(symbol)s 
+                and symbol_table = %(symbol_table)s
                 and hps_id = %(hps_id)s 
                 and covar_set_id = 0
         ),
@@ -1005,6 +1023,7 @@ def get_topk_prediction_settings(alchemyEngine, model, symbol, hps_id, topk):
             WHERE 
                 model = %(model)s
                 AND anchor_symbol = %(symbol)s
+                AND symbol_table = %(symbol_table)s
                 AND hps_id = %(hps_id)s 
                 and loss_val < (select loss_val from baseline)
             ORDER BY loss_val
@@ -1019,6 +1038,7 @@ def get_topk_prediction_settings(alchemyEngine, model, symbol, hps_id, topk):
             WHERE 
                 model = %(model)s
                 AND anchor_symbol = %(symbol)s
+                AND symbol_table = %(symbol_table)s
                 AND hps_id = %(hps_id)s 
                 and loss_val < (select loss_val from baseline)
             ORDER BY loss
@@ -1033,6 +1053,7 @@ def get_topk_prediction_settings(alchemyEngine, model, symbol, hps_id, topk):
     params = {
         "model": model,
         "symbol": symbol,
+        "symbol_table": symbol_table,
         "hps_id": hps_id,
         "limit": topk,
     }
@@ -1231,6 +1252,7 @@ def save_forecast_snapshot(
     alchemyEngine,
     model_name,
     symbol,
+    symbol_table,
     hyper_params,
     covar_set_id,
     metrics,
@@ -1263,13 +1285,13 @@ def save_forecast_snapshot(
                     into
                     predict_snapshots
                     (
-                        model,symbol,hyper_params,covar_set_id,mae_val,rmse_val,loss_val,mae,rmse,loss,
+                        model,symbol,symbol_table,hyper_params,covar_set_id,mae_val,rmse_val,loss_val,mae,rmse,loss,
                         predict_diff_mean,predict_diff_stddev,epochs,proc_time,mae_final,rmse_final,loss_final,
                         region,random_seed,future_steps,n_covars,cutoff_date,group_id,hpid,avg_loss,covar,
                         avg_yhat,cum_returns
                     )
                 values(
-                    :model,:symbol,:hyper_params,:covar_set_id,:mae_val,:rmse_val,:loss_val,
+                    :model,:symbol,:symbol_table,:hyper_params,:covar_set_id,:mae_val,:rmse_val,:loss_val,
                     :mae,:rmse,:loss,:predict_diff_mean,:predict_diff_stddev,:epochs,:proc_time,
                     :mae_final,:rmse_final,:loss_final,:region,:random_seed,:future_steps,:n_covars,
                     :cutoff_date,:group_id,:hpid,:avg_loss,:covar,:avg_yhat,:cum_returns
@@ -1279,6 +1301,7 @@ def save_forecast_snapshot(
             {
                 "model": model_name,
                 "symbol": symbol,
+                "symbol_table":symbol_table,
                 "hyper_params": hyper_params,
                 "covar_set_id": covar_set_id,
                 "mae_val": metrics["MAE_val"],
@@ -1324,6 +1347,7 @@ def save_forecast_snapshot(
 
         forecast_params.rename(columns={"ds": "date"}, inplace=True)
         forecast_params.loc[:, "symbol"] = symbol
+        forecast_params.loc[:, "symbol_table"] = symbol_table
         forecast_params.loc[:, "snapshot_id"] = snapshot_id
         # country_holidays = get_country_holidays(region)
         country_holidays = get_all_holidays(
@@ -1454,6 +1478,7 @@ def forecast(
     if covar_set_id == 0:
         new_df = merge_covar_df(
             symbol,
+            args.symbol_table,
             df,
             hps_metric["cov_table"],
             hps_metric["cov_symbol"],
@@ -1547,6 +1572,7 @@ def forecast(
         alchemyEngine,
         model,
         symbol,
+        args.symbol_table,
         hp_str,
         covar_set_id,
         metrics,
@@ -1604,11 +1630,11 @@ def ensemble_topk_prediction(
 
     region = get_holiday_region(alchemyEngine, symbol)
     logger.info("%s - inferred holiday region: %s", symbol, region)
-    s1 = get_topk_prediction_settings(alchemyEngine, args.model, symbol, hps_id, topk)
+    s1 = get_topk_prediction_settings(alchemyEngine, args.model, symbol, args.symbol_table, hps_id, topk)
     # get univariate and 2*topk 2-pair covariate settings
     nan_threshold = round(len(df) * args.nan_limit, 0)
     s2 = get_topk_foundation_settings(
-        alchemyEngine, args.model, symbol, hps_id, topk, cutoff_date, nan_threshold
+        alchemyEngine, args.model, symbol, args.symbol_table, hps_id, topk, cutoff_date, nan_threshold
     )
     settings = pd.concat([s1, s2], axis=0, ignore_index=True)
 
@@ -1654,6 +1680,7 @@ def ensemble_topk_prediction(
         alchemyEngine,
         args.model,
         symbol,
+        args.symbol_table,
         forecasts,
         avg_loss,
         weights,
@@ -1818,6 +1845,7 @@ def save_ensemble_snapshot(
     alchemyEngine,
     model,
     symbol,
+    symbol_table,
     top_forecasts,
     avg_loss,
     weights,
@@ -1859,6 +1887,7 @@ def save_ensemble_snapshot(
         if ens_df is None:
             ens_df = df
             ens_df.loc[:, "symbol"] = symbol
+            ens_df.loc[:, "symbol_table"] = symbol_table
             ens_df.loc[:, "holiday"] = ens_df["date"].apply(
                 lambda x: check_holiday(x, country_holidays)
             )
@@ -1882,12 +1911,12 @@ def save_ensemble_snapshot(
                     into
                     predict_snapshots
                     (
-                        model,symbol,hyper_params,
+                        model,symbol,symbol_table,hyper_params,
                         region,random_seed,future_steps,
                         group_id,cutoff_date,avg_yhat,cum_returns
                     )
                 values(
-                    :model,:symbol,:hyper_params,
+                    :model,:symbol,:symbol_table,:hyper_params,
                     :region,:random_seed,:future_steps,
                     :group_id,:cutoff_date,:avg_yhat,:cum_returns
                 ) RETURNING id
@@ -1896,6 +1925,7 @@ def save_ensemble_snapshot(
             {
                 "model": f"{model}_Ensemble",
                 "symbol": symbol,
+                "symbol_table": symbol_table,
                 "hyper_params": hyper_params,
                 "region": region,
                 "random_seed": random_seed,
@@ -2045,8 +2075,10 @@ def fast_bayesopt(
     elif domain_size < base_ds:
         domain_size = base_ds
 
-    if args.model == "SOFTS" or (model is not None and not model.accept_missing_data()):
+    if args.model == "SOFTS":
         df, _ = impute(df, args.random_seed, client)
+    if model is not None and not model.accept_missing_data():
+        df, _ = model.impute(df, random_seed=args.random_seed)
 
     locks = get_accelerator_locks(cpu_leases=0, timeout="60s")
     # split large iterations into smaller runs to avoid OOM / memory leak
@@ -2140,7 +2172,7 @@ def _univariate_default_hp(model, client, anchor_df, args, hps_id):
     ).result()
 
 
-def min_covar_loss_val(alchemyEngine, model, symbol, ts_date):
+def min_covar_loss_val(alchemyEngine, model, symbol, symbol_table, ts_date):
     with alchemyEngine.connect() as conn:
         match model:
             case "NeuralProphet":
@@ -2167,12 +2199,14 @@ def min_covar_loss_val(alchemyEngine, model, symbol, ts_date):
                             where 
                                 model = :model
                                 and symbol = :symbol 
+                                and symbol_table = :symbol_table
                                 and ts_date = :ts_date
                         """
                     ),
                     {
                         "model": model,
                         "symbol": symbol,
+                        "symbol_table": symbol_table,
                         "ts_date": ts_date,
                     },
                 )
@@ -2193,27 +2227,34 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
 
     # worker = get_worker()
     # alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
-
-    dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
-    sem = Semaphore(
-        max_leases=(
-            args.resource_intensive_sql_semaphore
-            if args.resource_intensive_sql_semaphore > 0
-            else int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker))
-        ),
-        name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
+    sem = None
+    max_leases = (
+        args.resource_intensive_sql_semaphore
+        if args.resource_intensive_sql_semaphore > 0
+        else int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker))
     )
+    if max_leases > 0:
+        dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
+        sem = Semaphore(
+            max_leases=max_leases,
+            name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
+        )
     locks = get_accelerator_locks(0, timeout="20s")
 
     args = init_hps(hps, model, symbol, args, client, alchemyEngine, logger)
     cutoff_date = _get_cutoff_date(args)
     anchor_df, anchor_table = load_anchor_ts(
-        args.symbol, args.timestep_limit, alchemyEngine, cutoff_date
+        args.symbol,
+        args.timestep_limit,
+        alchemyEngine,
+        cutoff_date,
+        args.symbol_table
     )
     cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
 
     hps_id, covar_set_id = get_hps_session(
         args.symbol,
+        args.symbol_table,
         args.model,
         cutoff_date,
         args.resume.lower() != "none",
@@ -2231,7 +2272,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
 
     univ_loss = _univariate_default_hp(model, client, anchor_df, args, hps_id)
 
-    min_covar_loss = min_covar_loss_val(alchemyEngine, args.model, symbol, cutoff_date)
+    min_covar_loss = min_covar_loss_val(alchemyEngine, args.model, symbol, args.symbol_table, cutoff_date)
     min_covar_loss = min_covar_loss if min_covar_loss is not None else LOSS_CAP
 
     base_loss = min(float(univ_loss) * args.loss_quantile, min_covar_loss)
@@ -2262,7 +2303,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     # client.cluster.scale(args.max_worker)
     scale_cluster_and_wait(client, args.max_worker)
 
-    if args.resume != "hps":
+    if args.resume in ("none", "covar"):
         # run covariate loss calculation in batch
         logger.info("Starting covariate loss calculation")
         t1_start = time.time()
@@ -2275,7 +2316,9 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
             round(time.time() - t1_start, 3),
         )
 
-    min_covar_loss = min_covar_loss_val(alchemyEngine, args.model, symbol, cutoff_date)
+    min_covar_loss = min_covar_loss_val(
+        alchemyEngine, args.model, symbol, args.symbol_table, cutoff_date
+    )
     min_covar_loss = min_covar_loss if min_covar_loss is not None else LOSS_CAP
     base_loss = min(base_loss, min_covar_loss)
 
