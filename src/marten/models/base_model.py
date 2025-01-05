@@ -374,12 +374,20 @@ class BaseModel(ABC):
         #     cpu_count = psutil.cpu_count(logical=True)
         #     num_threads = math.ceil(cpu_count / n_workers)
         #     torch.set_num_threads(num_threads)
-        n_workers = num_workers() * 0.9
+
+        # n_workers = num_workers() * 0.9
+        # cpu_count = psutil.cpu_count(logical=not is_baseline)
+        # quotient = cpu_count / n_workers
+        # floor = int(cpu_count // n_workers)
+        # mod = cpu_count % n_workers
+        # num_threads = math.ceil(quotient) if random.random() < mod / n_workers else floor
+
+        n_workers = num_workers()
         cpu_count = psutil.cpu_count(logical=not is_baseline)
-        quotient = cpu_count / n_workers
-        floor = int(cpu_count // n_workers)
-        mod = cpu_count % n_workers
-        num_threads = math.ceil(quotient) if random.random() < mod / n_workers else floor
+        quotient = math.ceil(cpu_count / n_workers)
+        choices = [n for n in range(1,quotient+2)]
+        num_threads = random.choice(choices)
+
         torch.set_num_threads(num_threads)
         return torch.get_num_threads()
         # return optimize_torch_on_cpu(self.torch_cpu_ratio())
