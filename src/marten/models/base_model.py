@@ -377,7 +377,7 @@ class BaseModel(ABC):
         n_workers = num_workers() * 0.9
         cpu_count = psutil.cpu_count(logical=not is_baseline)
         quotient = cpu_count / n_workers
-        floor = cpu_count // n_workers
+        floor = int(cpu_count // n_workers)
         mod = cpu_count % n_workers
         num_threads = math.ceil(quotient) if random.random() < mod / n_workers else floor
         torch.set_num_threads(num_threads)
