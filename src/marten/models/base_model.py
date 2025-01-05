@@ -385,7 +385,7 @@ class BaseModel(ABC):
         n_workers = num_workers()
         cpu_count = psutil.cpu_count(logical=not is_baseline)
         quotient = math.ceil(cpu_count / n_workers)
-        choices = [n for n in range(1,quotient+2)]
+        choices = [n for n in range(1,quotient+3)]
         num_threads = random.choice(choices)
 
         torch.set_num_threads(num_threads)
