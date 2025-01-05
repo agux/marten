@@ -421,7 +421,7 @@ def _pair_covar_metrics(
             )
         )
         # if too much pending task, then slow down for the tasks to be digested
-        await_futures(covar_futures, False, max_delay=100)
+        await_futures(covar_futures, False, max_delay=300)
     # wait(covar_fut)
     await_futures(covar_futures)
 
@@ -640,7 +640,9 @@ def _load_covars(
                 text("SELECT nextval('covar_set_sequence')")
             ).scalar()
             ## insert df into covar_set table
-            table_df = df.rename(columns={"feature": "cov_feature", "loss_val": "score"})
+            table_df = df.rename(
+                columns={"feature": "cov_feature", "loss_val": "score"}
+            )
             table_df["symbol"] = anchor_symbol
             table_df["id"] = covar_set_id
             table_df.to_sql("covar_set", con=conn, if_exists="append", index=False)
@@ -1411,15 +1413,17 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
     dates = anchor_df["ds"].dt.date.tolist()
 
     if not sem:
-        dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
-        sem = Semaphore(
-            max_leases=(
-                args.resource_intensive_sql_semaphore
-                if args.resource_intensive_sql_semaphore > 0
-                else int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker))
-            ),
-            name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
+        max_leases = (
+            args.resource_intensive_sql_semaphore
+            if args.resource_intensive_sql_semaphore > 0
+            else int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker))
         )
+        if max_leases > 0:
+            dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
+            sem = Semaphore(
+                max_leases=max_leases,
+                name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
+            )
     if not locks:
         locks = get_accelerator_locks(0, timeout="20s")
 
@@ -1475,7 +1479,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
                 "us_yield_30y",
                 "us_yield_spread_10y_2y",
                 "quantile",
-                "performance_benchmark", 
+                "performance_benchmark",
                 "china_yield_2y_change_rate",
                 "china_yield_5y_change_rate",
                 "china_yield_10y_change_rate",

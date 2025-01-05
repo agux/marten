@@ -98,7 +98,7 @@ class TSMixerxModel(BaseModel):
     def torch_num_threads(self) -> float:
         is_baseline = self.is_baseline(**self.model_args)
         if is_baseline:
-            return int(os.getenv("tsmixerx_torch_num_threads", 3))
+            return int(os.getenv("tsmixerx_torch_num_threads", 1))
         else:
             n_workers = num_workers()
             cpu_count = psutil.cpu_count(logical=True)

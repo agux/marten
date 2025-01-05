@@ -4,10 +4,7 @@ from typing import Any, Tuple, List, Type
 from dotenv import load_dotenv
 import os
 import time
-import math
-import random
 import socket
-import psutil
 import numpy as np
 import pandas as pd
 import logging
@@ -30,21 +27,18 @@ from utilsforecast.losses import _pl_agg_expr, _base_docstring, mae, rmse
 from utilsforecast.evaluation import evaluate
 from utilsforecast.compat import DataFrame, pl
 
-from dask.distributed import get_worker, worker_client
+from dask.distributed import get_worker
 
 from marten.utils.logger import get_logger
-from marten.utils.trainer import optimize_torch_on_cpu, is_cuda_error
+from marten.utils.trainer import is_cuda_error
 from marten.utils.worker import (
     release_lock,
     wait_gpu,
     wait_mps,
-    wait_cpu,
     restart_worker,
     workload_stage,
-    cpu_util,
     gpu_util,
     mps_util,
-    num_workers,
 )
 
 
