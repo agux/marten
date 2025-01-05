@@ -159,7 +159,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
             "distributed.worker.connections.outgoing": 100,
             "distributed.worker.connections.incoming": 100,
             "distributed.worker.multiprocessing-method": getattr(
-                args, "dask_multiprocessing", "spawn"
+                args, "dask_multiprocessing", "forkserver"
             ),
             "distributed.worker.memory.recent-to-old-time": "45 minutes",
             "distributed.deploy.lost-worker-timeout": "2 hours",
