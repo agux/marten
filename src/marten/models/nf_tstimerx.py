@@ -1,8 +1,11 @@
+import os
 import logging
 import pandas as pd
 import numpy as np
 import math
 import torch
+import psutil
+import random
 
 from types import SimpleNamespace
 from typing import Any, Tuple
@@ -15,6 +18,7 @@ from utilsforecast.losses import mae, rmse
 from utilsforecast.evaluation import evaluate
 
 from marten.models.base_model import BaseModel
+from marten.utils.worker import num_workers
 
 default_params = {
     "h": 20,
@@ -91,8 +95,16 @@ class TSMixerxModel(BaseModel):
         )
         # return True
 
-    def torch_cpu_ratio(self) -> float:
-        return 0.23 if self.is_baseline(**self.model_args) else 0.8
+    def torch_num_threads(self) -> float:
+        is_baseline = self.is_baseline(**self.model_args)
+        if is_baseline:
+            return int(os.getenv("tsmixerx_torch_num_threads", 3))
+        else:
+            n_workers = num_workers()
+            cpu_count = psutil.cpu_count(logical=True)
+            quotient = math.ceil(cpu_count / n_workers)
+            choices = [n for n in range(2, quotient + 3)]
+            return random.choice(choices)
 
     def _train(self, df: pd.DataFrame, **kwargs: Any) -> dict:
         model_config = default_params.copy()

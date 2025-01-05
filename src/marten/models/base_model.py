@@ -368,7 +368,6 @@ class BaseModel(ABC):
         pass
 
     def configure_torch(self):
-        is_baseline = self.is_baseline(**self.model_args)
         # if not is_baseline:
         #     n_workers = num_workers()
         #     cpu_count = psutil.cpu_count(logical=True)
@@ -381,14 +380,7 @@ class BaseModel(ABC):
         # floor = int(cpu_count // n_workers)
         # mod = cpu_count % n_workers
         # num_threads = math.ceil(quotient) if random.random() < mod / n_workers else floor
-
-        n_workers = num_workers()
-        cpu_count = psutil.cpu_count(logical=not is_baseline)
-        quotient = math.ceil(cpu_count / n_workers)
-        choices = [n for n in range(2,quotient+3)]
-        num_threads = random.choice(choices)
-
-        torch.set_num_threads(num_threads)
+        torch.set_num_threads(self.torch_num_threads())
         return torch.get_num_threads()
         # return optimize_torch_on_cpu(self.torch_cpu_ratio())
 
@@ -484,16 +476,13 @@ class BaseModel(ABC):
         pass
 
     @abstractmethod
-    def torch_cpu_ratio(self) -> float:
+    def torch_num_threads(self) -> int:
         """
-        Before we set the number of threads for torch in CPU mode
-        via `torch.set_num_threads(x)`, we need to calculate the x number.
-        Final x will take into account the ratio returned by this function,
-        which represents the porportion of idle CPU cores at the time of execution.
-        Returning 1 will likely cause the subsequent computation to render a 100% CPU usage.
+        The optimum number of threads set by torch in CPU mode
+        via `torch.set_num_threads(x)`
 
         Returns:
-            float: the ratio representing a porportion of idle CPU cores at the time of execution
+            int: the number of threads
         """
         pass
 
