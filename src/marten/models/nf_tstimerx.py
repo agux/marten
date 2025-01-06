@@ -14,9 +14,6 @@ from neuralforecast import NeuralForecast
 from neuralforecast.models import TSMixerx
 from neuralforecast.losses.pytorch import HuberLoss
 
-from utilsforecast.losses import mae, rmse
-from utilsforecast.evaluation import evaluate
-
 from marten.models.base_model import BaseModel
 from marten.utils.worker import num_workers
 

@@ -169,7 +169,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
             "distributed.worker.multiprocessing-method": getattr(
                 args, "dask_multiprocessing", "forkserver"
             ),
-            "distributed.worker.memory.recent-to-old-time": "45 minutes",
+            # "distributed.worker.memory.recent-to-old-time": "45 minutes",
             "distributed.deploy.lost-worker-timeout": "2 hours",
             "distributed.scheduler.work-stealing-interval": "5 seconds",
             "distributed.scheduler.worker-ttl": "8 hours",
@@ -179,14 +179,14 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
             "distributed.comm.retry.count": 10,
             "distributed.comm.timeouts.connect": "120s",
             "distributed.comm.timeouts.tcp": "600s",
-            "distributed.nanny.pre-spawn-environ.MALLOC_TRIM_THRESHOLD_": 0,
-            "distributed.nanny.environ.MALLOC_TRIM_THRESHOLD_": 0,
+            # "distributed.nanny.pre-spawn-environ.MALLOC_TRIM_THRESHOLD_": 0,
+            # "distributed.nanny.environ.MALLOC_TRIM_THRESHOLD_": 0,
             "distributed.admin.log-length": 10000 if dask_admin_logs else 0,
             "distributed.admin.low-level-log-length": 1000 if dask_admin_logs else 0,
             "distributed.admin.system-monitor.log-length": (
                 7200 if dask_admin_logs else 0
             ),
-            "distributed.admin.event-loop": "asyncio",  # tornado, asyncio, or uvloop
+            # "distributed.admin.event-loop": "asyncio",  # tornado, asyncio, or uvloop
         }
     )
     mem_limit = os.getenv("dask_worker_memory_limit")
@@ -367,8 +367,8 @@ def await_futures(
             #     get_logger().debug("undone futures: %s", num)
             #     log_futures(futures)
     elif num > multiprocessing.cpu_count() * multiplier:
-        delta = int(num - multiprocessing.cpu_count() * multiplier)
-        time.sleep(random_seconds(delta >> 2, delta >> 1, max_delay))
+        delta = num - int(multiprocessing.cpu_count() * multiplier)
+        time.sleep(random_seconds(delta >> 1, delta, max_delay))
 
         if task_timeout is not None and shared_vars is not None:
             handle_task_timeout(futures, task_timeout, shared_vars)
