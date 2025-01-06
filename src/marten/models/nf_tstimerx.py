@@ -29,11 +29,11 @@ default_params = {
 baseline_params = {
     "input_size": 60,
     "n_block": 2,
-    "ff_dim": 64,
+    "ff_dim": 16,
     "dropout": 0.1,
     "revin": True,
     "learning_rate": 1e-3,
-    "batch_size": 32,
+    "batch_size": 256,
     # step_size = 1,
     # "random_seed": 7,
     "optimizer": "Adam",
