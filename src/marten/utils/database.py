@@ -2,13 +2,9 @@ import os
 
 from dotenv import load_dotenv
 from sqlalchemy.exc import NoSuchTableError
+from typing import List
 
-from sqlalchemy import (
-    create_engine,
-    Engine,
-    text,
-    MetaData, Table
-)
+from sqlalchemy import create_engine, Engine, text, MetaData, Table
 
 
 def get_database_engine(url=None, pool_size=None) -> Engine:
@@ -104,3 +100,14 @@ def columns_with_prefix(conn, table, prefix):
         )
         # Fetch and return the column names
         return [row[0] for row in result.fetchall()]
+
+
+def set_autovacuum(alchemyEngine: Engine, enabled: bool, tables: List):
+    with alchemyEngine.begin() as conn:
+        for table in tables:
+            sql = (
+                f"ALTER TABLE {table} SET (autovacuum_enabled = false);"
+                if enabled
+                else f"ALTER TABLE {table} RESET (autovacuum_enabled);"
+            )
+            conn.execute(sql)

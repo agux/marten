@@ -299,7 +299,7 @@ def option_qvix():
         nonlocal logger
         try:
             return qvix_func()
-        except Exception:
+        except Exception as e:
             logger.warning(
                 "failed to get qvix %s: %s", qvix_func.__name__, e, exc_info=True
             )
