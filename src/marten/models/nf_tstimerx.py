@@ -56,6 +56,8 @@ class TSMixerxModel(BaseModel):
         self.nf = None
         self.val_size = None
 
+        torch.set_num_interop_threads(1)
+
     def restore_params(self, params: dict, **kwargs: Any) -> dict:
         return params
 
