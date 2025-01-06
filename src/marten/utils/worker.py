@@ -90,13 +90,13 @@ class LocalWorkerPlugin(WorkerPlugin):
         # configure logging at the root level of Lightning
         logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
 
-        # worker.logger.info(
-        #     "MALLOC_TRIM_THRESHOLD_: %s\nOMP_NUM_THREADS: %s\nMKL_NUM_THREADS: %s\nOPENBLAS_NUM_THREADS: %s\n",
-        #     os.getenv("MALLOC_TRIM_THRESHOLD_"),
-        #     os.getenv("OMP_NUM_THREADS"),
-        #     os.getenv("MKL_NUM_THREADS"),
-        #     os.getenv("OPENBLAS_NUM_THREADS"),
-        # )
+        worker.logger.info(
+            "MALLOC_TRIM_THRESHOLD_: %s\nOMP_NUM_THREADS: %s\nMKL_NUM_THREADS: %s\nOPENBLAS_NUM_THREADS: %s\n",
+            os.getenv("MALLOC_TRIM_THRESHOLD_"),
+            os.getenv("OMP_NUM_THREADS"),
+            os.getenv("MKL_NUM_THREADS"),
+            os.getenv("OPENBLAS_NUM_THREADS"),
+        )
 
 
 class IgnorePLFilter(logging.Filter):
