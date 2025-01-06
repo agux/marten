@@ -91,11 +91,18 @@ class LocalWorkerPlugin(WorkerPlugin):
         logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
 
         worker.logger.info(
-            "MALLOC_TRIM_THRESHOLD_: %s\nOMP_NUM_THREADS: %s\nMKL_NUM_THREADS: %s\nOPENBLAS_NUM_THREADS: %s\n",
+            (
+                "MALLOC_TRIM_THRESHOLD_: %s\n"
+                "OMP_NUM_THREADS: %s\n"
+                "MKL_NUM_THREADS: %s\n"
+                "OPENBLAS_NUM_THREADS: %s\n"
+                "NUMEXPR_NUM_THREADS: %s"
+            ),
             os.getenv("MALLOC_TRIM_THRESHOLD_"),
             os.getenv("OMP_NUM_THREADS"),
             os.getenv("MKL_NUM_THREADS"),
             os.getenv("OPENBLAS_NUM_THREADS"),
+            os.getenv("NUMEXPR_NUM_THREADS"),
         )
 
 
