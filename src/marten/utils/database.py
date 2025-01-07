@@ -103,11 +103,47 @@ def columns_with_prefix(conn, table, prefix):
 
 
 def set_autovacuum(alchemyEngine: Engine, enabled: bool, tables: List):
-    with alchemyEngine.begin() as conn:
-        for table in tables:
-            sql = text(
-                f"ALTER TABLE {table} SET (autovacuum_enabled = false);"
-                if enabled
-                else f"ALTER TABLE {table} RESET (autovacuum_enabled);"
-            )
-            conn.execute(sql)
+    autovacuum_value = "true" if enabled else "false"
+
+    with alchemyEngine.connect() as conn:
+        for table_name in tables:
+            # Check if the table is partitioned
+            is_partitioned_sql = text(f"""
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM pg_partitioned_table
+                    WHERE partrelid = '{table_name}'::regclass
+                )
+            """)
+            is_partitioned = conn.execute(is_partitioned_sql).scalar()
+
+            if is_partitioned:
+                # The table is partitioned; get all leaf partitions
+                get_partitions_sql = text(f"""
+                    WITH RECURSIVE partitions AS (
+                        SELECT
+                            inhrelid::regclass AS partition
+                        FROM
+                            pg_inherits
+                        WHERE
+                            inhparent = '{table_name}'::regclass
+                        UNION ALL
+                        SELECT
+                            pg_inherits.inhrelid::regclass
+                        FROM
+                            pg_inherits
+                            JOIN partitions ON pg_inherits.inhparent = partitions.partition::regclass
+                    )
+                    SELECT partition FROM partitions
+                """)
+                partitions = [
+                    row[0] for row in conn.execute(get_partitions_sql).fetchall()
+                ]
+                # Set autovacuum on each partition
+                for partition in partitions:
+                    alter_sql = text(f"ALTER TABLE {partition} SET (autovacuum_enabled = {autovacuum_value})")
+                    conn.execute(alter_sql)
+            else:
+                # The table is not partitioned; apply directly
+                alter_sql = text(f"ALTER TABLE {table_name} SET (autovacuum_enabled = {autovacuum_value})")
+                conn.execute(alter_sql)
