@@ -306,7 +306,7 @@ def numerical_analysis(quotes_list, symbol, table):
             [
                 table,
                 symbol,
-                q.date.strftime("%Y-%m-%d"),
+                q.date,
                 tofl(slope10[i].slope),
                 tofl(slope30[i].slope),
                 tofl(slope100[i].slope),
@@ -408,7 +408,7 @@ def price_characteristics(quotes_list, symbol, table):
             [
                 table,
                 symbol,
-                q.date.strftime("%Y-%m-%d"),
+                q.date,
                 tofl(atr[i].tr),
                 tofl(atr[i].atr),
                 tofl(atr[i].atrp),
@@ -508,7 +508,7 @@ def price_transforms(quotes_list, symbol, table):
             [
                 table,
                 symbol,
-                q.date.strftime("%Y-%m-%d"),
+                q.date,
                 tofl(fisher_transform[i].fisher),
                 tofl(fisher_transform[i].trigger),
                 tofl(heikin_ashi[i].open),
@@ -630,7 +630,7 @@ def ma(quotes_list, symbol, table):
             [
                 table,
                 symbol,
-                q.date.strftime("%Y-%m-%d"),
+                q.date,
                 tofl(alma[i].alma),
                 tofl(dema9[i].dema),
                 tofl(dema20[i].dema),
@@ -721,7 +721,7 @@ def volume_based(quotes_list, symbol, table):
             [
                 table,
                 symbol,
-                q.date.strftime("%Y-%m-%d"),
+                q.date,
                 tofl(adl[i].money_flow_multiplier),
                 tofl(adl[i].money_flow_volume),
                 tofl(adl[i].adl),
@@ -774,7 +774,7 @@ def other_price_patterns(quotes_list, symbol, table):
             [
                 table,
                 symbol,
-                q.date.strftime("%Y-%m-%d"),
+                q.date,
                 tofl(pivots[i].high_point),
                 tofl(pivots[i].low_point),
                 tofl(pivots[i].high_line),
@@ -815,7 +815,7 @@ def stop_reverse(quotes_list, symbol, table):
             [
                 table,
                 symbol,
-                q.date.strftime("%Y-%m-%d"),
+                q.date,
                 tofl(chandelier[i].chandelier_exit),
                 tofl(parabolic_sar[i].sar),
                 tofl(parabolic_sar[i].is_reversal),
@@ -884,7 +884,7 @@ def oscillators(quotes_list, symbol, table):
             [
                 table,
                 symbol,
-                q.date.strftime("%Y-%m-%d"),
+                q.date,
                 tofl(ao[i].oscillator),
                 tofl(ao[i].normalized),
                 tofl(cmo[i].cmo),
@@ -982,7 +982,7 @@ def price_channel(quotes_list, symbol, table):
             [
                 table,
                 symbol,
-                q.date.strftime("%Y-%m-%d"),
+                q.date,
                 tofl(bollinger[i].sma),
                 tofl(bollinger[i].upper_band),
                 tofl(bollinger[i].lower_band),
@@ -1090,7 +1090,7 @@ def price_trends(quotes_list, symbol, table):
             [
                 table,
                 symbol,
-                q.date.strftime("%Y-%m-%d"),
+                q.date,
                 tofl(atr_stop[i].atr_stop),
                 tofl(aroon[i].aroon_up),
                 tofl(aroon[i].aroon_down),
