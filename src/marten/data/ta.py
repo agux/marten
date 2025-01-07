@@ -211,6 +211,7 @@ def calc_ta_for(symbol, table):
 def save_ta(ta_table, df, symbol):
     worker = get_worker()
     alchemyEngine = worker.alchemyEngine
+    last_date = None
     with alchemyEngine.connect() as conn:
         result = conn.execute(
             text(
