@@ -228,7 +228,7 @@ def save_ta(ta_table, df, symbol, table):
             },
         )
         last_date = result.fetchone()[0]
-    # df.loc[:, "date"] = pd.to_datetime(df["date"]).dt.date
+    df.loc[:, "date"] = pd.to_datetime(df["date"]).dt.date
     # worker.logger.info(
     #     "%s@%s, last_date:%s, before: %s, sample date: %s",
     #     symbol,
