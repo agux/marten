@@ -228,9 +228,11 @@ def save_ta(ta_table, df, symbol, table):
             },
         )
         last_date = result.fetchone()[0]
-    df.loc[:, "date"] = pd.to_datetime(df["date"]).dt.date
     if last_date is not None:
-        df = df[df["date"] >= last_date.date()]
+        df.loc[:, "date"] = pd.to_datetime(df["date"])
+        last_date = pd.to_datetime(last_date)
+        df = df[df["date"] >= last_date]
+    df.loc[:, "date"] = df["date"].dt.date
     with alchemyEngine.begin() as conn:
         update_on_conflict(ta_table, conn, df, primary_keys=["table", "symbol", "date"])
 
