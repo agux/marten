@@ -265,39 +265,39 @@ def fit_with_covar(
                 config["locks"] = locks
                 # get_logger().info("fit_with_covar : %s", locks)
                 merged_df.replace([np.inf, -np.inf], np.nan, inplace=True)
-                cores = []
-                try:
-                    cores = bind_cpu_cores(
-                        alchemyEngine,
-                        int(psutil.cpu_count(logical=False) / num_workers()),
-                    )
-                    if not model.accept_missing_data():
-                        df_na = merged_df.iloc[:, 1:].isna()
-                        if df_na.any().any():
-                            logger.info(
-                                "running imputation for %s @ %s.%s",
+                # cores = []
+                # try:
+                #     cores = bind_cpu_cores(
+                #         alchemyEngine,
+                #         int(psutil.cpu_count(logical=False) / num_workers()),
+                #     )
+                if not model.accept_missing_data():
+                    df_na = merged_df.iloc[:, 1:].isna()
+                    if df_na.any().any():
+                        logger.info(
+                            "running imputation for %s @ %s.%s",
+                            cov_symbol,
+                            cov_table,
+                            feature,
+                        )
+                        merged_df, singular_vars = remove_singular_variables(merged_df)
+                        if len(singular_vars) > 0:
+                            logger.warning(
+                                "%s @ %s.%s: these singular variables cannot be imputed: %s",
                                 cov_symbol,
                                 cov_table,
                                 feature,
+                                singular_vars,
                             )
-                            merged_df, singular_vars = remove_singular_variables(merged_df)
-                            if len(singular_vars) > 0:
-                                logger.warning(
-                                    "%s @ %s.%s: these singular variables cannot be imputed: %s",
-                                    cov_symbol,
-                                    cov_table,
-                                    feature,
-                                    singular_vars,
-                                )
-                            merged_df, impute_df = model.impute(merged_df, **config)
-                            merged_df.dropna(axis=1, how="any", inplace=True)
-                            if impute_df is not None:
-                                impute_df.dropna(axis=1, how="all", inplace=True)
-                    metrics = model.train(merged_df, **config)
-                except Exception as e:
-                    raise e
-                finally:
-                    release_cpu_cores(alchemyEngine, cores)
+                        merged_df, impute_df = model.impute(merged_df, **config)
+                        merged_df.dropna(axis=1, how="any", inplace=True)
+                        if impute_df is not None:
+                            impute_df.dropna(axis=1, how="all", inplace=True)
+                metrics = model.train(merged_df, **config)
+                # except Exception as e:
+                #     raise e
+                # finally:
+                #     release_cpu_cores(alchemyEngine, cores)
 
         fit_time = time.time() - start_time
         # get the row count in merged_df as timesteps
