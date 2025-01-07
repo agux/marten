@@ -174,7 +174,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
             "distributed.worker.connections.outgoing": 100,
             "distributed.worker.connections.incoming": 100,
             "distributed.worker.multiprocessing-method": getattr(
-                args, "dask_multiprocessing", "forkserver"
+                args, "dask_multiprocessing", "spawn"
             ),
             # "distributed.worker.memory.recent-to-old-time": "45 minutes",
             "distributed.deploy.lost-worker-timeout": "2 hours",
@@ -561,28 +561,29 @@ def workload_stage():
     """
     starting / progressing / finishing / unknown
     """
-    with worker_client() as client:
-        workload_info = client.get_metadata(["workload_info"], None)
-        if workload_info is None:
-            stage = "unknown"
+    client = get_client()
+    # with worker_client() as client:
+    workload_info = client.get_metadata(["workload_info"], None)
+    if workload_info is None:
+        stage = "unknown"
+    else:
+        finished = workload_info["finished"]
+        total = workload_info["total"]
+        workers = client.scheduler_info()["workers"]
+        if total - finished <= len(workers):
+            stage = "finishing"
+        elif finished <= len(workers):
+            stage = "starting"
         else:
-            finished = workload_info["finished"]
-            total = workload_info["total"]
-            workers = client.scheduler_info()["workers"]
-            if total - finished <= len(workers):
-                stage = "finishing"
-            elif finished <= len(workers):
-                stage = "starting"
-            else:
-                stage = "progressing"
-            get_logger().debug(
-                "finished:%s total:%s workers:%s stage:%s",
-                finished,
-                total,
-                len(workers),
-                stage,
-            )
-        return stage
+            stage = "progressing"
+        get_logger().debug(
+            "finished:%s total:%s workers:%s stage:%s",
+            finished,
+            total,
+            len(workers),
+            stage,
+        )
+    return stage
 
 
 def scale_cluster_and_wait(client: Client, n_workers: int, timeout: int = 60):

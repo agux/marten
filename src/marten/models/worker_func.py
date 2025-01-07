@@ -4,6 +4,7 @@ import json
 import hashlib
 import traceback
 import math
+import psutil
 import os
 import asyncio
 
@@ -29,6 +30,7 @@ from marten.utils.worker import (
     await_futures,
     scale_cluster_and_wait,
     restart_all_workers,
+    num_workers,
 )
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
@@ -43,6 +45,7 @@ from marten.utils.neuralprophet import (
     select_topk_features,
     NPPredictor,
 )
+from marten.utils.system import release_cpu_cores, bind_cpu_cores
 
 
 LOSS_CAP = 99.99
@@ -60,7 +63,11 @@ def merge_covar_df(
     sem=None,
 ):
 
-    if anchor_symbol == cov_symbol and symbol_table == cov_table and not cov_table.startswith("ta_"):
+    if (
+        anchor_symbol == cov_symbol
+        and symbol_table == cov_table
+        and not cov_table.startswith("ta_")
+    ):
         if feature == "y":
             # no covariate is needed. this is a baseline metric
             merged_df = anchor_df[["ds", "y"]]
@@ -258,29 +265,39 @@ def fit_with_covar(
                 config["locks"] = locks
                 # get_logger().info("fit_with_covar : %s", locks)
                 merged_df.replace([np.inf, -np.inf], np.nan, inplace=True)
-                if not model.accept_missing_data():
-                    df_na = merged_df.iloc[:, 1:].isna()
-                    if df_na.any().any():
-                        logger.info(
-                            "running imputation for %s @ %s.%s",
-                            cov_symbol,
-                            cov_table,
-                            feature,
-                        )
-                        merged_df, singular_vars = remove_singular_variables(merged_df)
-                        if len(singular_vars) > 0:
-                            logger.warning(
-                                "%s @ %s.%s: these singular variables cannot be imputed: %s",
+                cores = []
+                try:
+                    cores = bind_cpu_cores(
+                        alchemyEngine,
+                        int(psutil.cpu_count(logical=False) / num_workers()),
+                    )
+                    if not model.accept_missing_data():
+                        df_na = merged_df.iloc[:, 1:].isna()
+                        if df_na.any().any():
+                            logger.info(
+                                "running imputation for %s @ %s.%s",
                                 cov_symbol,
                                 cov_table,
                                 feature,
-                                singular_vars,
                             )
-                        merged_df, impute_df = model.impute(merged_df, **config)
-                        merged_df.dropna(axis=1, how="any", inplace=True)
-                        if impute_df is not None:
-                            impute_df.dropna(axis=1, how="all", inplace=True)
-                metrics = model.train(merged_df, **config)
+                            merged_df, singular_vars = remove_singular_variables(merged_df)
+                            if len(singular_vars) > 0:
+                                logger.warning(
+                                    "%s @ %s.%s: these singular variables cannot be imputed: %s",
+                                    cov_symbol,
+                                    cov_table,
+                                    feature,
+                                    singular_vars,
+                                )
+                            merged_df, impute_df = model.impute(merged_df, **config)
+                            merged_df.dropna(axis=1, how="any", inplace=True)
+                            if impute_df is not None:
+                                impute_df.dropna(axis=1, how="all", inplace=True)
+                    metrics = model.train(merged_df, **config)
+                except Exception as e:
+                    raise e
+                finally:
+                    release_cpu_cores(alchemyEngine, cores)
 
         fit_time = time.time() - start_time
         # get the row count in merged_df as timesteps
@@ -630,7 +647,14 @@ def log_metrics_for_hyper_params(
     # Otherwise we could proceed further code execution.
     hpid, param_str = get_hpid(params)
     if not new_metric_keys(
-        args.model, anchor_symbol, args.symbol_table, hpid, param_str, covar_set_id, hps_id, alchemyEngine
+        args.model,
+        anchor_symbol,
+        args.symbol_table,
+        hpid,
+        param_str,
+        covar_set_id,
+        hps_id,
+        alchemyEngine,
     ):
         logger.debug("Skip re-entry for %s: %s", anchor_symbol, param_str)
         with alchemyEngine.connect() as conn:
@@ -848,7 +872,14 @@ def update_metrics_table(
 
 
 def new_metric_keys(
-    model, anchor_symbol, symbol_table, hpid, hyper_params, covar_set_id, hps_id, alchemyEngine
+    model,
+    anchor_symbol,
+    symbol_table,
+    hpid,
+    hyper_params,
+    covar_set_id,
+    hps_id,
+    alchemyEngine,
 ):
     def action():
         try:
@@ -999,7 +1030,9 @@ def get_topk_foundation_settings(
     return df
 
 
-def get_topk_prediction_settings(alchemyEngine, model, symbol, symbol_table, hps_id, topk):
+def get_topk_prediction_settings(
+    alchemyEngine, model, symbol, symbol_table, hps_id, topk
+):
     # worker = get_worker()
     # alchemyEngine = worker.alchemyEngine
 
@@ -1301,7 +1334,7 @@ def save_forecast_snapshot(
             {
                 "model": model_name,
                 "symbol": symbol,
-                "symbol_table":symbol_table,
+                "symbol_table": symbol_table,
                 "hyper_params": hyper_params,
                 "covar_set_id": covar_set_id,
                 "mae_val": metrics["MAE_val"],
@@ -1630,11 +1663,20 @@ def ensemble_topk_prediction(
 
     region = get_holiday_region(alchemyEngine, symbol)
     logger.info("%s - inferred holiday region: %s", symbol, region)
-    s1 = get_topk_prediction_settings(alchemyEngine, args.model, symbol, args.symbol_table, hps_id, topk)
+    s1 = get_topk_prediction_settings(
+        alchemyEngine, args.model, symbol, args.symbol_table, hps_id, topk
+    )
     # get univariate and 2*topk 2-pair covariate settings
     nan_threshold = round(len(df) * args.nan_limit, 0)
     s2 = get_topk_foundation_settings(
-        alchemyEngine, args.model, symbol, args.symbol_table, hps_id, topk, cutoff_date, nan_threshold
+        alchemyEngine,
+        args.model,
+        symbol,
+        args.symbol_table,
+        hps_id,
+        topk,
+        cutoff_date,
+        nan_threshold,
     )
     settings = pd.concat([s1, s2], axis=0, ignore_index=True)
 
@@ -2244,11 +2286,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     args = init_hps(hps, model, symbol, args, client, alchemyEngine, logger)
     cutoff_date = _get_cutoff_date(args)
     anchor_df, anchor_table = load_anchor_ts(
-        args.symbol,
-        args.timestep_limit,
-        alchemyEngine,
-        cutoff_date,
-        args.symbol_table
+        args.symbol, args.timestep_limit, alchemyEngine, cutoff_date, args.symbol_table
     )
     cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
 
@@ -2272,7 +2310,9 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
 
     univ_loss = _univariate_default_hp(model, client, anchor_df, args, hps_id)
 
-    min_covar_loss = min_covar_loss_val(alchemyEngine, args.model, symbol, args.symbol_table, cutoff_date)
+    min_covar_loss = min_covar_loss_val(
+        alchemyEngine, args.model, symbol, args.symbol_table, cutoff_date
+    )
     min_covar_loss = min_covar_loss if min_covar_loss is not None else LOSS_CAP
 
     base_loss = min(float(univ_loss) * args.loss_quantile, min_covar_loss)

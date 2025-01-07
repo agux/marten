@@ -35,6 +35,7 @@ from marten.utils.worker import (
 )
 from marten.utils.neuralprophet import select_topk_features
 from marten.utils.softs import is_large_model
+from marten.utils.system import init_cpu_core_id
 from marten.utils.trainer import (
     select_device,
     select_randk_covars,
@@ -1457,6 +1458,8 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
             )
     if not locks:
         locks = get_accelerator_locks(0, timeout="20s")
+
+    init_cpu_core_id(alchemyEngine)
 
     # endogenous features of the anchor time series per se
     endogenous_features = [col for col in anchor_df.columns if col not in ("ds")]
