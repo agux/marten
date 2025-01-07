@@ -10,7 +10,7 @@ from stock_indicators.indicators.common.quote import Quote
 from stock_indicators.indicators.common.enums import PeriodSize
 
 from marten.utils.worker import await_futures
-from marten.utils.database import has_column
+from marten.utils.database import has_column, set_autovacuum
 from marten.data.db import update_on_conflict
 from marten.data.tabledef import (
     ta_ma,
@@ -25,6 +25,18 @@ from marten.data.tabledef import (
     ta_volume_based,
 )
 
+ta_table_names = [
+    ta_ma.__tablename__,
+    ta_numerical_analysis.__tablename__,
+    ta_oscillators.__tablename__,
+    ta_other_price_patterns.__tablename__,
+    ta_price_channel.__tablename__,
+    ta_price_characteristics.__tablename__,
+    ta_price_transforms.__tablename__,
+    ta_price_trends.__tablename__,
+    ta_stop_reverse.__tablename__,
+    ta_volume_based.__tablename__,
+]
 
 def tofl(value, mapping=None):
     if value is None:
@@ -39,6 +51,8 @@ def calc_ta():
 
     t_start = time.time()
     logger.info("Starting to recalculate technical indicators...")
+
+    set_autovacuum(alchemyEngine, False, ta_table_names)
 
     total = 0
     futures = []
@@ -166,6 +180,8 @@ def calc_ta():
 
         await_futures(futures)
 
+    set_autovacuum(alchemyEngine, True, ta_table_names)
+    
     logger.info("Technical indicators time taken: %s seconds", time.time() - t_start)
 
     return total
