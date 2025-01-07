@@ -105,7 +105,7 @@ def columns_with_prefix(conn, table, prefix):
 def set_autovacuum(alchemyEngine: Engine, enabled: bool, tables: List):
     with alchemyEngine.begin() as conn:
         for table in tables:
-            sql = (
+            sql = text(
                 f"ALTER TABLE {table} SET (autovacuum_enabled = false);"
                 if enabled
                 else f"ALTER TABLE {table} RESET (autovacuum_enabled);"
