@@ -2,6 +2,7 @@ import time
 import math
 import pandas as pd
 import numpy as np
+from datetime import timedelta
 from sqlalchemy import text
 from dask.distributed import worker_client, get_worker
 
@@ -181,7 +182,7 @@ def calc_ta():
         await_futures(futures)
 
     set_autovacuum(alchemyEngine, True, ta_table_names)
-    
+
     logger.info("Technical indicators time taken: %s seconds", time.time() - t_start)
 
     return total
@@ -227,7 +228,7 @@ def save_ta(ta_table, df, symbol):
         )
         last_date = result.fetchone()[0]
     if last_date is not None:
-        df = df[df["date"] >= last_date]
+        df = df[df["date"] > (last_date - timedelta(days=1))]
     with alchemyEngine.begin() as conn:
         update_on_conflict(ta_table, conn, df, primary_keys=["table", "symbol", "date"])
 
