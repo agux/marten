@@ -41,7 +41,7 @@ def configure_parser(parser):
         action="store",
         type=int,
         default=1,
-        help=("Number of threads per worker (python processes)" "Defaults to 1"),
+        help=("Number of threads per worker (python processes). Defaults to 1"),
     )
     parser.add_argument(
         "--timestep_limit",
