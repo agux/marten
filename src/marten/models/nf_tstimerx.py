@@ -36,7 +36,7 @@ baseline_params = {
     "batch_size": 256,
     # step_size = 1,
     # "random_seed": 7,
-    "optimizer": "Adam",
+    "optimizer": "AdamW",
     # num_workers_loader = 0,
     # drop_last_loader = False,
     # lr_scheduler=None,
