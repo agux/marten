@@ -39,6 +39,7 @@ ta_table_names = [
     ta_volume_based.__tablename__,
 ]
 
+
 def tofl(value, mapping=None):
     if value is None:
         return value
@@ -228,8 +229,24 @@ def save_ta(ta_table, df, symbol):
         )
         last_date = result.fetchone()[0]
     df.loc[:, "date"] = pd.to_datetime(df["date"]).dt.date
+    worker.info(
+        "%s@%s, last_date:%s, before: %s, sample date: %s",
+        symbol,
+        ta_table.__tablename__,
+        last_date,
+        len(df),
+        df.loc[0, "date"],
+    )
     if last_date is not None:
         df = df[df["date"] > (last_date - timedelta(days=1))]
+    worker.info(
+        "%s@%s, last_date:%s, after: %s, sample date: %s",
+        symbol,
+        ta_table.__tablename__,
+        last_date,
+        len(df),
+        df.loc[0, "date"],
+    )
     with alchemyEngine.begin() as conn:
         update_on_conflict(ta_table, conn, df, primary_keys=["table", "symbol", "date"])
 
