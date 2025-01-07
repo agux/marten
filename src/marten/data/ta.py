@@ -208,10 +208,9 @@ def calc_ta_for(symbol, table):
     numerical_analysis(quotes_list, symbol, table)
 
 
-def save_ta(ta_table, df, symbol):
+def save_ta(ta_table, df, symbol, table):
     worker = get_worker()
     alchemyEngine = worker.alchemyEngine
-    last_date = None
     with alchemyEngine.connect() as conn:
         result = conn.execute(
             text(
@@ -224,12 +223,12 @@ def save_ta(ta_table, df, symbol):
                 """
             ),
             {
-                "table": ta_table.__tablename__,
+                "table": table,
                 "symbol": symbol,
             },
         )
         last_date = result.fetchone()[0]
-    df.loc[:, "date"] = pd.to_datetime(df["date"]).dt.date
+    # df.loc[:, "date"] = pd.to_datetime(df["date"]).dt.date
     worker.logger.info(
         "%s@%s, last_date:%s, before: %s, sample date: %s",
         symbol,
@@ -327,7 +326,7 @@ def numerical_analysis(quotes_list, symbol, table):
         )
     df = pd.DataFrame(data, columns=columns)
     df.replace({np.nan: None}, inplace=True)
-    save_ta(ta_numerical_analysis, df, symbol)
+    save_ta(ta_numerical_analysis, df, symbol, table)
 
 
 def price_characteristics(quotes_list, symbol, table):
@@ -457,7 +456,7 @@ def price_characteristics(quotes_list, symbol, table):
         )
     df = pd.DataFrame(data, columns=columns)
     df.replace({np.nan: None}, inplace=True)
-    save_ta(ta_price_characteristics, df, symbol)
+    save_ta(ta_price_characteristics, df, symbol, table)
 
 
 def price_transforms(quotes_list, symbol, table):
@@ -537,7 +536,7 @@ def price_transforms(quotes_list, symbol, table):
         )
     df = pd.DataFrame(data, columns=columns)
     df.replace({np.nan: None}, inplace=True)
-    save_ta(ta_price_transforms, df, symbol)
+    save_ta(ta_price_transforms, df, symbol, table)
 
 
 def ma(quotes_list, symbol, table):
@@ -676,7 +675,7 @@ def ma(quotes_list, symbol, table):
         )
     df = pd.DataFrame(data, columns=columns)
     df.replace({np.nan: None}, inplace=True)
-    save_ta(ta_ma, df, symbol)
+    save_ta(ta_ma, df, symbol, table)
 
 
 def volume_based(quotes_list, symbol, table):
@@ -747,7 +746,7 @@ def volume_based(quotes_list, symbol, table):
         )
     df = pd.DataFrame(data, columns=columns)
     df.replace({np.nan: None}, inplace=True)
-    save_ta(ta_volume_based, df, symbol)
+    save_ta(ta_volume_based, df, symbol, table)
 
 
 def other_price_patterns(quotes_list, symbol, table):
@@ -788,7 +787,7 @@ def other_price_patterns(quotes_list, symbol, table):
         )
     df = pd.DataFrame(data, columns=columns)
     df.replace({np.nan: None}, inplace=True)
-    save_ta(ta_other_price_patterns, df, symbol)
+    save_ta(ta_other_price_patterns, df, symbol, table)
 
 
 def stop_reverse(quotes_list, symbol, table):
@@ -828,7 +827,7 @@ def stop_reverse(quotes_list, symbol, table):
         )
     df = pd.DataFrame(data, columns=columns)
     df.replace({np.nan: None}, inplace=True)
-    save_ta(ta_stop_reverse, df, symbol)
+    save_ta(ta_stop_reverse, df, symbol, table)
 
 
 def oscillators(quotes_list, symbol, table):
@@ -914,7 +913,7 @@ def oscillators(quotes_list, symbol, table):
         )
     df = pd.DataFrame(data, columns=columns)
     df.replace({np.nan: None}, inplace=True)
-    save_ta(ta_oscillators, df, symbol)
+    save_ta(ta_oscillators, df, symbol, table)
 
 
 def price_channel(quotes_list, symbol, table):
@@ -1028,7 +1027,7 @@ def price_channel(quotes_list, symbol, table):
         )
     df = pd.DataFrame(data, columns=columns)
     df.replace({np.nan: None}, inplace=True)
-    save_ta(ta_price_channel, df, symbol)
+    save_ta(ta_price_channel, df, symbol, table)
 
 
 def price_trends(quotes_list, symbol, table):
@@ -1130,7 +1129,7 @@ def price_trends(quotes_list, symbol, table):
         )
     df = pd.DataFrame(data, columns=columns)
     df.replace({np.nan: None}, inplace=True)
-    save_ta(ta_price_trends, df, symbol)
+    save_ta(ta_price_trends, df, symbol, table)
 
 
 def load_historical(symbol, alchemyEngine, anchor_table, has_volume):
