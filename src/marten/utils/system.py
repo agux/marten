@@ -3,8 +3,9 @@ import time
 import psutil
 import threading
 
-from sqlalchemy import Engine
+from sqlalchemy import Engine, text
 from typing import List
+
 
 def get_physical_core_ids():
     core_info = {}
@@ -28,11 +29,13 @@ def release_cpu_cores(alchemyEngine: Engine, cores: List[int]):
     with alchemyEngine.begin() as conn:
         # Lock the row for exclusive access
         result = conn.execute(
+            text(
             """
             SELECT value FROM sys_params
             WHERE name = :name
             FOR UPDATE
-            """,
+            """
+            ),
             {"name": "unique_cpu_core_ids"},
         )
         row = result.fetchone()
@@ -45,25 +48,31 @@ def release_cpu_cores(alchemyEngine: Engine, cores: List[int]):
         new_cores = sorted(set(current_cores + cores))
         updated_cores_str = ",".join(str(core_id) for core_id in new_cores)
         conn.execute(
+            text(
             """
             UPDATE sys_params SET value = :value
             WHERE name = :name
-            """,
+            """
+            ),
             {"value": updated_cores_str, "name": "unique_cpu_core_ids"},
         )
 
 
-def bind_cpu_cores(alchemyEngine:Engine, num_cores: int = 1, max_wait: float = 15.0) -> List[int]:
+def bind_cpu_cores(
+    alchemyEngine: Engine, num_cores: int = 1, max_wait: float = 15.0
+) -> List[int]:
     def _allocate():
         nonlocal alchemyEngine, num_cores
         with alchemyEngine.begin() as conn:
             # Start a transaction and lock the row for exclusive access
             result = conn.execute(
+                text(
                 """
                 SELECT value FROM sys_params
                 WHERE name = :name
                 FOR UPDATE
-                """,
+                """
+                ),
                 {"name": "unique_cpu_core_ids"},
             )
             row = result.fetchone()
@@ -94,10 +103,12 @@ def bind_cpu_cores(alchemyEngine:Engine, num_cores: int = 1, max_wait: float = 1
 
             # Update the database with the remaining cores
             conn.execute(
+                text(
                 """
                 UPDATE sys_params SET value = :value
                 WHERE name = :name
-                """,
+                """
+                ),
                 {"value": updated_cores_str, "name": "unique_cpu_core_ids"},
             )
 
@@ -129,10 +140,12 @@ def init_cpu_core_id(alchemyEngine: Engine):
     core_ids_str = ",".join(str(core_id) for core_id in core_ids)
     with alchemyEngine.begin() as conn:
         conn.execute(
+            text(
             """
             INSERT INTO sys_params (name, value)
             VALUES (:name, :value)
             ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value
-            """,
+            """
+            ),
             {"name": "unique_cpu_core_ids", "value": core_ids_str},
         )
