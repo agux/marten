@@ -435,7 +435,7 @@ def _pair_covar_metrics(
             )
         )
         # if too much pending task, then slow down for the tasks to be digested
-        await_futures(covar_futures, False, max_delay=300)
+        await_futures(covar_futures, False, multiplier=0.5, max_delay=300)
     # wait(covar_fut)
     await_futures(covar_futures)
 
