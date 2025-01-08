@@ -31,6 +31,7 @@ def configure_parser(parser):
 
 def run_test(args):
     logging.getLogger("distributed.nanny").setLevel(logging.CRITICAL)
+    logging.getLogger("distributed.scheduler").setLevel(logging.CRITICAL)
 
     n_workers = args.n_workers
     n_tasks = args.n_tasks if args.n_tasks is not None else n_workers
