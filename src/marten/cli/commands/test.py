@@ -1,6 +1,8 @@
 from dask.distributed import Client, LocalCluster
 import time
 import math
+import logging
+
 from datetime import datetime
 
 
@@ -28,6 +30,8 @@ def configure_parser(parser):
 
 
 def run_test(args):
+    logging.getLogger("distributed.nanny").setLevel(logging.CRITICAL)
+
     n_workers = args.n_workers
     n_tasks = args.n_tasks if args.n_tasks is not None else n_workers
     n = args.n
@@ -57,6 +61,8 @@ def run_test(args):
 
 # Define a CPU-intensive function
 def cpu_heavy_function(n):
+    logging.getLogger("distributed.nanny").setLevel(logging.CRITICAL)
+
     start_time = datetime.now()
     result = 0.0
     for i in range(1, n):
