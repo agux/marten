@@ -5,6 +5,10 @@ import logging
 
 from datetime import datetime
 
+logging.getLogger("distributed.nanny").setLevel(logging.CRITICAL)
+logging.getLogger("distributed.scheduler").setLevel(logging.CRITICAL)
+logging.getLogger("tornado.application").setLevel(logging.CRITICAL)
+logging.getLogger("distributed.worker").setLevel(logging.CRITICAL)
 
 def configure_parser(parser):
     parser.add_argument(
@@ -30,12 +34,8 @@ def configure_parser(parser):
 
 
 def run_test(args):
-    logging.getLogger("distributed.nanny").setLevel(logging.CRITICAL)
-    logging.getLogger("distributed.scheduler").setLevel(logging.CRITICAL)
-    logging.getLogger("tornado.application").setLevel(logging.CRITICAL)
-    
     print("Running performance test...")
-    
+
     n_workers = args.n_workers
     n_tasks = args.n_tasks if args.n_tasks is not None else n_workers
     n = args.n
@@ -68,8 +68,6 @@ def run_test(args):
 
 # Define a CPU-intensive function
 def cpu_heavy_function(n):
-    logging.getLogger("distributed.nanny").setLevel(logging.CRITICAL)
-
     start_time = datetime.now()
     result = 0.0
     for i in range(1, n):
