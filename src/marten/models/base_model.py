@@ -20,6 +20,7 @@ from neuralprophet import (
 import torch
 import torch.optim as optim
 from torch.optim.optimizer import Optimizer
+from torch.profiler import profile, record_function, ProfilerActivity
 
 from sklearn.preprocessing import StandardScaler
 
@@ -101,6 +102,7 @@ class BaseModel(ABC):
         self.locks = None
 
         load_dotenv()
+
         self.device_lock_release_delay = float(
             os.getenv("DEVICE_LOCK_RELEASE_DELAY", 2)
         )
@@ -111,6 +113,25 @@ class BaseModel(ABC):
             os.getenv("RESOURCE_WAIT_TIME", 5)
         )  # seconds, waiting for compute resource.
         self.lock_wait_time = os.getenv("LOCK_WAIT_TIME", "2s")
+
+        profile_enabled = bool(os.getenv("model_profile_enabled", False))
+        if profile_enabled:
+            # activities = [
+            #     ProfilerActivity.CPU,
+            # ]
+            # if torch.cuda.is_available():
+            #     activities.append(ProfilerActivity.CUDA)
+
+            self.profiler = profile(
+                # activities=activities,
+                # record_shapes=True,
+                # profile_memory=True,
+                with_stack=True,  # Enables stack trace recording
+                with_flops=True,
+                with_modules=True,
+            )
+            self.profile_folder = "profiles"
+            os.makedirs(self.profile_folder, exist_ok=True)
 
         logging.getLogger("lightning").setLevel(logging.WARNING)
         logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
@@ -428,7 +449,11 @@ class BaseModel(ABC):
             # model_config = asyncio.wait_for(
             #     loop.run_in_executor(None, self._train, df, **kwargs), None
             # )
-            model_config = self._train(df, **kwargs)
+            if self.profiler:
+                with self.profiler:
+                    model_config = self._train(df, **kwargs)
+            else:
+                model_config = self._train(df, **kwargs)
         except Exception as e:
             self.release_accelerator_lock()
             if is_cuda_error(e):
@@ -449,7 +474,11 @@ class BaseModel(ABC):
                 # model_config = loop.run_in_executor(
                 #     None, functools.partial(self._train, df, **kwargs)
                 # ).result()
-                model_config = self._train(df, **kwargs)
+                if self.profiler:
+                    with self.profiler:
+                        model_config = self._train(df, **kwargs)
+                else:
+                    model_config = self._train(df, **kwargs)
             else:
                 get_logger().warning("encountered error with train params: %s", kwargs)
                 raise e
@@ -459,6 +488,26 @@ class BaseModel(ABC):
         metrics["machine"] = socket.gethostname()
         metrics["cpu_cores"] = cpu_cores
         metrics["fit_time"] = fit_time
+
+        if self.profiler:
+            # Retrieve the profiling statistics
+            profiler_result = self.profiler.key_averages().table(
+                sort_by="self_cpu_time_total",  # Sort by total CPU time
+                row_limit=50,  # Limit the number of rows in the table (remove or adjust as needed)
+            )
+
+            task_key = get_worker().get_current_task()
+            output_file = os.path.join(self.profile_folder, f"{task_key}_output.txt")
+            # Save the table to a file
+            with open(output_file, "w") as f:
+                f.write(profiler_result)
+
+            # Optionally, save as Chrome trace file
+            trace_file = os.path.join(self.profile_folder, f"{task_key}_trace.txt")
+            self.profiler.export_chrome_trace(trace_file)
+
+            stacks_file = os.path.join(self.profile_folder, f"{task_key}_stacks.txt")
+            self.profiler.export_stacks(stacks_file)
 
         return metrics
 
