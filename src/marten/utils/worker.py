@@ -6,7 +6,7 @@ import psutil
 import multiprocessing
 import threading
 import torch
-import traceback
+import math
 import dask
 import dask.config
 from dask.distributed import (
@@ -378,8 +378,8 @@ def await_futures(
             #     get_logger().debug("undone futures: %s", num)
             #     log_futures(futures)
     elif num > multiprocessing.cpu_count() * multiplier:
-        delta = num - int(multiprocessing.cpu_count() * multiplier)
-        time.sleep(random_seconds(delta >> 1, delta, max_delay))
+        delta = num - multiprocessing.cpu_count() * multiplier
+        time.sleep(random_seconds(math.pow(delta, 0.7), delta, max_delay))
 
         if task_timeout is not None and shared_vars is not None:
             handle_task_timeout(futures, task_timeout, shared_vars)
