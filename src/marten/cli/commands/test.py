@@ -33,7 +33,9 @@ def run_test(args):
     logging.getLogger("distributed.nanny").setLevel(logging.CRITICAL)
     logging.getLogger("distributed.scheduler").setLevel(logging.CRITICAL)
     logging.getLogger("tornado.application").setLevel(logging.CRITICAL)
-
+    
+    print("Running performance test...")
+    
     n_workers = args.n_workers
     n_tasks = args.n_tasks if args.n_tasks is not None else n_workers
     n = args.n
@@ -58,7 +60,10 @@ def run_test(args):
     print(f"Total: {time_taken:.2f} seconds.")
 
     # Shutdown the Dask client and cluster
-    client.shutdown()
+    try:
+        client.shutdown()
+    except Exception:
+        pass
 
 
 # Define a CPU-intensive function
