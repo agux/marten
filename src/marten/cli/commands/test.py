@@ -106,56 +106,57 @@ def cpu_heavy_function(n):
 def neural_network_computation(n_timesteps, input_size, hidden_size):
     start_time = datetime.now()
 
-    # Random initialization of inputs and weights
-    np.random.seed(0)  # For reproducibility
-    x = np.random.randn(n_timesteps, input_size)  # Input time series data
-    h = np.zeros(
-        (n_timesteps + 1, hidden_size)
-    )  # Hidden states (including initial hidden state)
-    y = np.zeros((n_timesteps, input_size))  # Outputs
-    targets = np.random.randn(
-        n_timesteps, input_size
-    )  # Target outputs for loss computation
+    for _ in range(5):
+        # Random initialization of inputs and weights
+        np.random.seed(0)  # For reproducibility
+        x = np.random.randn(n_timesteps, input_size)  # Input time series data
+        h = np.zeros(
+            (n_timesteps + 1, hidden_size)
+        )  # Hidden states (including initial hidden state)
+        y = np.zeros((n_timesteps, input_size))  # Outputs
+        targets = np.random.randn(
+            n_timesteps, input_size
+        )  # Target outputs for loss computation
 
-    Wxh = np.random.randn(hidden_size, input_size)  # Input to hidden weights
-    Whh = np.random.randn(hidden_size, hidden_size)  # Hidden to hidden weights
-    Why = np.random.randn(input_size, hidden_size)  # Hidden to output weights
+        Wxh = np.random.randn(hidden_size, input_size)  # Input to hidden weights
+        Whh = np.random.randn(hidden_size, hidden_size)  # Hidden to hidden weights
+        Why = np.random.randn(input_size, hidden_size)  # Hidden to output weights
 
-    bh = np.random.randn(
-        hidden_size,
-    )  # Hidden bias
-    by = np.random.randn(
-        input_size,
-    )  # Output bias
+        bh = np.random.randn(
+            hidden_size,
+        )  # Hidden bias
+        by = np.random.randn(
+            input_size,
+        )  # Output bias
 
-    # Forward pass
-    for t in range(n_timesteps):
-        # Hidden state update (simple RNN)
-        h[t] = np.tanh(np.dot(Wxh, x[t]) + np.dot(Whh, h[t - 1]) + bh)
-        # Output (this can be thought of as decoding)
-        y[t] = np.dot(Why, h[t]) + by
+        # Forward pass
+        for t in range(n_timesteps):
+            # Hidden state update (simple RNN)
+            h[t] = np.tanh(np.dot(Wxh, x[t]) + np.dot(Whh, h[t - 1]) + bh)
+            # Output (this can be thought of as decoding)
+            y[t] = np.dot(Why, h[t]) + by
 
-    # Compute loss (mean squared error)
-    loss = np.sum(0.5 * (y - targets) ** 2)
+        # Compute loss (mean squared error)
+        loss = np.sum(0.5 * (y - targets) ** 2)
 
-    # Backward pass (Backpropagation Through Time)
-    dWhy = np.zeros_like(Why)
-    dby = np.zeros_like(by)
-    dWxh = np.zeros_like(Wxh)
-    dWhh = np.zeros_like(Whh)
-    dbh = np.zeros_like(bh)
-    dh_next = np.zeros(hidden_size)
+        # Backward pass (Backpropagation Through Time)
+        dWhy = np.zeros_like(Why)
+        dby = np.zeros_like(by)
+        dWxh = np.zeros_like(Wxh)
+        dWhh = np.zeros_like(Whh)
+        dbh = np.zeros_like(bh)
+        dh_next = np.zeros(hidden_size)
 
-    for t in reversed(range(n_timesteps)):
-        dy = y[t] - targets[t]  # Derivative of loss w.r.t. y
-        dWhy += np.outer(dy, h[t])  # Gradients w.r.t. Why
-        dby += dy  # Gradients w.r.t. by
-        dh = np.dot(Why.T, dy) + dh_next  # Backprop into h
-        dh_raw = (1 - h[t] ** 2) * dh  # Backprop through tanh nonlinearity
-        dbh += dh_raw  # Gradients w.r.t. bh
-        dWxh += np.outer(dh_raw, x[t])  # Gradients w.r.t. Wxh
-        dWhh += np.outer(dh_raw, h[t - 1])  # Gradients w.r.t. Whh
-        dh_next = np.dot(Whh.T, dh_raw)  # Pass gradient to previous time step
+        for t in reversed(range(n_timesteps)):
+            dy = y[t] - targets[t]  # Derivative of loss w.r.t. y
+            dWhy += np.outer(dy, h[t])  # Gradients w.r.t. Why
+            dby += dy  # Gradients w.r.t. by
+            dh = np.dot(Why.T, dy) + dh_next  # Backprop into h
+            dh_raw = (1 - h[t] ** 2) * dh  # Backprop through tanh nonlinearity
+            dbh += dh_raw  # Gradients w.r.t. bh
+            dWxh += np.outer(dh_raw, x[t])  # Gradients w.r.t. Wxh
+            dWhh += np.outer(dh_raw, h[t - 1])  # Gradients w.r.t. Whh
+            dh_next = np.dot(Whh.T, dh_raw)  # Pass gradient to previous time step
 
     end_time = datetime.now()
     time_taken = (end_time - start_time).total_seconds()
