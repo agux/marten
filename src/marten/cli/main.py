@@ -7,7 +7,7 @@ logger = logging.getLogger("NP.plotly")
 logger.setLevel(logging.CRITICAL)
 
 import argparse
-from marten.cli.commands import etl, hps, predict
+from marten.cli.commands import etl, hps, predict, test
 
 
 def main():
@@ -29,6 +29,12 @@ def main():
         "predict", help="Predict yearly seasonality using the best setting for the given asset symbols."
     )
     predict.configure_parser(predict_parser)
+
+    test_parser = subparsers.add_parser(
+        "test",
+        help="Test Dask framework and hardware performance.",
+    )
+    test.configure_parser(test_parser)
 
     # # Training Sub-command
     # train_parser = subparsers.add_parser("train", help="Train models on financial data")

@@ -97,7 +97,8 @@ class LocalWorkerPlugin(WorkerPlugin):
                 "MKL_NUM_THREADS: %s\n"
                 "OPENBLAS_NUM_THREADS: %s\n"
                 "NUMEXPR_NUM_THREADS: %s\n"
-                "VECLIB_MAXIMUM_THREADS: %s\n"
+                "VECLIB_MAXIMUM_THREADS: %s\n\n"
+                "torch.__config__.parallel_info():\n%s\n"
             ),
             os.getenv("MALLOC_TRIM_THRESHOLD_"),
             os.getenv("OMP_NUM_THREADS"),
@@ -105,6 +106,7 @@ class LocalWorkerPlugin(WorkerPlugin):
             os.getenv("OPENBLAS_NUM_THREADS"),
             os.getenv("NUMEXPR_NUM_THREADS"),
             os.getenv("VECLIB_MAXIMUM_THREADS"),
+            torch.__config__.parallel_info(),
         )
 
 

@@ -39,7 +39,10 @@ def init(args):
             args.symbol_table = "fund_etf_daily_em_view"
         case _:
             args.symbol_table = "unspecified"
+    
     load_dotenv()  # take environment variables from .env.
+    print_sys_info()
+
     client = init_client(
         __name__,
         args.max_worker,
@@ -69,6 +72,9 @@ def init(args):
         case _:
             model = None
 
+def print_sys_info():
+    import torch
+    logger.info(torch.__config__.show())
 
 def main(args):
     global client, alchemyEngine, logger, model
