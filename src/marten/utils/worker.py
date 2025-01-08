@@ -96,13 +96,15 @@ class LocalWorkerPlugin(WorkerPlugin):
                 "OMP_NUM_THREADS: %s\n"
                 "MKL_NUM_THREADS: %s\n"
                 "OPENBLAS_NUM_THREADS: %s\n"
-                "NUMEXPR_NUM_THREADS: %s"
+                "NUMEXPR_NUM_THREADS: %s\n"
+                "torch.__config__.parallel_info():\n%s\n"
             ),
             os.getenv("MALLOC_TRIM_THRESHOLD_"),
             os.getenv("OMP_NUM_THREADS"),
             os.getenv("MKL_NUM_THREADS"),
             os.getenv("OPENBLAS_NUM_THREADS"),
             os.getenv("NUMEXPR_NUM_THREADS"),
+            torch.__config__.parallel_info(),
         )
 
 
