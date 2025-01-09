@@ -100,6 +100,7 @@ class BaseModel(ABC):
         self.model_args = None
         self.accelerator_lock = None
         self.locks = None
+        self.profiler = None
 
         load_dotenv()
 
@@ -500,7 +501,7 @@ class BaseModel(ABC):
 
         if self.profiler:
             self.locks["profiler"].release()
-            
+
             # Retrieve the profiling statistics
             profiler_result = self.profiler.key_averages().table(
                 sort_by="self_cpu_time_total",  # Sort by total CPU time
