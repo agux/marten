@@ -117,6 +117,7 @@ class BaseModel(ABC):
 
         self.profile_folder = "profiles"
         self.profile_enabled = bool(os.getenv("model_profile_enabled", "0"))
+        get_logger().info("profile_enabled: %s", self.profile_enabled)
 
         logging.getLogger("lightning").setLevel(logging.WARNING)
         logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
@@ -129,6 +130,8 @@ class BaseModel(ABC):
             or not self.profile_enabled
         ):
             return
+        
+        get_logger().info("_init_profiler() has been executed?????")
 
         if "profiler" not in self.locks:
             self.locks["profiler"] = Semaphore(
@@ -137,7 +140,7 @@ class BaseModel(ABC):
 
         if not self.locks["profiler"].acquire(2):
             return
-        
+
         activities = [
             ProfilerActivity.CPU,
         ]
@@ -468,6 +471,7 @@ class BaseModel(ABC):
         # loop = asyncio.get_running_loop()
         # loop = get_worker().io_loop
         self._init_profiler()
+        get_logger().info("self.profiler: %s", self.profiler)
         try:
             get_logger().debug("training with kwargs: %s", kwargs)
             # model_config = asyncio.wait_for(
