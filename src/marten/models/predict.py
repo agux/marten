@@ -1,10 +1,13 @@
 import faulthandler
 faulthandler.enable()
 
-import time
 import os
 # OPENBLAS_NUM_THREADS = 1
-# os.environ["OPENBLAS_NUM_THREADS"] = f"{OPENBLAS_NUM_THREADS}"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+
+import time
 
 from marten.models.base_model import BaseModel
 from marten.utils.logger import get_logger

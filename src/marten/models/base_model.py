@@ -404,7 +404,9 @@ class BaseModel(ABC):
         # floor = int(cpu_count // n_workers)
         # mod = cpu_count % n_workers
         # num_threads = math.ceil(quotient) if random.random() < mod / n_workers else floor
-        torch.set_num_threads(self.torch_num_threads())
+        num_threads = self.torch_num_threads()
+        torch.set_num_interop_threads(num_threads)
+        torch.set_num_threads(num_threads)
         return torch.get_num_threads()
         # return optimize_torch_on_cpu(self.torch_cpu_ratio())
 

@@ -73,16 +73,16 @@ class LocalWorkerPlugin(WorkerPlugin):
                 case _:
                     worker.model = None
 
-        if hasattr(self.args, "max_worker"):
-            # Sets the number of threads used for intraop parallelism on CPU.
-            n_threads = int(
-                os.getenv(
-                    "TORCH_CPU_THREADS",
-                    psutil.cpu_count() / self.args.max_worker,
-                )
-            )
-            if n_threads > 0:
-                torch.set_num_threads(n_threads)
+        # if hasattr(self.args, "max_worker"):
+        #     # Sets the number of threads used for intraop parallelism on CPU.
+        #     n_threads = int(
+        #         os.getenv(
+        #             "TORCH_CPU_THREADS",
+        #             psutil.cpu_count() / self.args.max_worker,
+        #         )
+        #     )
+        #     if n_threads > 0:
+        #         torch.set_num_threads(n_threads)
 
         rank_zero_logger = logging.getLogger("pytorch_lightning.utilities.rank_zero")
         rank_zero_logger.addFilter(IgnorePLFilter())
