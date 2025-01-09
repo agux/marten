@@ -519,9 +519,9 @@ class BaseModel(ABC):
             self.locks["profiler"].release()
 
             # Retrieve the profiling statistics
-            profiler_result = self.profiler.key_averages().table(
+            profiler_result = self.profiler.key_averages(group_by_stack_n=5).table(
                 sort_by="self_cpu_time_total",  # Sort by total CPU time
-                row_limit=50,  # Limit the number of rows in the table (remove or adjust as needed)
+                row_limit=30,  # Limit the number of rows in the table (remove or adjust as needed)
             )
 
             task_key = get_worker().get_current_task()
