@@ -114,8 +114,14 @@ class BaseModel(ABC):
         )  # seconds, waiting for compute resource.
         self.lock_wait_time = os.getenv("LOCK_WAIT_TIME", "2s")
 
-        profile_enabled = bool(os.getenv("model_profile_enabled", False))
-        if profile_enabled:
+        self.profile_enabled = bool(os.getenv("model_profile_enabled", False))
+
+        logging.getLogger("lightning").setLevel(logging.WARNING)
+        logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
+        logging.getLogger("lightning_utilities").setLevel(logging.WARNING)
+
+    def _init_profiler(self):
+        if self.profile_enabled:
             # activities = [
             #     ProfilerActivity.CPU,
             # ]
@@ -132,10 +138,6 @@ class BaseModel(ABC):
             )
             self.profile_folder = "profiles"
             os.makedirs(self.profile_folder, exist_ok=True)
-
-        logging.getLogger("lightning").setLevel(logging.WARNING)
-        logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
-        logging.getLogger("lightning_utilities").setLevel(logging.WARNING)
 
     def is_baseline(self, **kwargs: Any) -> bool:
         """
@@ -444,6 +446,7 @@ class BaseModel(ABC):
         start_time = time.time()
         # loop = asyncio.get_running_loop()
         # loop = get_worker().io_loop
+        self._init_profiler()
         try:
             get_logger().debug("training with kwargs: %s", kwargs)
             # model_config = asyncio.wait_for(
