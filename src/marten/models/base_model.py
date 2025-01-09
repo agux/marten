@@ -20,7 +20,7 @@ from neuralprophet import (
 import torch
 import torch.optim as optim
 from torch.optim.optimizer import Optimizer
-from torch.profiler import profile, record_function, ProfilerActivity
+from torch.profiler import profile, ProfilerActivity
 
 from sklearn.preprocessing import StandardScaler
 
@@ -115,7 +115,9 @@ class BaseModel(ABC):
         )  # seconds, waiting for compute resource.
         self.lock_wait_time = os.getenv("LOCK_WAIT_TIME", "2s")
 
-        self.profile_enabled = bool(os.getenv("model_profile_enabled", False))
+        self.profile_enabled = bool(
+            os.getenv("model_profile_enabled", "0")
+        )
 
         logging.getLogger("lightning").setLevel(logging.WARNING)
         logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
@@ -409,7 +411,7 @@ class BaseModel(ABC):
         # torch.set_num_interop_threads(num_threads)
         # NOTE cannot set num_interop_threads here otherwise
         # RuntimeError: Error: cannot set number of interop threads after parallel work has started or set_num_interop_threads called
-        
+
         torch.set_num_threads(num_threads)
         return torch.get_num_threads()
         # return optimize_torch_on_cpu(self.torch_cpu_ratio())
