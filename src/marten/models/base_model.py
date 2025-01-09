@@ -28,7 +28,7 @@ from utilsforecast.losses import _pl_agg_expr, _base_docstring, mae, rmse
 from utilsforecast.evaluation import evaluate
 from utilsforecast.compat import DataFrame, pl
 
-from dask.distributed import get_worker
+from dask.distributed import get_worker, Semaphore
 
 from marten.utils.logger import get_logger
 from marten.utils.trainer import is_cuda_error
@@ -121,15 +121,21 @@ class BaseModel(ABC):
         logging.getLogger("lightning_utilities").setLevel(logging.WARNING)
 
     def _init_profiler(self):
-        if self.profile_enabled:
-            # activities = [
-            #     ProfilerActivity.CPU,
-            # ]
+        if self.model_args["accelerator"] == "cpu" and self.profile_enabled:
+            if "profiler" not in self.locks:
+                self.locks["profiler"] = Semaphore(
+                    max_leases=1, name=f"""{socket.gethostname()}::profiler"""
+                )
+            if not self.locks["profiler"].acquire(2):
+                return
+            activities = [
+                ProfilerActivity.CPU,
+            ]
             # if torch.cuda.is_available():
             #     activities.append(ProfilerActivity.CUDA)
 
             self.profiler = profile(
-                # activities=activities,
+                activities=activities,
                 # record_shapes=True,
                 # profile_memory=True,
                 with_stack=True,  # Enables stack trace recording
@@ -493,6 +499,8 @@ class BaseModel(ABC):
         metrics["fit_time"] = fit_time
 
         if self.profiler:
+            self.locks["profiler"].release()
+            
             # Retrieve the profiling statistics
             profiler_result = self.profiler.key_averages().table(
                 sort_by="self_cpu_time_total",  # Sort by total CPU time
