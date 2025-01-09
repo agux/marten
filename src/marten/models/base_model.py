@@ -115,38 +115,44 @@ class BaseModel(ABC):
         )  # seconds, waiting for compute resource.
         self.lock_wait_time = os.getenv("LOCK_WAIT_TIME", "2s")
 
-        self.profile_enabled = bool(
-            os.getenv("model_profile_enabled", "0")
-        )
+        self.profile_folder = "profiles"
+        self.profile_enabled = bool(os.getenv("model_profile_enabled", "0"))
 
         logging.getLogger("lightning").setLevel(logging.WARNING)
         logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
         logging.getLogger("lightning_utilities").setLevel(logging.WARNING)
 
     def _init_profiler(self):
-        if self.model_args["accelerator"] == "cpu" and self.profile_enabled:
-            if "profiler" not in self.locks:
-                self.locks["profiler"] = Semaphore(
-                    max_leases=1, name=f"""{socket.gethostname()}::profiler"""
-                )
-            if not self.locks["profiler"].acquire(2):
-                return
-            activities = [
-                ProfilerActivity.CPU,
-            ]
-            # if torch.cuda.is_available():
-            #     activities.append(ProfilerActivity.CUDA)
+        self.profiler = None
+        if (
+            self.model_args["accelerator"] != "cpu"
+            or not self.profile_enabled
+        ):
+            return
 
-            self.profiler = profile(
-                activities=activities,
-                # record_shapes=True,
-                # profile_memory=True,
-                with_stack=True,  # Enables stack trace recording
-                with_flops=True,
-                with_modules=True,
+        if "profiler" not in self.locks:
+            self.locks["profiler"] = Semaphore(
+                max_leases=1, name=f"""{socket.gethostname()}::profiler"""
             )
-            self.profile_folder = "profiles"
-            os.makedirs(self.profile_folder, exist_ok=True)
+
+        if not self.locks["profiler"].acquire(2):
+            return
+        
+        activities = [
+            ProfilerActivity.CPU,
+        ]
+        # if torch.cuda.is_available():
+        #     activities.append(ProfilerActivity.CUDA)
+
+        self.profiler = profile(
+            activities=activities,
+            # record_shapes=True,
+            # profile_memory=True,
+            with_stack=True,  # Enables stack trace recording
+            with_flops=True,
+            with_modules=True,
+        )
+        os.makedirs(self.profile_folder, exist_ok=True)
 
     def is_baseline(self, **kwargs: Any) -> bool:
         """
