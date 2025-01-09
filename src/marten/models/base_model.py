@@ -116,11 +116,11 @@ class BaseModel(ABC):
         self.lock_wait_time = os.getenv("LOCK_WAIT_TIME", "2s")
 
         self.profile_folder = "profiles"
-        self.profile_enabled = bool(os.getenv("MODEL_PROFILE_ENABLED", "0"))
-        get_logger().info(
-            "MODEL_PROFILE_ENABLED:%s, profile_enabled: %s",
-            os.getenv("model_profile_enabled", "0"),
-            self.profile_enabled,
+        self.profile_enabled = os.getenv("model_profile_enabled", "0").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
         )
 
         logging.getLogger("lightning").setLevel(logging.WARNING)
@@ -131,8 +131,6 @@ class BaseModel(ABC):
         self.profiler = None
         if self.model_args["accelerator"] != "cpu" or not self.profile_enabled:
             return
-
-        get_logger().info("_init_profiler() has been executed?????")
 
         if "profiler" not in self.locks:
             self.locks["profiler"] = Semaphore(
@@ -472,7 +470,6 @@ class BaseModel(ABC):
         # loop = asyncio.get_running_loop()
         # loop = get_worker().io_loop
         self._init_profiler()
-        get_logger().info("self.profiler: %s", self.profiler)
         try:
             get_logger().debug("training with kwargs: %s", kwargs)
             # model_config = asyncio.wait_for(
