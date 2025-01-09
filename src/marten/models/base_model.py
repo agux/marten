@@ -116,8 +116,12 @@ class BaseModel(ABC):
         self.lock_wait_time = os.getenv("LOCK_WAIT_TIME", "2s")
 
         self.profile_folder = "profiles"
-        self.profile_enabled = bool(os.getenv("model_profile_enabled", "0"))
-        get_logger().info("profile_enabled: %s", self.profile_enabled)
+        self.profile_enabled = bool(os.getenv("MODEL_PROFILE_ENABLED", "0"))
+        get_logger().info(
+            "MODEL_PROFILE_ENABLED:%s, profile_enabled: %s",
+            os.getenv("model_profile_enabled", "0"),
+            self.profile_enabled,
+        )
 
         logging.getLogger("lightning").setLevel(logging.WARNING)
         logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
@@ -125,12 +129,9 @@ class BaseModel(ABC):
 
     def _init_profiler(self):
         self.profiler = None
-        if (
-            self.model_args["accelerator"] != "cpu"
-            or not self.profile_enabled
-        ):
+        if self.model_args["accelerator"] != "cpu" or not self.profile_enabled:
             return
-        
+
         get_logger().info("_init_profiler() has been executed?????")
 
         if "profiler" not in self.locks:
