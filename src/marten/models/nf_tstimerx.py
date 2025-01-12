@@ -17,6 +17,8 @@ from neuralforecast.losses.pytorch import HuberLoss
 from marten.models.base_model import BaseModel
 from marten.utils.worker import num_workers
 
+import zentorch
+
 default_params = {
     "h": 20,
     "max_steps": 1000,
@@ -162,6 +164,10 @@ class TSMixerxModel(BaseModel):
             # devices="auto",
             devices=model_config["devices"],
         )
+
+        if model_config["accelerator"] == "cpu":
+            self.model = torch.compile(self.model, backend="zentorch")
+            
         self.nf = NeuralForecast(
             models=[self.model],
             freq="B",
