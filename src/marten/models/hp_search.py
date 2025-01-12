@@ -780,7 +780,7 @@ def augment_anchor_df_with_covars(
     )
 
     ranked_features = [
-        f"{r["feature"]}::{r["cov_table"]}::{r["cov_symbol"]}"
+        f'{r["feature"]}::{r["cov_table"]}::{r["cov_symbol"]}'
         for _, r in covars_df.iterrows()
     ]
 

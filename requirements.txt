@@ -21,7 +21,7 @@ statsmodels>=0.14.2
 # ray>=2.33.0
 neuralforecast
 utilsforecast
-stock_indicators
+stock_indicators  # requires manual installation of .net SDK
 mini-racer
 lightning-fabric
 pytorch-lightning
