@@ -60,7 +60,7 @@ class LocalWorkerPlugin(WorkerPlugin):
         # worker.logger.info(torch.__config__.parallel_info())
 
         if hasattr(self.args, "model"):
-            torch.set_num_interop_threads(1)
+            # torch.set_num_interop_threads(1)
             torch.cuda.set_per_process_memory_fraction(1.0)
             match self.args.model.lower():
                 case "timemixer":
