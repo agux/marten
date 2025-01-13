@@ -260,7 +260,7 @@ class BaseModel(ABC):
         accelerator = self.model_args["accelerator"].lower()
         # if accelerator == "cpu":
         #     return accelerator
-        if accelerator in ("mps", "auto") and torch.mps.is_available():
+        if accelerator in ("mps", "auto") and torch.backends.mps.is_available():
             accelerator = "mps"
         elif accelerator in ("gpu", "auto") and not torch.cuda.is_available():
             accelerator = "cpu"
