@@ -35,7 +35,7 @@ baseline_params = {
     "dropout": 0.1,
     "revin": True,
     "learning_rate": 1e-3,
-    "batch_size": 256,
+    "batch_size": 32,
     # step_size = 1,
     # "random_seed": 7,
     "optimizer": "AdamW",
