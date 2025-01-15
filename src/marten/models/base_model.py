@@ -122,6 +122,12 @@ class BaseModel(ABC):
             "yes",
             "on",
         )
+        self.profile_memory = os.getenv("model_profile_memory", "0").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
 
         logging.getLogger("lightning").setLevel(logging.WARNING)
         logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
@@ -149,7 +155,7 @@ class BaseModel(ABC):
         self.profiler = profile(
             activities=activities,
             # record_shapes=True,
-            profile_memory=True,
+            profile_memory=self.profile_memory,
             with_stack=True,  # Enables stack trace recording
             with_flops=True,
             with_modules=True,
