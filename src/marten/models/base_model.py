@@ -149,7 +149,7 @@ class BaseModel(ABC):
         self.profiler = profile(
             activities=activities,
             # record_shapes=True,
-            # profile_memory=True,
+            profile_memory=True,
             with_stack=True,  # Enables stack trace recording
             with_flops=True,
             with_modules=True,
@@ -517,15 +517,24 @@ class BaseModel(ABC):
 
         if self.profiler:
             self.locks["profiler"].release()
+            task_key = get_worker().get_current_task()
 
-            # Retrieve the profiling statistics
+            # Retrieve the profiling statistics sort by CPU
             profiler_result = self.profiler.key_averages(group_by_stack_n=5).table(
                 sort_by="self_cpu_time_total",  # Sort by total CPU time
-                row_limit=30,  # Limit the number of rows in the table (remove or adjust as needed)
+                row_limit=20,  # Limit the number of rows in the table (remove or adjust as needed)
             )
+            output_file = os.path.join(self.profile_folder, f"{task_key}_cpu.txt")
+            # Save the table to a file
+            with open(output_file, "w") as f:
+                f.write(profiler_result)
 
-            task_key = get_worker().get_current_task()
-            output_file = os.path.join(self.profile_folder, f"{task_key}_output.txt")
+            # sort by memory usage
+            profiler_result = self.profiler.key_averages(group_by_stack_n=5).table(
+                sort_by="self_cpu_memory_usage",  # Sort by total CPU time
+                row_limit=20,  # Limit the number of rows in the table (remove or adjust as needed)
+            )
+            output_file = os.path.join(self.profile_folder, f"{task_key}_memory.txt")
             # Save the table to a file
             with open(output_file, "w") as f:
                 f.write(profiler_result)
