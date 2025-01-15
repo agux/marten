@@ -535,15 +535,16 @@ class BaseModel(ABC):
             with open(output_file, "w") as f:
                 f.write(profiler_result)
 
-            # sort by memory usage
-            profiler_result = self.profiler.key_averages(group_by_stack_n=5).table(
-                sort_by="self_cpu_memory_usage",  # Sort by total CPU time
-                row_limit=20,  # Limit the number of rows in the table (remove or adjust as needed)
-            )
-            output_file = os.path.join(self.profile_folder, f"{task_key}_memory.txt")
-            # Save the table to a file
-            with open(output_file, "w") as f:
-                f.write(profiler_result)
+            if self.profile_memory:
+                # sort by memory usage
+                profiler_result = self.profiler.key_averages(group_by_stack_n=5).table(
+                    sort_by="self_cpu_memory_usage",  # Sort by total CPU time
+                    row_limit=20,  # Limit the number of rows in the table (remove or adjust as needed)
+                )
+                output_file = os.path.join(self.profile_folder, f"{task_key}_memory.txt")
+                # Save the table to a file
+                with open(output_file, "w") as f:
+                    f.write(profiler_result)
 
             # Optionally, save as Chrome trace file
             trace_file = os.path.join(self.profile_folder, f"{task_key}_trace.txt")
