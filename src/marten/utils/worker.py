@@ -96,7 +96,7 @@ class LocalWorkerPlugin(WorkerPlugin):
         # configure logging at the root level of Lightning
         logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
 
-        worker.logger.info(
+        worker.logger.debug(
             (
                 "MALLOC_TRIM_THRESHOLD_: %s\n"
                 "OMP_NUM_THREADS: %s\n"

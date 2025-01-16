@@ -199,8 +199,9 @@ class BaseModel(ABC):
         return model_optim, optim_args
 
     def _check_cpu(self) -> bool:
-        if not self.trainable_on_cpu(**self.model_args):
-            return False
+        return self.trainable_on_cpu(**self.model_args)
+        # if not self.trainable_on_cpu(**self.model_args):
+        #     return False
 
         # match workload_stage():
         #     case "finishing":
@@ -308,13 +309,6 @@ class BaseModel(ABC):
 
     def _get_metrics(self, **kwargs: Any) -> dict:
         train_trajectories = self.nf.models[0].train_trajectories
-        # loss = min(train_losses, key=lambda x: x[1])[1]
-        # valid_losses = self.nf.models[0].valid_trajectories
-        # loss_val = (
-        #     min(valid_losses, key=lambda x: x[1])[1]
-        #     if len(valid_losses) > 0
-        #     else np.nan
-        # )
         if kwargs["accelerator"] == "gpu":
             # without exclusive lock, it may fail due to insufficient GPU memory.
             while True:
@@ -324,17 +318,6 @@ class BaseModel(ABC):
                     time.sleep(0.5)
         try:
             forecast = self.nf.predict_insample()
-            # forecast = (
-            #     get_worker()
-            #     .loop.run_in_executor(None, self.nf.predict_insample)
-            #     .result()
-            # )
-            # forecast = asyncio.wait_for(
-            #     asyncio.get_running_loop().run_in_executor(
-            #         None, self.nf.predict_insample
-            #     ),
-            #     None,
-            # )
         except Exception as e:
             get_logger().error("failed to predict insample: %s", e, exc_info=True)
             raise e
