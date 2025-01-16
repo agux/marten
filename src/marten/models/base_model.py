@@ -11,6 +11,8 @@ import logging
 import warnings
 import functools
 
+from cpuinfo import get_cpu_info
+
 from neuralprophet import (
     set_random_seed as np_random_seed,
     set_log_level,
@@ -32,6 +34,7 @@ from dask.distributed import get_worker, Semaphore
 
 from marten.utils.logger import get_logger
 from marten.utils.trainer import is_cuda_error
+from marten.utils.system import bool_envar
 from marten.utils.worker import (
     release_lock,
     wait_gpu,
@@ -116,22 +119,20 @@ class BaseModel(ABC):
         self.lock_wait_time = os.getenv("LOCK_WAIT_TIME", "2s")
 
         self.profile_folder = "profiles"
-        self.profile_enabled = os.getenv("model_profile_enabled", "0").lower() in (
-            "1",
-            "true",
-            "yes",
-            "on",
-        )
-        self.profile_memory = os.getenv("model_profile_memory", "0").lower() in (
-            "1",
-            "true",
-            "yes",
-            "on",
-        )
+        self.profile_enabled = bool_envar("model_profile_enabled", False)
+        self.profile_memory = bool_envar("model_profile_memory", False)
+        self.zentorch_enabled = bool_envar("zentorch_enabled", False)
+        if self.zentorch_enabled:
+            self._enable_zentorch()
 
         logging.getLogger("lightning").setLevel(logging.WARNING)
         logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
         logging.getLogger("lightning_utilities").setLevel(logging.WARNING)
+
+    def _enable_zentorch(self):
+        info = get_cpu_info()
+        cpu_brand = info.get('brand_raw', '').upper()
+        self.zentorch_enabled = "AMD" in cpu_brand
 
     def _init_profiler(self):
         self.profiler = None
@@ -191,7 +192,7 @@ class BaseModel(ABC):
             case "SGD":
                 model_optim = optim.SGD
         optim_args = {
-            "lr": kwargs["learning_rate"],
+            # "lr": kwargs["learning_rate"],
             "fused": kwargs["accelerator"] in ("gpu", "auto")
             and torch.cuda.is_available(),
         }

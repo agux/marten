@@ -88,6 +88,7 @@ class LocalWorkerPlugin(WorkerPlugin):
         rank_zero_logger = logging.getLogger("pytorch_lightning.utilities.rank_zero")
         rank_zero_logger.addFilter(IgnorePLFilter())
 
+        logging.getLogger("NP.plotly").setLevel(logging.CRITICAL)
         # configure logging at the root level of Lightning
         logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
 
@@ -168,7 +169,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     dask.config.set(scheduler="processes")
     dask.config.set(
         {
-            "distributed.client.heartbeat": "5s",
+            # "distributed.client.heartbeat": "5s",
             "distributed.worker.memory.terminate": False,
             # NOTE restarting worker may cause distributed.lock to malfunction, setting None to its client.scheduler
             # "distributed.worker.lifetime.duration": "1 hour",
@@ -176,21 +177,21 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
             # "distributed.worker.lifetime.restart": True,
             # "distributed.worker.profile.enabled": False,
             "distributed.worker.resources.POWER": power,
-            "distributed.worker.connections.outgoing": 100,
-            "distributed.worker.connections.incoming": 100,
+            # "distributed.worker.connections.outgoing": 100,
+            # "distributed.worker.connections.incoming": 100,
             "distributed.worker.multiprocessing-method": getattr(
                 args, "dask_multiprocessing", "spawn"
             ),
             # "distributed.worker.memory.recent-to-old-time": "45 minutes",
             "distributed.deploy.lost-worker-timeout": "2 hours",
-            "distributed.scheduler.work-stealing-interval": "5 seconds",
+            # "distributed.scheduler.work-stealing-interval": "5 seconds",
             "distributed.scheduler.worker-ttl": "8 hours",
-            "distributed.scheduler.worker-saturation": 0.0001,
+            # "distributed.scheduler.worker-saturation": 0.0001,
             "distributed.scheduler.locks.lease-timeout": "15 minutes",
             # "distributed.scheduler.validate": True,
             "distributed.comm.retry.count": 10,
-            "distributed.comm.timeouts.connect": "120s",
-            "distributed.comm.timeouts.tcp": "600s",
+            # "distributed.comm.timeouts.connect": "120s",
+            # "distributed.comm.timeouts.tcp": "600s",
             # "distributed.nanny.pre-spawn-environ.MALLOC_TRIM_THRESHOLD_": 0,
             # "distributed.nanny.environ.MALLOC_TRIM_THRESHOLD_": 0,
             "distributed.admin.log-length": 10000 if dask_admin_logs else 0,

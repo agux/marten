@@ -149,3 +149,12 @@ def init_cpu_core_id(alchemyEngine: Engine):
             ),
             {"name": "unique_cpu_core_ids", "value": core_ids_str},
         )
+
+def bool_envar(name: str, default: bool = False) -> bool:
+    return os.getenv(name, str(default)).lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
