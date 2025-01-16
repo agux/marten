@@ -325,6 +325,13 @@ class BaseModel(ABC):
             self.release_accelerator_lock()
 
         forecast.reset_index(inplace=True)
+
+        get_logger().info(
+            "forecast for %s:\n%s", 
+            get_worker().get_current_task(),
+            forecast.tail()
+        )
+
         loss = loss_val = eval_mae = eval_rmse = eval_mae_val = eval_rmse_val = np.nan
         if kwargs["validate"]:
             loss = self._evaluate_cross_validation(
@@ -505,39 +512,46 @@ class BaseModel(ABC):
         metrics["cpu_cores"] = cpu_cores
         metrics["fit_time"] = fit_time
 
-        if self.profiler:
-            self.locks["profiler"].release()
-            task_key = get_worker().get_current_task()
+        self._export_profiles()
 
-            # Retrieve the profiling statistics sort by CPU
+        return metrics
+
+    def _export_profiles(self):
+        if not self.profiler:
+            return
+
+        self.locks["profiler"].release()
+        task_key = get_worker().get_current_task()
+
+        # Retrieve the profiling statistics sort by CPU
+        profiler_result = self.profiler.key_averages(group_by_stack_n=5).table(
+            sort_by="self_cpu_time_total",  # Sort by total CPU time
+            row_limit=20,  # Limit the number of rows in the table (remove or adjust as needed)
+        )
+        output_file = os.path.join(self.profile_folder, f"{task_key}_cpu.txt")
+        # Save the table to a file
+        with open(output_file, "w") as f:
+            f.write(profiler_result)
+
+        if self.profile_memory:
+            # sort by memory usage
             profiler_result = self.profiler.key_averages(group_by_stack_n=5).table(
-                sort_by="self_cpu_time_total",  # Sort by total CPU time
+                sort_by="self_cpu_memory_usage",  # Sort by total CPU time
                 row_limit=20,  # Limit the number of rows in the table (remove or adjust as needed)
             )
-            output_file = os.path.join(self.profile_folder, f"{task_key}_cpu.txt")
+            output_file = os.path.join(
+                self.profile_folder, f"{task_key}_memory.txt"
+            )
             # Save the table to a file
             with open(output_file, "w") as f:
                 f.write(profiler_result)
 
-            if self.profile_memory:
-                # sort by memory usage
-                profiler_result = self.profiler.key_averages(group_by_stack_n=5).table(
-                    sort_by="self_cpu_memory_usage",  # Sort by total CPU time
-                    row_limit=20,  # Limit the number of rows in the table (remove or adjust as needed)
-                )
-                output_file = os.path.join(self.profile_folder, f"{task_key}_memory.txt")
-                # Save the table to a file
-                with open(output_file, "w") as f:
-                    f.write(profiler_result)
+        # Optionally, save as Chrome trace file
+        trace_file = os.path.join(self.profile_folder, f"{task_key}_trace.txt")
+        self.profiler.export_chrome_trace(trace_file)
 
-            # Optionally, save as Chrome trace file
-            trace_file = os.path.join(self.profile_folder, f"{task_key}_trace.txt")
-            self.profiler.export_chrome_trace(trace_file)
-
-            stacks_file = os.path.join(self.profile_folder, f"{task_key}_stacks.txt")
-            self.profiler.export_stacks(stacks_file)
-
-        return metrics
+        stacks_file = os.path.join(self.profile_folder, f"{task_key}_stacks.txt")
+        self.profiler.export_stacks(stacks_file)
 
     @abstractmethod
     def trainable_on_cpu(self, **kwargs: Any) -> bool:

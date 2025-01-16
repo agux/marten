@@ -194,8 +194,8 @@ class TSMixerxModel(BaseModel):
     def _predict(self, df: pd.DataFrame, **kwargs: Any) -> pd.DataFrame:
         forecast = self.nf.predict(df)
         # check if "id" column is in the forecast dataframe. If so, drop this column.
-        if "id" in forecast.columns:
-            forecast.drop(columns=["id"], inplace=True)
+        # if "id" in forecast.columns:
+        #     forecast.drop(columns=["id"], inplace=True)
         forecast.reset_index(drop=True, inplace=True)
         forecast.insert(forecast.columns.get_loc("ds") + 1, "y", np.nan)
         forecast.rename(columns={"TSMixerx": "yhat_n"}, inplace=True)
