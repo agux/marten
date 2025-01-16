@@ -275,7 +275,7 @@ def covar_symbols_from_table(
         group_by = f"group by {symbol_col}"
 
     orig_table = (
-        table[:-5] if table.startswith("ta_") and table.endswith("_view") else table
+        table[:-5] if table.endswith("_view") else table
     )
 
     query = f"""
