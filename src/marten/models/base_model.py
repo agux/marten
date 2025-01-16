@@ -1,3 +1,21 @@
+import warnings
+# Ignore the specific FutureWarning about Series.view deprecation
+warnings.filterwarnings(
+    action="ignore",
+    message=".*Series.view is deprecated.*",
+    category=FutureWarning,
+)
+warnings.filterwarnings(
+    action="ignore",
+    message=".*The epoch parameter in `scheduler.step()` was not necessary.*",
+    category=UserWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message="Trying to infer the `batch_size` from an ambiguous collection.*",
+    category=UserWarning,
+)
+
 from abc import ABC, abstractmethod
 from types import SimpleNamespace
 from typing import Any, Tuple, List, Type
@@ -812,7 +830,8 @@ class BaseModel(ABC):
             imputed_df = imputed_df.merge(result, on="ds", how="left")
 
         for na_col in na_cols:
-            df[na_col].fillna(imputed_df[na_col], inplace=True)
+            # df[na_col].fillna(imputed_df[na_col], inplace=True)
+            df.fillna({na_col: imputed_df[na_col]}, inplace=True)
 
         # Select imputed rows only
         imputed_df = imputed_df.loc[na_row_indices].copy()
