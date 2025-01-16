@@ -292,7 +292,7 @@ class BaseModel(ABC):
         return accelerator
 
     def _evaluate_cross_validation(self, df, metric):
-        models = df.drop(columns=["unique_id", "ds", "cutoff", "y"]).columns.tolist()
+        models = df.drop(columns=["index", "unique_id", "ds", "cutoff", "y"]).columns.tolist()
         evals = []
         # Calculate loss for every unique_id and cutoff.
         for cutoff in df["cutoff"].unique():
@@ -326,7 +326,7 @@ class BaseModel(ABC):
 
         forecast.reset_index(inplace=True)
 
-        get_logger().info(
+        get_logger().debug(
             "forecast for %s:\n%s", 
             get_worker().get_current_task(),
             forecast.tail()
