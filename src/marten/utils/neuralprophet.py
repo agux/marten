@@ -4,6 +4,9 @@ import traceback
 import socket
 import math
 import pandas as pd
+import logging
+logging.getLogger("NP.plotly").setLevel(logging.CRITICAL)
+logging.getLogger("prophet.plot").disabled = True
 
 from tenacity import (
     stop_after_attempt,

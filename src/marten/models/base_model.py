@@ -202,13 +202,13 @@ class BaseModel(ABC):
         if not self.trainable_on_cpu(**self.model_args):
             return False
 
-        match workload_stage():
-            case "finishing":
-                return False  # stick to GPU and avoid straggler last-task
-            # case "starting":
-            #     return True
-            case _:
-                return True
+        # match workload_stage():
+        #     case "finishing":
+        #         return False  # stick to GPU and avoid straggler last-task
+        #     # case "starting":
+        #     #     return True
+        #     case _:
+        #         return True
 
     def _lock_accelerator(self, accelerator) -> str:
         if accelerator == "cpu":

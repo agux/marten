@@ -5,6 +5,9 @@ import numpy as np
 import warnings
 import logging
 
+logging.getLogger("NP.plotly").setLevel(logging.CRITICAL)
+logging.getLogger("prophet.plot").disabled = True
+
 import exchange_calendars as xcals
 
 from tenacity import (

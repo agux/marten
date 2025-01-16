@@ -7,6 +7,9 @@ import math
 import psutil
 import os
 import asyncio
+import logging
+logging.getLogger("NP.plotly").setLevel(logging.CRITICAL)
+logging.getLogger("prophet.plot").disabled = True
 
 # OPENBLAS_NUM_THREADS = 1
 # os.environ["OPENBLAS_NUM_THREADS"] = f"{OPENBLAS_NUM_THREADS}"
