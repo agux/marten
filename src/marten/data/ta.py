@@ -232,7 +232,7 @@ def save_ta(ta_table, df, symbol, table):
         df.loc[:, "date"] = pd.to_datetime(df["date"])
         last_date = pd.to_datetime(last_date)
         df = df[df["date"] >= last_date]
-    df.loc[:, "date"] = df["date"].dt.date
+    df.loc[:, "date"] = df["date"].dt.normalize()
     with alchemyEngine.begin() as conn:
         update_on_conflict(ta_table, conn, df, primary_keys=["table", "symbol", "date"])
 
