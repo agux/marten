@@ -169,7 +169,7 @@ class TSMixerxModel(BaseModel):
 
         if model_config["accelerator"] == "cpu" and self.zentorch_enabled:
             self.model = torch.compile(self.model, backend="zentorch")
-            
+
         self.nf = NeuralForecast(
             models=[self.model],
             freq="B",
@@ -194,8 +194,8 @@ class TSMixerxModel(BaseModel):
     def _predict(self, df: pd.DataFrame, **kwargs: Any) -> pd.DataFrame:
         forecast = self.nf.predict(df)
         # check if "id" column is in the forecast dataframe. If so, drop this column.
-        # if "id" in forecast.columns:
-        #     forecast.drop(columns=["id"], inplace=True)
+        if "index" in forecast.columns:
+            forecast.drop(columns=["index"], inplace=True)
         forecast.reset_index(drop=True, inplace=True)
         forecast.insert(forecast.columns.get_loc("ds") + 1, "y", np.nan)
         forecast.rename(columns={"TSMixerx": "yhat_n"}, inplace=True)
