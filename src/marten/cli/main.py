@@ -4,6 +4,7 @@ import logging
 # Set the logger's level to CRITICAL to disable it
 # To suppress the overwhelming, ignorable error `Importing plotly failed. Interactive plots will not work.`
 logging.getLogger("NP.plotly").setLevel(logging.CRITICAL)
+logging.getLogger("prophet.plot").disabled = True
 
 import argparse
 from marten.cli.commands import etl, hps, predict, test

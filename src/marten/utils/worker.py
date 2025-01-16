@@ -89,6 +89,7 @@ class LocalWorkerPlugin(WorkerPlugin):
         rank_zero_logger.addFilter(IgnorePLFilter())
 
         logging.getLogger("NP.plotly").setLevel(logging.CRITICAL)
+        logging.getLogger("prophet.plot").disabled = True
         # configure logging at the root level of Lightning
         logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
 

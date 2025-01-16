@@ -279,23 +279,28 @@ def covar_symbols_from_table(
     )
 
     query = f"""
-        WITH existing_cov_symbols AS ({existing_cov_symbols})
-        select
-            {symbol_col} symbol, count(*) num
-        from
-            {orig_table} t
-        where
-            NOT EXISTS (
-                SELECT 1
-                FROM existing_cov_symbols ecs
-                WHERE {symbol_col} = ecs.cov_symbol
-            )
-            and {notnull}
-            and {exclude}
-            and t.date between %(start_date)s and %(end_date)s
-        {group_by}
-        having 
-            count(*) >= %(min_count)s
+        WITH existing_cov_symbols AS ({existing_cov_symbols}),
+        eligible_symbols AS (
+            SELECT
+                {symbol_col} symbol,
+                COUNT(*) AS num
+            FROM
+                {orig_table} t
+            WHERE
+                {notnull}
+                AND {exclude}
+                AND t.date BETWEEN %(start_date)s and %(end_date)s
+            {group_by}
+            HAVING COUNT(*) >= %(min_count)s
+        )
+        SELECT
+            es.symbol,
+            es.num
+        FROM
+            eligible_symbols es
+        LEFT JOIN existing_cov_symbols ecs ON es.symbol = ecs.cov_symbol
+        WHERE
+            ecs.cov_symbol IS NULL
     """
 
     if sem:
