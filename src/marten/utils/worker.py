@@ -385,7 +385,7 @@ def await_futures(
             #     log_futures(futures)
     elif num > multiprocessing.cpu_count() * multiplier:
         delta = num - multiprocessing.cpu_count() * multiplier
-        time.sleep(random_seconds(math.pow(delta, 0.7), delta, max_delay))
+        time.sleep(random_seconds(math.pow(delta, 0.8), delta, max_delay))
 
         if task_timeout is not None and shared_vars is not None:
             handle_task_timeout(futures, task_timeout, shared_vars)
