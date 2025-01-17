@@ -174,8 +174,8 @@ class TSMixerxModel(BaseModel):
                 model_config["accelerator"],
                 self.zentorch_enabled,
             )
+            #NOTE: many inductor sub-process will be spawn if zentorch is imported
             import zentorch
-
             self.model = torch.compile(self.model, backend="zentorch")
 
         self.nf = NeuralForecast(
