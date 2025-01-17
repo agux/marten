@@ -1,4 +1,5 @@
 import os
+
 os.environ["NIXTLA_ID_AS_COL"] = "True"
 
 import logging
@@ -118,6 +119,7 @@ class TSMixerxModel(BaseModel):
 
         seed_logger = logging.getLogger("lightning_fabric.utilities.seed")
         from lightning_utilities.core.rank_zero import log as rank_zero_logger
+
         # rank_zero_logger = logging.getLogger("lightning_utilities.core.rank_zero")
         orig_seed_log_level = seed_logger.getEffectiveLevel()
         orig_log_level = rank_zero_logger.getEffectiveLevel()
@@ -168,14 +170,19 @@ class TSMixerxModel(BaseModel):
             devices=model_config["devices"],
         )
 
-        if model_config["accelerator"] == "cpu" and self.zentorch_enabled:
+        if (
+            model_config["accelerator"] == "cpu"
+            and self.zentorch_enabled
+            and not self.is_baseline(**self.model_args)
+        ):
             get_logger().info(
                 "Enabling Zentorch. accelerator: %s, zentorch_enabled: %s",
                 model_config["accelerator"],
                 self.zentorch_enabled,
             )
-            #NOTE: many inductor sub-process will be spawn if zentorch is imported
+            # NOTE: many inductor sub-process will be spawn if zentorch is imported
             import zentorch
+
             self.model = torch.compile(self.model, backend="zentorch")
 
         self.nf = NeuralForecast(

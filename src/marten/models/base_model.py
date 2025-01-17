@@ -1,4 +1,5 @@
 import warnings
+
 # Ignore the specific FutureWarning about Series.view deprecation
 warnings.filterwarnings(
     action="ignore",
@@ -149,7 +150,7 @@ class BaseModel(ABC):
 
     def _enable_zentorch(self):
         info = get_cpu_info()
-        cpu_brand = info.get('brand_raw', '').upper()
+        cpu_brand = info.get("brand_raw", "").upper()
         self.zentorch_enabled = "AMD" in cpu_brand
 
     def _init_profiler(self):
@@ -310,7 +311,9 @@ class BaseModel(ABC):
         return accelerator
 
     def _evaluate_cross_validation(self, df, metric):
-        models = df.drop(columns=["index", "unique_id", "ds", "cutoff", "y"]).columns.tolist()
+        models = df.drop(
+            columns=["index", "unique_id", "ds", "cutoff", "y"]
+        ).columns.tolist()
         evals = []
         # Calculate loss for every unique_id and cutoff.
         for cutoff in df["cutoff"].unique():
@@ -327,13 +330,13 @@ class BaseModel(ABC):
 
     def _get_metrics(self, **kwargs: Any) -> dict:
         train_trajectories = self.nf.models[0].train_trajectories
-        # if kwargs["accelerator"] == "gpu":
-        #     # without exclusive lock, it may fail due to insufficient GPU memory.
-        #     while True:
-        #         if self._lock_accelerator("gpu") == "gpu":
-        #             break
-        #         else:
-        #             time.sleep(0.5)
+        if kwargs["accelerator"] == "gpu" and not self.is_baseline(**self.model_args):
+            # without exclusive lock, it may fail due to insufficient GPU memory.
+            while True:
+                if self._lock_accelerator("gpu") == "gpu":
+                    break
+                else:
+                    time.sleep(0.5)
         try:
             forecast = self.nf.predict_insample()
         except Exception as e:
@@ -345,9 +348,7 @@ class BaseModel(ABC):
         forecast.reset_index(inplace=True)
 
         get_logger().debug(
-            "forecast for %s:\n%s", 
-            get_worker().get_current_task(),
-            forecast.tail()
+            "forecast for %s:\n%s", get_worker().get_current_task(), forecast.tail()
         )
 
         loss = loss_val = eval_mae = eval_rmse = eval_mae_val = eval_rmse_val = np.nan
@@ -557,9 +558,7 @@ class BaseModel(ABC):
                 sort_by="self_cpu_memory_usage",  # Sort by total CPU time
                 row_limit=20,  # Limit the number of rows in the table (remove or adjust as needed)
             )
-            output_file = os.path.join(
-                self.profile_folder, f"{task_key}_memory.txt"
-            )
+            output_file = os.path.join(self.profile_folder, f"{task_key}_memory.txt")
             # Save the table to a file
             with open(output_file, "w") as f:
                 f.write(profiler_result)
