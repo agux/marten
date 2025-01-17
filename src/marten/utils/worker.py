@@ -385,7 +385,8 @@ def await_futures(
             #     log_futures(futures)
     elif num > multiprocessing.cpu_count() * multiplier:
         delta = num - multiprocessing.cpu_count() * multiplier
-        time.sleep(random_seconds(math.pow(delta, 0.8), delta, max_delay))
+        threading.Event().wait(random_seconds(math.pow(delta, 0.8), delta, max_delay))
+        # time.sleep(random_seconds(math.pow(delta, 0.8), delta, max_delay))
 
         if task_timeout is not None and shared_vars is not None:
             handle_task_timeout(futures, task_timeout, shared_vars)
@@ -486,8 +487,9 @@ def release_lock(lock: Lock, after=10):
         return
 
     def _release():
+        nonlocal lock
         get_logger().debug("lock %s will be released in %s seconds", lock.name, after)
-        time.sleep(after)
+        # time.sleep(after)
         try:
             lock.release()
             get_logger().debug("lock %s released", lock.name)

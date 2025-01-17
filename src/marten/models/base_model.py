@@ -1,5 +1,4 @@
 import warnings
-
 # Ignore the specific FutureWarning about Series.view deprecation
 warnings.filterwarnings(
     action="ignore",
@@ -24,6 +23,7 @@ from dotenv import load_dotenv
 import os
 import time
 import socket
+import threading
 import numpy as np
 import pandas as pd
 import logging
@@ -268,10 +268,12 @@ class BaseModel(ABC):
             stop_at = time.time() + self.resource_wait_time
             if accelerator == "mps":
                 while wait_mps(stop_at):
-                    time.sleep(0.5)
+                    threading.Event().wait(0.5)
+                    # time.sleep(0.5)
             else:
                 while wait_gpu(gpu_ut, gpu_rt, stop_at):
-                    time.sleep(0.2)
+                    threading.Event().wait(0.2)
+                    # time.sleep(0.2)
 
             now = time.time()
             if now <= stop_at:
@@ -336,7 +338,8 @@ class BaseModel(ABC):
                 if self._lock_accelerator("gpu") == "gpu":
                     break
                 else:
-                    time.sleep(0.5)
+                    # time.sleep(0.5)
+                    threading.Event().wait(0.5)
         try:
             forecast = self.nf.predict_insample()
         except Exception as e:
@@ -694,7 +697,8 @@ class BaseModel(ABC):
                 if self._lock_accelerator("gpu") == "gpu":
                     break
                 else:
-                    time.sleep(0.5)
+                    # time.sleep(0.5)
+                    threading.Event().wait(0.5)
         forecast = self._predict(df, **kwargs)
         # convert np.float32 type columns in forecast dataframe to native float,
         # to avoid `psycopg2.ProgrammingError: can't adapt type 'numpy.float32'`
