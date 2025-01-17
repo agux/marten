@@ -20,7 +20,7 @@ from marten.models.base_model import BaseModel
 from marten.utils.worker import num_workers
 from marten.utils.logger import get_logger
 
-import zentorch
+# import zentorch
 
 default_params = {
     "h": 20,
@@ -174,6 +174,8 @@ class TSMixerxModel(BaseModel):
                 model_config["accelerator"],
                 self.zentorch_enabled,
             )
+            import zentorch
+
             self.model = torch.compile(self.model, backend="zentorch")
 
         self.nf = NeuralForecast(
