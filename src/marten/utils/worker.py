@@ -64,7 +64,7 @@ class LocalWorkerPlugin(WorkerPlugin):
 
         if hasattr(self.args, "model"):
             torch.set_num_interop_threads(1)
-            torch.cuda.set_per_process_memory_fraction(1.0)
+            # torch.cuda.set_per_process_memory_fraction(1.0)
             match self.args.model.lower():
                 case "timemixer":
                     from marten.models.time_mixer import TimeMixerModel
@@ -189,7 +189,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
             # "distributed.worker.memory.recent-to-old-time": "45 minutes",
             "distributed.deploy.lost-worker-timeout": "2 hours",
             # "distributed.scheduler.work-stealing-interval": "5 seconds",
-            "distributed.scheduler.worker-ttl": "8 hours",
+            # "distributed.scheduler.worker-ttl": "8 hours",
             # "distributed.scheduler.worker-saturation": 0.0001,
             "distributed.scheduler.locks.lease-timeout": "15 minutes",
             # "distributed.scheduler.validate": True,
@@ -385,7 +385,7 @@ def await_futures(
             #     log_futures(futures)
     elif num > multiprocessing.cpu_count() * multiplier:
         delta = num - multiprocessing.cpu_count() * multiplier
-        threading.Event().wait(random_seconds(math.pow(delta, 0.8), delta, max_delay))
+        threading.Event().wait(random_seconds(math.pow(delta, 0.9), delta, max_delay))
         # time.sleep(random_seconds(math.pow(delta, 0.8), delta, max_delay))
 
         if task_timeout is not None and shared_vars is not None:

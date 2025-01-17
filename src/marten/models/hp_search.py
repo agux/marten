@@ -442,7 +442,7 @@ def _pair_covar_metrics(
         # if too much pending task, then slow down for the tasks to be digested
         await_futures(covar_futures, False, multiplier=0.5, max_delay=300)
     # wait(covar_fut)
-    await_futures(covar_futures)
+    # await_futures(covar_futures)
 
 
 def _load_covar_set(covar_set_id, model, alchemyEngine):
@@ -1430,6 +1430,9 @@ def covar_metric(
                         covar_futures,
                     )
                     num_symbols += len(cov_symbols)
+
+    await_futures(covar_futures)
+    
     logger.info(
         "finished covar_metric for %s features in %s, total covar symbols: %s",
         len(features),
