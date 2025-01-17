@@ -327,13 +327,13 @@ class BaseModel(ABC):
 
     def _get_metrics(self, **kwargs: Any) -> dict:
         train_trajectories = self.nf.models[0].train_trajectories
-        if kwargs["accelerator"] == "gpu":
-            # without exclusive lock, it may fail due to insufficient GPU memory.
-            while True:
-                if self._lock_accelerator("gpu") == "gpu":
-                    break
-                else:
-                    time.sleep(0.5)
+        # if kwargs["accelerator"] == "gpu":
+        #     # without exclusive lock, it may fail due to insufficient GPU memory.
+        #     while True:
+        #         if self._lock_accelerator("gpu") == "gpu":
+        #             break
+        #         else:
+        #             time.sleep(0.5)
         try:
             forecast = self.nf.predict_insample()
         except Exception as e:
