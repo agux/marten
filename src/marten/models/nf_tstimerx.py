@@ -18,6 +18,7 @@ from neuralforecast.losses.pytorch import HuberLoss
 
 from marten.models.base_model import BaseModel
 from marten.utils.worker import num_workers
+from marten.utils.logger import get_logger
 
 import zentorch
 
@@ -168,6 +169,11 @@ class TSMixerxModel(BaseModel):
         )
 
         if model_config["accelerator"] == "cpu" and self.zentorch_enabled:
+            get_logger().info(
+                "Enabling Zentorch. accelerator: %s, zentorch_enabled: %s",
+                model_config["accelerator"],
+                self.zentorch_enabled,
+            )
             self.model = torch.compile(self.model, backend="zentorch")
 
         self.nf = NeuralForecast(
