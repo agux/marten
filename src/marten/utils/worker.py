@@ -210,7 +210,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     mem_limit = os.getenv("dask_worker_memory_limit")
     cluster = LocalCluster(
         # host="0.0.0.0", #NOTE: if not using 0.0.0.0, remote machines may not be able to join the cluster
-        # host="localhost",
+        host=f"127.0.0.1:{getattr(args, "scheduler_port", 0)}",
         scheduler_port=getattr(args, "scheduler_port", 0),
         # scheduler_kwargs={"external_address": "localhost"},
         n_workers=getattr(
