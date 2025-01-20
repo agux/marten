@@ -216,7 +216,7 @@ class LocalCluster(SpecCluster):
 
         worker_kwargs.update(
             {
-                "host": "localhost" if host == "0.0.0.0" else host,
+                "host": "127.0.0.1" if host == "0.0.0.0" else host,
                 "nthreads": threads_per_worker,
                 "services": worker_services,
                 "dashboard_address": worker_dashboard_address,
