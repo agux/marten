@@ -11,7 +11,7 @@ import dask
 import dask.config
 from dask.distributed import (
     WorkerPlugin,
-    # LocalCluster,
+    LocalCluster,
     Client,
     get_client,
     get_worker,
@@ -28,7 +28,7 @@ from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
 from marten.utils.net import get_machine_ips
 from marten.utils.trainer import is_cuda_error, cuda_memory_stats
-from marten.utils.local_cluster import LocalCluster
+# from marten.utils.local_cluster import LocalCluster
 
 from dotenv import load_dotenv
 
@@ -210,7 +210,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     mem_limit = os.getenv("dask_worker_memory_limit")
     cluster = LocalCluster(
         # host="0.0.0.0", #NOTE: if not using 0.0.0.0, remote machines may not be able to join the cluster
-        host=f'127.0.0.1:{getattr(args, "scheduler_port", 0)}',
+        # host="localhost",
         scheduler_port=getattr(args, "scheduler_port", 0),
         # scheduler_kwargs={"external_address": "localhost"},
         n_workers=getattr(
