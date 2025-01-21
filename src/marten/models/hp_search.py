@@ -23,6 +23,8 @@ from dask.distributed import (
     wait,
 )
 
+import ray
+
 from marten.models.base_model import BaseModel
 from marten.utils.database import get_database_engine, columns_with_prefix
 from marten.utils.logger import get_logger
@@ -394,7 +396,7 @@ def _pair_endogenous_covar_metrics(
 def _pair_covar_metrics(
     client,
     anchor_symbol,
-    anchor_df_future,
+    anchor_df,
     cov_table,
     cov_symbols,
     feature,
@@ -420,7 +422,7 @@ def _pair_covar_metrics(
             client.submit(
                 fit_with_covar,
                 anchor_symbol,
-                anchor_df_future,
+                anchor_df,
                 cov_table,
                 symbol,
                 min_date,
@@ -435,8 +437,8 @@ def _pair_covar_metrics(
                 args.infer_holiday,
                 sem=sem,
                 locks=locks,
-                key=f"{fit_with_covar.__name__}-{symbol}@{cov_table}.{feature}",
-                priority=p_order,
+                # key=f"{fit_with_covar.__name__}-{symbol}@{cov_table}.{feature}",
+                # priority=p_order,
             )
         )
         # if too much pending task, then slow down for the tasks to be digested
@@ -1432,7 +1434,7 @@ def covar_metric(
                     num_symbols += len(cov_symbols)
 
     await_futures(covar_futures)
-    
+
     logger.info(
         "finished covar_metric for %s features in %s, total covar symbols: %s",
         len(features),

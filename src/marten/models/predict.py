@@ -9,6 +9,8 @@ import os
 
 import time
 
+import ray
+
 from marten.models.base_model import BaseModel
 from marten.utils.logger import get_logger
 from marten.utils.worker import init_client
