@@ -13,7 +13,7 @@ import ray
 
 from marten.models.base_model import BaseModel
 from marten.utils.logger import get_logger
-from marten.utils.worker import init_client
+from marten.utils.worker import init_client, init_ray
 from marten.utils.database import get_database_engine
 from marten.utils.trainer import select_device
 from marten.models.worker_func import (
@@ -28,7 +28,7 @@ from types import SimpleNamespace
 from dotenv import load_dotenv
 
 logger = get_logger(__name__)
-client = None
+# client = None
 alchemyEngine = None
 model: BaseModel = None
 
@@ -48,13 +48,14 @@ def init(args):
     load_dotenv()  # take environment variables from .env.
     print_sys_info()
 
-    client = init_client(
-        __name__,
-        args.max_worker,
-        threads=args.threads,
-        dashboard_port=args.dashboard_port,
-        args=args,
-    )
+    # client = init_client(
+    #     __name__,
+    #     args.max_worker,
+    #     threads=args.threads,
+    #     dashboard_port=args.dashboard_port,
+    #     args=args,
+    # )
+    init_ray()
 
     if alchemyEngine is None:
         DB_USER = os.getenv("DB_USER")
