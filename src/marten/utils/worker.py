@@ -7,6 +7,9 @@ import multiprocessing
 import threading
 import torch
 import math
+
+import ray
+
 import dask
 import dask.config
 from dask.distributed import (
@@ -165,6 +168,15 @@ def local_machine_power():
     compute_power = 2 if total_memory >= 8192 and multi_processor_count >= 64 else 1
     return compute_power
 
+def init_ray(args):
+    max_worker = getattr(args, "max_worker", -1)
+    ray.init(
+        num_cpus=getattr(
+            args,
+            "min_worker",
+            int(max_worker) if max_worker > 0 else multiprocessing.cpu_count(),
+        )
+    )
 
 def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     # setting worker resources in environment variable for restarted workers
