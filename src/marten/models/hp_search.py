@@ -23,7 +23,7 @@ from dask.distributed import (
     wait,
 )
 
-import ray
+# import ray
 
 from marten.models.base_model import BaseModel
 from marten.utils.database import get_database_engine, columns_with_prefix

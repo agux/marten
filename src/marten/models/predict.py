@@ -9,7 +9,7 @@ import os
 
 import time
 
-import ray
+# import ray
 
 from marten.models.base_model import BaseModel
 from marten.utils.logger import get_logger
@@ -48,14 +48,14 @@ def init(args):
     load_dotenv()  # take environment variables from .env.
     print_sys_info()
 
-    # client = init_client(
-    #     __name__,
-    #     args.max_worker,
-    #     threads=args.threads,
-    #     dashboard_port=args.dashboard_port,
-    #     args=args,
-    # )
-    init_ray()
+    client = init_client(
+        __name__,
+        args.max_worker,
+        threads=args.threads,
+        dashboard_port=args.dashboard_port,
+        args=args,
+    )
+    # init_ray()
 
     if alchemyEngine is None:
         DB_USER = os.getenv("DB_USER")
