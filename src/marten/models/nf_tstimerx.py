@@ -168,7 +168,7 @@ class TSMixerxModel(BaseModel):
             accelerator=model_config["accelerator"],
             # devices="auto",
             devices=model_config["devices"],
-            prediction="bf16-mixed",
+            precision="bf16-mixed",
             logger=False,
             enable_checkpointing=False,
             barebones=True,
