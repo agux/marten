@@ -9,6 +9,7 @@ import math
 import torch
 import psutil
 import random
+import shutil
 
 from types import SimpleNamespace
 from typing import Any, Tuple
@@ -217,6 +218,8 @@ class TSMixerxModel(BaseModel):
 
         seed_logger.setLevel(orig_seed_log_level)
         rank_zero_logger.setLevel(orig_log_level)
+
+        shutil.rmtree(self.csvLogger.log_dir)
 
         return model_config
 
