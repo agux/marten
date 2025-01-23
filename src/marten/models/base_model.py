@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 import logging
 import warnings
-import functools
+import shutil
 
 from cpuinfo import get_cpu_info
 
@@ -42,6 +42,8 @@ import torch
 import torch.optim as optim
 from torch.optim.optimizer import Optimizer
 from torch.profiler import profile, ProfilerActivity
+
+from pytorch_lightning.loggers import CSVLogger
 
 from sklearn.preprocessing import StandardScaler
 
@@ -123,6 +125,7 @@ class BaseModel(ABC):
         self.accelerator_lock = None
         self.locks = None
         self.profiler = None
+        self.csvLogger = None
 
         load_dotenv()
 
@@ -380,6 +383,8 @@ class BaseModel(ABC):
             eval_mae = self._evaluate_cross_validation(forecast, mae).iloc[0, 0]
             eval_rmse = self._evaluate_cross_validation(forecast, rmse).iloc[0, 0]
 
+        shutil.rmtree(self.csvLogger.log_dir)
+
         return {
             "epoch": int(train_trajectories[-1][0]),
             "MAE_val": float(eval_mae_val),
@@ -443,6 +448,16 @@ class BaseModel(ABC):
         return torch.get_num_threads()
         # return optimize_torch_on_cpu(self.torch_cpu_ratio())
 
+    def _init_csvlogger(self):
+        if self.csvLogger:
+            shutil.rmtree(self.csvLogger.log_dir)
+        else:
+            self.csvLogger = CSVLogger(
+                save_dir="lightning_logs",
+                name="csvlog",
+                version=get_worker().name,
+            )
+
     def train(self, df: pd.DataFrame, **kwargs: Any) -> dict:
         """
         Select the proper accelerator and train the model with the given data.
@@ -483,6 +498,7 @@ class BaseModel(ABC):
         # loop = asyncio.get_running_loop()
         # loop = get_worker().io_loop
         self._init_profiler()
+        self._init_csvlogger()
         try:
             get_logger().debug("training with kwargs: %s", kwargs)
             # model_config = asyncio.wait_for(

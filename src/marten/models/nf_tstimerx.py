@@ -9,14 +9,11 @@ import math
 import torch
 import psutil
 import random
-import shutil
 
 from types import SimpleNamespace
 from typing import Any, Tuple
 
 from dask.distributed import get_worker
-
-from pytorch_lightning.loggers import CSVLogger
 
 from neuralforecast import NeuralForecast
 from neuralforecast.models import TSMixerx
@@ -66,7 +63,6 @@ class TSMixerxModel(BaseModel):
         self.model = None
         self.nf = None
         self.val_size = None
-        self.csvLogger = None
 
         # torch.set_num_interop_threads(1)
 
@@ -133,13 +129,6 @@ class TSMixerxModel(BaseModel):
         rank_zero_logger.setLevel(logging.FATAL)
 
         exog = [col for col in df.columns if col not in ["unique_id", "ds", "y"]]
-
-        if not self.csvLogger:
-            self.csvLogger = CSVLogger(
-                save_dir="lightning_logs",
-                name="csvlog",
-                version=get_worker().name,
-            )
 
         self.model = TSMixerx(
             h=model_config["h"],
@@ -218,8 +207,6 @@ class TSMixerxModel(BaseModel):
 
         seed_logger.setLevel(orig_seed_log_level)
         rank_zero_logger.setLevel(orig_log_level)
-
-        shutil.rmtree(self.csvLogger.log_dir)
 
         return model_config
 
