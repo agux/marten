@@ -166,12 +166,12 @@ class TSMixerxModel(BaseModel):
             enable_progress_bar=False,
             enable_model_summary=False,
             accelerator=model_config["accelerator"],
-            # devices="auto",
+            # devices="auto",  #NOTE: not workable for CPU
             devices=model_config["devices"],
             precision="bf16-mixed",
-            logger=False,
             enable_checkpointing=False,
-            barebones=True,
+            # logger=False, # NOTE: can't disable logger as early stopping rely on it
+            # barebones=True, # NOTE: this disable logger as well
         )
 
         if (
