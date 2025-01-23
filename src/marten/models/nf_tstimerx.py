@@ -39,7 +39,7 @@ baseline_params = {
     "dropout": 0.1,
     "revin": True,
     "learning_rate": 1e-3,
-    "batch_size": 32,
+    "batch_size": 256,
     # step_size = 1,
     # "random_seed": 7,
     "optimizer": "AdamW",
@@ -168,6 +168,12 @@ class TSMixerxModel(BaseModel):
             accelerator=model_config["accelerator"],
             # devices="auto",
             devices=model_config["devices"],
+            prediction="bf16-mixed",
+            logger=False,
+            enable_checkpointing=False,
+            enable_progress_bar=False,
+            enable_model_summary=False,
+            barebones=True,
         )
 
         if (
@@ -193,7 +199,9 @@ class TSMixerxModel(BaseModel):
             local_scaler_type=model_config["local_scaler_type"],
         )
         self.val_size = min(300, int(len(df) * 0.9)) if model_config["validate"] else 0
-        self.nf.fit(df, val_size=self.val_size, use_init_models=True)
+        self.nf.fit(df, val_size=self.val_size, 
+                    # use_init_models=True
+                    )
 
         seed_logger.setLevel(orig_seed_log_level)
         rank_zero_logger.setLevel(orig_log_level)
