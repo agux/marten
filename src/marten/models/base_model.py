@@ -455,7 +455,7 @@ class BaseModel(ABC):
         else:
             self.csvLogger = CSVLogger(
                 save_dir="lightning_logs",
-                name="csvlog",
+                name="",
                 version=get_worker().name,
             )
 
