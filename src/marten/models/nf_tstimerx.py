@@ -171,8 +171,6 @@ class TSMixerxModel(BaseModel):
             prediction="bf16-mixed",
             logger=False,
             enable_checkpointing=False,
-            enable_progress_bar=False,
-            enable_model_summary=False,
             barebones=True,
         )
 
