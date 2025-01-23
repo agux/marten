@@ -178,7 +178,7 @@ class TSMixerxModel(BaseModel):
             accelerator=model_config["accelerator"],
             # devices="auto",  #NOTE: not workable for CPU
             devices=model_config["devices"],
-            precision="bf16-mixed",
+            # precision="bf16-mixed",  #NOTE: saves GPU mem but slower on CPU
             enable_checkpointing=False,
             logger=self.csvLogger,  # NOTE: can't disable logger as early stopping rely on it
             # barebones=True, # NOTE: this disable logger as well
