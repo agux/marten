@@ -1,4 +1,5 @@
 import warnings
+
 # Ignore the specific FutureWarning about Series.view deprecation
 warnings.filterwarnings(
     action="ignore",
@@ -383,7 +384,7 @@ class BaseModel(ABC):
             eval_mae = self._evaluate_cross_validation(forecast, mae).iloc[0, 0]
             eval_rmse = self._evaluate_cross_validation(forecast, rmse).iloc[0, 0]
 
-        shutil.rmtree(self.csvLogger.log_dir)
+        # shutil.rmtree(self.csvLogger.log_dir)
 
         return {
             "epoch": int(train_trajectories[-1][0]),
@@ -450,7 +451,11 @@ class BaseModel(ABC):
 
     def _init_csvlogger(self):
         if self.csvLogger:
-            shutil.rmtree(self.csvLogger.log_dir)
+            shutil.rmtree(
+                os.path.join(
+                    self.csvLogger.log_dir, "csvlog", f"version_{get_worker().name}"
+                )
+            )
         else:
             self.csvLogger = CSVLogger(
                 save_dir="lightning_logs",
