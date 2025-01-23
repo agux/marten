@@ -443,12 +443,6 @@ class BaseModel(ABC):
         return torch.get_num_threads()
         # return optimize_torch_on_cpu(self.torch_cpu_ratio())
 
-    async def _train_async(self, df: pd.DataFrame, **kwargs: Any) -> dict:
-        future = get_worker().io_loop.run_in_executor(
-            None, functools.partial(self._train, df, **kwargs)
-        )
-        return await future
-
     def train(self, df: pd.DataFrame, **kwargs: Any) -> dict:
         """
         Select the proper accelerator and train the model with the given data.

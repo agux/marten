@@ -267,7 +267,7 @@ def fit_with_covar(
                 config["random_seed"] = random_seed
                 config["locks"] = locks
                 # get_logger().info("fit_with_covar : %s", locks)
-                merged_df.replace([np.inf, -np.inf], np.nan, inplace=True)
+                merged_df = merged_df.replace([np.inf, -np.inf], np.nan)
                 # cores = []
                 # try:
                 #     cores = bind_cpu_cores(

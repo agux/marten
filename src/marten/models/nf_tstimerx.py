@@ -13,6 +13,10 @@ import random
 from types import SimpleNamespace
 from typing import Any, Tuple
 
+from dask.distributed import get_worker
+
+from pytorch_lightning.loggers import CSVLogger
+
 from neuralforecast import NeuralForecast
 from neuralforecast.models import TSMixerx
 from neuralforecast.losses.pytorch import HuberLoss
@@ -61,6 +65,12 @@ class TSMixerxModel(BaseModel):
         self.model = None
         self.nf = None
         self.val_size = None
+
+        self.csvLogger = CSVLogger(
+            save_dir="lightning_logs",
+            name="csvlog",
+            version=get_worker().name,
+        )
 
         # torch.set_num_interop_threads(1)
 
@@ -170,7 +180,7 @@ class TSMixerxModel(BaseModel):
             devices=model_config["devices"],
             precision="bf16-mixed",
             enable_checkpointing=False,
-            # logger=False, # NOTE: can't disable logger as early stopping rely on it
+            logger=self.csvLogger,  # NOTE: can't disable logger as early stopping rely on it
             # barebones=True, # NOTE: this disable logger as well
         )
 
@@ -197,9 +207,11 @@ class TSMixerxModel(BaseModel):
             local_scaler_type=model_config["local_scaler_type"],
         )
         self.val_size = min(300, int(len(df) * 0.9)) if model_config["validate"] else 0
-        self.nf.fit(df, val_size=self.val_size, 
-                    # use_init_models=True
-                    )
+        self.nf.fit(
+            df,
+            val_size=self.val_size,
+            # use_init_models=True
+        )
 
         seed_logger.setLevel(orig_seed_log_level)
         rank_zero_logger.setLevel(orig_log_level)
