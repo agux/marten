@@ -27,6 +27,7 @@ from marten.utils.logger import get_logger
 
 default_params = {
     "h": 20,
+    "batch_size": 50,  # NOTE: bigger batch_size seems slower on CPU
     "max_steps": 1000,
     "val_check_steps": 50,
     "num_lr_decays": -1,
@@ -41,7 +42,6 @@ baseline_params = {
     "dropout": 0.1,
     "revin": True,
     "learning_rate": 1e-3,
-    "batch_size": 32,
     # step_size = 1,
     # "random_seed": 7,
     "optimizer": "AdamW",
@@ -236,7 +236,6 @@ class TSMixerxModel(BaseModel):
             dropout=uniform(0, 0.5),
             revin=[True, False],
             learning_rate=loguniform(0.0001, 0.002),
-            batch_size=[2**w for w in range(5, 7+1)],
             local_scaler_type=[None, "standard", "robust", "robust-iqr", "minmax"],
             topk_covar=list(range(0, {kwargs["topk_covars"]}+1)),
             covar_dist=dirichlet([float({kwargs["max_covars"]})]*{kwargs["max_covars"]}),
