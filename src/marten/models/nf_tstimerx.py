@@ -27,7 +27,7 @@ from marten.utils.logger import get_logger
 
 default_params = {
     "h": 20,
-    "batch_size": 50,  # NOTE: bigger batch_size seems slower on CPU
+    "batch_size": 100,  # NOTE: bigger batch_size seems slower on CPU
     "max_steps": 1000,
     "val_check_steps": 50,
     "num_lr_decays": -1,
