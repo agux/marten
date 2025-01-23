@@ -451,11 +451,7 @@ class BaseModel(ABC):
 
     def _init_csvlogger(self):
         if self.csvLogger:
-            shutil.rmtree(
-                os.path.join(
-                    self.csvLogger.log_dir, "csvlog", f"version_{get_worker().name}"
-                )
-            )
+            shutil.rmtree(self.csvLogger.log_dir)
         else:
             self.csvLogger = CSVLogger(
                 save_dir="lightning_logs",
