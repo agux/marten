@@ -437,7 +437,7 @@ def _pair_covar_metrics(
                 args.infer_holiday,
                 sem=sem,
                 locks=locks,
-                key=f"{fit_with_covar.__name__}({cov_table}.{feature})--{uuid.uuid4().hex}",
+                key=f"{fit_with_covar.__name__}({cov_table})--{uuid.uuid4().hex}",
                 priority=p_order,
             )
         )
@@ -1807,6 +1807,9 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
                 + f"{cov_table}({len(features)})_{len(keys) - i}",
             )
         )
+        if i > 1:
+            _, futures = wait(futures, return_when="FIRST_COMPLETED")
+
 
 
 def univariate_baseline(anchor_df, hps_id, args):
