@@ -1390,7 +1390,7 @@ def covar_metric(
                             cutoff_date,
                             min_count,
                             sem,
-                            key=f"{covar_symbols_from_table.__name__}-{cov_table}.{feature}",
+                            key=f"{covar_symbols_from_table.__name__}({cov_table})-{feature}-{uuid.uuid4().hex}",
                             priority=p_order + 1,
                         )
                     )
@@ -1808,8 +1808,8 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
             )
         )
         if i > 1:
-            _, futures = wait(futures, return_when="FIRST_COMPLETED")
-
+            _, undone = wait(futures, return_when="FIRST_COMPLETED")
+            futures = list(undone)
 
 
 def univariate_baseline(anchor_df, hps_id, args):
