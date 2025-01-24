@@ -312,13 +312,17 @@ class BaseModel(ABC):
 
         accelerator = "gpu" if accelerator == "auto" else accelerator
 
-        self.release_accelerator_lock()
-        accelerator = self._lock_accelerator(accelerator)
-        self.release_accelerator_lock(
-            self.device_lock_release_delay
-            if self.is_baseline(**self.model_args)
-            else self.device_lock_release_delay_large
-        )
+        if accelerator == "gpu":
+            if int(worker.name) > self.locks["gpu"].max_leases:
+                accelerator = "cpu"
+
+        # self.release_accelerator_lock()
+        # accelerator = self._lock_accelerator(accelerator)
+        # self.release_accelerator_lock(
+        #     self.device_lock_release_delay
+        #     if self.is_baseline(**self.model_args)
+        #     else self.device_lock_release_delay_large
+        # )
         return accelerator
 
     def _evaluate_cross_validation(self, df, metric):
