@@ -12,6 +12,8 @@ import math
 import multiprocessing
 import pandas as pd
 import numpy as np
+import uuid
+
 from dotenv import load_dotenv
 
 import dask
@@ -276,9 +278,7 @@ def covar_symbols_from_table(
         notnull = f"t.{feature} is not null"
         group_by = f"group by {symbol_col}"
 
-    orig_table = (
-        table[:-5] if table.endswith("_view") else table
-    )
+    orig_table = table[:-5] if table.endswith("_view") else table
 
     query = f"""
         WITH existing_cov_symbols AS ({existing_cov_symbols}),
@@ -437,8 +437,8 @@ def _pair_covar_metrics(
                 args.infer_holiday,
                 sem=sem,
                 locks=locks,
-                # key=f"{fit_with_covar.__name__}-{symbol}@{cov_table}.{feature}",
-                # priority=p_order,
+                key=f"{fit_with_covar.__name__}({cov_table}.{feature})--{uuid.uuid4().hex}",
+                priority=p_order,
             )
         )
         # if too much pending task, then slow down for the tasks to be digested
@@ -1802,6 +1802,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
                 sem,
                 locks,
                 p_order=len(keys) - i,
+                priority=len(keys) - i,
                 key=f"{covar_metric.__name__}_{keys[i].lower()}({len(features)})-"
                 + f"{cov_table}({len(features)})_{len(keys) - i}",
             )
