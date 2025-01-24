@@ -8,12 +8,17 @@ warnings.filterwarnings(
 )
 warnings.filterwarnings(
     action="ignore",
-    message=".*The epoch parameter in `scheduler.step()` was not necessary.*",
+    message="The epoch parameter in `scheduler.step\\(\\)` was not necessary.*",
     category=UserWarning,
 )
 warnings.filterwarnings(
     "ignore",
     message="Trying to infer the `batch_size` from an ambiguous collection.*",
+    category=UserWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message=r"You called `self\.log\(.*but have no logger configured.*",
     category=UserWarning,
 )
 

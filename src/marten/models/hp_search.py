@@ -1390,7 +1390,7 @@ def covar_metric(
                             cutoff_date,
                             min_count,
                             sem,
-                            key=f"{covar_symbols_from_table.__name__}({cov_table})-{feature}-{uuid.uuid4().hex}",
+                            key=f"{covar_symbols_from_table.__name__}({cov_table})--{feature}_{uuid.uuid4().hex}",
                             priority=p_order + 1,
                         )
                     )
@@ -1807,7 +1807,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
                 + f"{cov_table}({len(features)})_{len(keys) - i}",
             )
         )
-        if i > 1:
+        if i > 0:
             _, undone = wait(futures, return_when="FIRST_COMPLETED")
             futures = list(undone)
 
