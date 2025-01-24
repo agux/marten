@@ -130,51 +130,56 @@ class TSMixerxModel(BaseModel):
 
         exog = [col for col in df.columns if col not in ["unique_id", "ds", "y"]]
 
-        self.model = TSMixerx(
-            h=model_config["h"],
-            n_series=1,
-            input_size=model_config["input_size"],
+        model_args = {
+            "h": model_config["h"],
+            "n_series": 1,
+            "input_size": model_config["input_size"],
             # stat_exog_list=None,
-            hist_exog_list=exog,
+            "hist_exog_list": exog,
             # futr_exog_list=None,
-            n_block=model_config["n_block"],
-            ff_dim=model_config["ff_dim"],
-            dropout=model_config["dropout"],
-            revin=model_config["revin"],
-            loss=HuberLoss(),
+            "n_block": model_config["n_block"],
+            "ff_dim": model_config["ff_dim"],
+            "dropout": model_config["dropout"],
+            "revin": model_config["revin"],
+            "loss": HuberLoss(),
             # valid_loss=None,
-            max_steps=model_config["max_steps"],
-            learning_rate=model_config["learning_rate"],
-            num_lr_decays=model_config["num_lr_decays"],
-            early_stop_patience_steps=(
+            "max_steps": model_config["max_steps"],
+            "learning_rate": model_config["learning_rate"],
+            "num_lr_decays": model_config["num_lr_decays"],
+            "early_stop_patience_steps": (
                 model_config["early_stop_patience_steps"]
                 if model_config["validate"]
                 else -1
             ),
-            val_check_steps=model_config["val_check_steps"],
-            batch_size=model_config["batch_size"],
+            "val_check_steps": model_config["val_check_steps"],
+            "batch_size": model_config["batch_size"],
             # step_size = 1,
-            random_seed=model_config["random_seed"],
+            "random_seed": model_config["random_seed"],
             # num_workers_loader = 0,
             # drop_last_loader = False,
-            optimizer=optimizer,
-            optimizer_kwargs=optim_args,
+            "optimizer": optimizer,
+            "optimizer_kwargs": optim_args,
             # lr_scheduler=None,
             # lr_scheduler_model_config=None,
             # NOTE: scaling will be set when instantiating `NeuralForecast`.
             # See https://nixtlaverse.nixtla.io/neuralforecast/docs/capabilities/time_series_scaling.html
             # scaler_type="identity",
             # NOTE: beginning of trainer_kwargs
-            enable_progress_bar=False,
-            enable_model_summary=False,
-            accelerator=model_config["accelerator"],
+            "enable_progress_bar": False,
+            "enable_model_summary": False,
+            "accelerator": model_config["accelerator"],
             # devices="auto",  #NOTE: not workable for CPU
-            devices=model_config["devices"],
+            "devices": model_config["devices"],
             # precision="bf16-mixed",  #NOTE: saves GPU mem but slower on CPU
-            enable_checkpointing=False,
-            logger=self.csvLogger,  # NOTE: can't disable logger as early stopping rely on it
+            "enable_checkpointing": False,
+            "logger": self.csvLogger,  # NOTE: can't disable logger as early stopping rely on it
             # barebones=True, # NOTE: this disable logger as well
-        )
+        }
+
+        if model_config["accelerator"] == "gpu" and torch.cuda.is_bf16_supported():
+            model_args["precision"] = "bf16-mixed"
+
+        self.model = TSMixerx(**model_args)
 
         if (
             model_config["accelerator"] == "cpu"

@@ -1467,7 +1467,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
                 name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
             )
     if not locks:
-        locks = get_accelerator_locks(0, timeout="20s")
+        locks = get_accelerator_locks(0, gpu_leases=2, timeout="20s")
 
     # init_cpu_core_id(alchemyEngine)
 
