@@ -31,6 +31,7 @@ from marten.models.base_model import BaseModel
 from marten.utils.database import get_database_engine, columns_with_prefix
 from marten.utils.logger import get_logger
 from marten.utils.worker import (
+    get_result,
     await_futures,
     init_client,
     num_workers,
@@ -395,7 +396,7 @@ def _pair_endogenous_covar_metrics(
 
 
 def _pair_covar_metrics(
-    client,
+    # client,
     anchor_symbol,
     anchor_df,
     cov_table,
@@ -419,30 +420,31 @@ def _pair_covar_metrics(
             cov_table,
             feature,
         )
-        covar_futures.append(
-            client.submit(
-                fit_with_covar,
-                anchor_symbol,
-                anchor_df,
-                cov_table,
-                symbol,
-                min_date,
-                args.random_seed,
-                feature,
-                # select_device(
-                #     args.accelerator,
-                #     getattr(args, "gpu_util_threshold", None),
-                #     getattr(args, "gpu_ram_threshold", None),
-                # ),
-                "auto",
-                args.early_stopping,
-                args.infer_holiday,
-                sem=sem,
-                locks=locks,
-                key=f"{fit_with_covar.__name__}({cov_table})--{uuid.uuid4().hex}",
-                priority=p_order,
+        with worker_client() as client:
+            covar_futures.append(
+                client.submit(
+                    fit_with_covar,
+                    anchor_symbol,
+                    anchor_df,
+                    cov_table,
+                    symbol,
+                    min_date,
+                    args.random_seed,
+                    feature,
+                    # select_device(
+                    #     args.accelerator,
+                    #     getattr(args, "gpu_util_threshold", None),
+                    #     getattr(args, "gpu_ram_threshold", None),
+                    # ),
+                    "auto",
+                    args.early_stopping,
+                    args.infer_holiday,
+                    sem=sem,
+                    locks=locks,
+                    key=f"{fit_with_covar.__name__}({cov_table})--{uuid.uuid4().hex}",
+                    priority=p_order,
+                )
             )
-        )
         # if too much pending task, then slow down for the tasks to be digested
         await_futures(covar_futures, False, multiplier=0.5, max_delay=300)
     # wait(covar_fut)
@@ -1343,43 +1345,44 @@ def covar_metric(
     cov_symbols_fut = []
     covar_futures = []
     num_symbols = 0
-    with worker_client() as client:
-        for feature in features:
-            match cov_table:
-                case "bond_metrics_em" | "bond_metrics_em_view":
-                    # construct a dummy cov_symbols dataframe with `symbol` column and the value 'bond'.
-                    _pair_covar_metrics(
-                        client,
-                        anchor_symbol,
-                        anchor_df,
-                        cov_table,
-                        ["bond"],
-                        feature,
-                        min_date,
-                        args,
-                        sem,
-                        locks,
-                        p_order,
-                        covar_futures,
-                    )
-                    num_symbols += 1
-                case "currency_boc_safe_view":
-                    _pair_covar_metrics(
-                        client,
-                        anchor_symbol,
-                        anchor_df,
-                        cov_table,
-                        ["currency_exchange"],
-                        feature,
-                        min_date,
-                        args,
-                        sem,
-                        locks,
-                        p_order,
-                        covar_futures,
-                    )
-                    num_symbols += 1
-                case _:
+    # with worker_client() as client:
+    for feature in features:
+        match cov_table:
+            case "bond_metrics_em" | "bond_metrics_em_view":
+                # construct a dummy cov_symbols dataframe with `symbol` column and the value 'bond'.
+                _pair_covar_metrics(
+                    # client,
+                    anchor_symbol,
+                    anchor_df,
+                    cov_table,
+                    ["bond"],
+                    feature,
+                    min_date,
+                    args,
+                    sem,
+                    locks,
+                    p_order,
+                    covar_futures,
+                )
+                num_symbols += 1
+            case "currency_boc_safe_view":
+                _pair_covar_metrics(
+                    # client,
+                    anchor_symbol,
+                    anchor_df,
+                    cov_table,
+                    ["currency_exchange"],
+                    feature,
+                    min_date,
+                    args,
+                    sem,
+                    locks,
+                    p_order,
+                    covar_futures,
+                )
+                num_symbols += 1
+            case _:
+                with worker_client() as client:
                     cov_symbols_fut.append(
                         client.submit(
                             covar_symbols_from_table,
@@ -1408,32 +1411,32 @@ def covar_metric(
                     # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
                     # cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
         # logger.info("[DEBUG] len(futures): %s in %s", len(cov_symbols_fut), cov_table)
-
-        if cov_symbols_fut:
-            for batch in as_completed(cov_symbols_fut).batches():
-                for future in batch:
-                    cov_symbols, feature = future.result()
-                    # logger.info(
-                    #     "identified %s symbols for %s.%s",
-                    #     len(cov_symbols),
-                    #     cov_table,
-                    #     feature
-                    # )
-                    _pair_covar_metrics(
-                        client,
-                        anchor_symbol,
-                        anchor_df,
-                        cov_table,
-                        cov_symbols,
-                        feature,
-                        min_date,
-                        args,
-                        sem,
-                        locks,
-                        p_order,
-                        covar_futures,
-                    )
-                    num_symbols += len(cov_symbols)
+    
+    if cov_symbols_fut:
+        for batch in as_completed(cov_symbols_fut).batches():
+            for future in batch:
+                cov_symbols, feature = future.result()
+                # logger.info(
+                #     "identified %s symbols for %s.%s",
+                #     len(cov_symbols),
+                #     cov_table,
+                #     feature
+                # )
+                _pair_covar_metrics(
+                    # client,
+                    anchor_symbol,
+                    anchor_df,
+                    cov_table,
+                    cov_symbols,
+                    feature,
+                    min_date,
+                    args,
+                    sem,
+                    locks,
+                    p_order,
+                    covar_futures,
+                )
+                num_symbols += len(cov_symbols)
 
     await_futures(covar_futures)
 
@@ -1810,8 +1813,10 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
             )
         )
         if i > 0:
-            _, undone = wait(futures, return_when="FIRST_COMPLETED")
+            done, undone = wait(futures, return_when="FIRST_COMPLETED")
             futures = list(undone)
+            for f in done:
+                get_result(f)
 
 
 def univariate_baseline(anchor_df, hps_id, args):
