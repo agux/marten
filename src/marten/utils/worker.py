@@ -31,6 +31,7 @@ from marten.utils.database import get_database_engine
 from marten.utils.logger import get_logger
 from marten.utils.net import get_machine_ips
 from marten.utils.trainer import is_cuda_error, cuda_memory_stats
+
 # from marten.utils.local_cluster import LocalCluster
 
 from dotenv import load_dotenv
@@ -168,6 +169,7 @@ def local_machine_power():
     compute_power = 2 if total_memory >= 8192 and multi_processor_count >= 64 else 1
     return compute_power
 
+
 def init_ray(args):
     max_worker = getattr(args, "max_worker", -1)
     ray.init(
@@ -177,6 +179,7 @@ def init_ray(args):
             int(max_worker) if max_worker > 0 else multiprocessing.cpu_count(),
         )
     )
+
 
 def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     # setting worker resources in environment variable for restarted workers
@@ -262,6 +265,10 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
         "dask dashboard can be accessed at: %s", cluster.dashboard_link
     )
     get_logger(name).info("dask scheduler address: %s", cluster.scheduler_address)
+    get_logger(name).info(
+        "distributed.admin.event-loop: %s",
+        dask.config.get("distributed.admin.event-loop"),
+    )
 
     return client
 
