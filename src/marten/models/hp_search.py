@@ -1820,7 +1820,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
                 + f"{cov_table}({len(features)})_{len(keys) - i}",
             )
         )
-        if i > 0:
+        if i > 1:
             done, undone = wait(futures, return_when="FIRST_COMPLETED")
             futures = list(undone)
             for f in done:

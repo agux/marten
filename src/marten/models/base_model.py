@@ -49,7 +49,7 @@ import torch.optim as optim
 from torch.optim.optimizer import Optimizer
 from torch.profiler import profile, ProfilerActivity
 
-from pytorch_lightning.loggers import CSVLogger
+from pytorch_lightning.loggers import TensorBoardLogger
 
 from sklearn.preprocessing import StandardScaler
 
@@ -131,7 +131,7 @@ class BaseModel(ABC):
         self.accelerator_lock = None
         self.locks = None
         self.profiler = None
-        self.csvLogger = None
+        self.trainLogger = None
 
         load_dotenv()
 
@@ -344,6 +344,7 @@ class BaseModel(ABC):
         return evals
 
     def _get_metrics(self, **kwargs: Any) -> dict:
+        # TODO: speed up this part
         train_trajectories = self.nf.models[0].train_trajectories
         if kwargs["accelerator"] == "gpu" and not self.is_baseline(**self.model_args):
             # without exclusive lock, it may fail due to insufficient GPU memory.
@@ -458,11 +459,11 @@ class BaseModel(ABC):
         return torch.get_num_threads()
         # return optimize_torch_on_cpu(self.torch_cpu_ratio())
 
-    def _init_csvlogger(self):
-        if self.csvLogger:
-            shutil.rmtree(self.csvLogger.log_dir)
+    def _init_train_logger(self):
+        if self.trainLogger:
+            shutil.rmtree(self.trainLogger.log_dir)
         else:
-            self.csvLogger = CSVLogger(
+            self.trainLogger = TensorBoardLogger(
                 save_dir="lightning_logs",
                 name="",
                 version=get_worker().name,
@@ -508,7 +509,7 @@ class BaseModel(ABC):
         # loop = asyncio.get_running_loop()
         # loop = get_worker().io_loop
         self._init_profiler()
-        self._init_csvlogger()
+        self._init_train_logger()
         try:
             get_logger().debug("training with kwargs: %s", kwargs)
             # model_config = asyncio.wait_for(
