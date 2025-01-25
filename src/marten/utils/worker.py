@@ -255,7 +255,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     # )
     client = Client(
         cluster,
-        direct_to_workers=False,
+        direct_to_workers=True,
         connection_limit=4096,
         # security=False
     )
