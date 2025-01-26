@@ -374,26 +374,26 @@ class BaseModel(ABC):
             train_set = forecast[: -self.val_size]
             val_set = forecast[-self.val_size :]
 
-            loss = huber_loss(train_set["y"], train_set[str(self.nf.model)])
+            loss = huber_loss(train_set["y"], train_set[str(self.nf.models[0])])
             eval_mae = mean_absolute_error(
-                train_set["y"], train_set[str(self.nf.model)]
+                train_set["y"], train_set[str(self.nf.models[0])]
             )
             eval_rmse = np.sqrt(
-                mean_squared_error(train_set["y"], train_set[str(self.nf.model)])
+                mean_squared_error(train_set["y"], train_set[str(self.nf.models[0])])
             )
 
-            loss_val = huber_loss(val_set["y"], val_set[str(self.nf.model)])
+            loss_val = huber_loss(val_set["y"], val_set[str(self.nf.models[0])])
             eval_mae_val = mean_absolute_error(
-                val_set["y"], val_set[str(self.nf.model)]
+                val_set["y"], val_set[str(self.nf.models[0])]
             )
             eval_rmse_val = np.sqrt(
-                mean_squared_error(val_set["y"], val_set[str(self.nf.model)])
+                mean_squared_error(val_set["y"], val_set[str(self.nf.models[0])])
             )
         else:
-            loss = huber_loss(forecast["y"], forecast[str(self.nf.model)])
-            eval_mae = mean_absolute_error(forecast["y"], forecast[str(self.nf.model)])
+            loss = huber_loss(forecast["y"], forecast[str(self.nf.models[0])])
+            eval_mae = mean_absolute_error(forecast["y"], forecast[str(self.nf.models[0])])
             eval_rmse = np.sqrt(
-                mean_squared_error(forecast["y"], forecast[str(self.nf.model)])
+                mean_squared_error(forecast["y"], forecast[str(self.nf.models[0])])
             )
 
         # shutil.rmtree(self.csvLogger.log_dir)
