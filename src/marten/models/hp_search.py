@@ -1390,46 +1390,17 @@ def covar_metric(
                 )
                 num_symbols += 1
             case _:
-                with worker_client() as client:
-                    cov_symbols_fut.append(
-                        client.submit(
-                            covar_symbols_from_table,
-                            args.model,
-                            anchor_symbol,
-                            args.symbol_table,
-                            dates,
-                            cov_table,
-                            feature,
-                            cutoff_date,
-                            min_count,
-                            sem,
-                            key=f"{covar_symbols_from_table.__name__}({cov_table})--{feature}_{uuid.uuid4().hex}",
-                            priority=p_order + 1,
-                        )
-                    )
-                    # cov_symbols = _covar_symbols_from_table(
-                    #     args.model,
-                    #     anchor_symbol,
-                    #     dates,
-                    #     cov_table,
-                    #     feature,
-                    #     cutoff_date,
-                    #     min_count,
-                    # )
-                    # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
-                    # cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
-        # logger.info("[DEBUG] len(futures): %s in %s", len(cov_symbols_fut), cov_table)
-    
-    if cov_symbols_fut:
-        for batch in as_completed(cov_symbols_fut).batches():
-            for future in batch:
-                cov_symbols, feature = future.result()
-                # logger.info(
-                #     "identified %s symbols for %s.%s",
-                #     len(cov_symbols),
-                #     cov_table,
-                #     feature
-                # )
+                cov_symbols, feature = covar_symbols_from_table(
+                    args.model,
+                    anchor_symbol,
+                    args.symbol_table,
+                    dates,
+                    cov_table,
+                    feature,
+                    cutoff_date,
+                    min_count,
+                    sem,
+                )
                 _pair_covar_metrics(
                     # client,
                     anchor_symbol,
@@ -1445,8 +1416,66 @@ def covar_metric(
                     covar_futures,
                 )
                 num_symbols += len(cov_symbols)
+                # with worker_client() as client:
+                #     cov_symbols_fut.append(
+                #         client.submit(
+                #             covar_symbols_from_table,
+                #             args.model,
+                #             anchor_symbol,
+                #             args.symbol_table,
+                #             dates,
+                #             cov_table,
+                #             feature,
+                #             cutoff_date,
+                #             min_count,
+                #             sem,
+                #             key=f"{covar_symbols_from_table.__name__}({cov_table})--{feature}_{uuid.uuid4().hex}",
+                #             priority=p_order + 1,
+                #         )
+                #     )
+                # cov_symbols = _covar_symbols_from_table(
+                #     args.model,
+                #     anchor_symbol,
+                #     dates,
+                #     cov_table,
+                #     feature,
+                #     cutoff_date,
+                #     min_count,
+                # )
+                # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
+                # cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
+        # logger.info("[DEBUG] len(futures): %s in %s", len(cov_symbols_fut), cov_table)
 
-    await_futures(covar_futures)
+    # if cov_symbols_fut:
+    #     for batch in as_completed(cov_symbols_fut).batches():
+    #         for future in batch:
+    #             cov_symbols, feature = future.result()
+    #             # logger.info(
+    #             #     "identified %s symbols for %s.%s",
+    #             #     len(cov_symbols),
+    #             #     cov_table,
+    #             #     feature
+    #             # )
+    #             _pair_covar_metrics(
+    #                 # client,
+    #                 anchor_symbol,
+    #                 anchor_df,
+    #                 cov_table,
+    #                 cov_symbols,
+    #                 feature,
+    #                 min_date,
+    #                 args,
+    #                 sem,
+    #                 locks,
+    #                 p_order,
+    #                 covar_futures,
+    #             )
+    #             num_symbols += len(cov_symbols)
+
+    # await_futures(covar_futures)
+    done, _ = wait(covar_futures)
+    for f in done:
+        get_result(f)
 
     logger.info(
         "finished covar_metric for %s features in %s, total covar symbols: %s",
