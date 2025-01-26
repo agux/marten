@@ -1473,9 +1473,10 @@ def covar_metric(
     #             num_symbols += len(cov_symbols)
 
     # await_futures(covar_futures)
-    done, _ = wait(covar_futures)
-    for f in done:
-        get_result(f)
+    with worker_client:
+        done, _ = wait(covar_futures)
+        for f in done:
+            get_result(f)
 
     logger.info(
         "finished covar_metric for %s features in %s, total covar symbols: %s",
