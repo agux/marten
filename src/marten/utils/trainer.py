@@ -1,6 +1,7 @@
 import torch
 import psutil
 import socket
+import numpy as np
 
 import dask
 from dask.distributed import get_worker, Semaphore
