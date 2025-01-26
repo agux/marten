@@ -1,11 +1,13 @@
+# create virtual environment with `conda env create -f environment.yml`
 name: python312
 channels:
   - conda-forge
   - defaults
+  - pytorch
+  - nvidia
 dependencies:
   - python=3.12
   - pip
-  - akshare
   - ipykernel
   - exchange-calendars>=4.5.3     # May not be available at this version
   - numpy>=1.26.4                 # Version may not be available
@@ -24,15 +26,18 @@ dependencies:
   - holidays>=0.47
   - arm-mango>=1.4.3
   - statsmodels>=0.14.2
-  - utilsforecast
-  - stock_indicators              # Requires manual installation of .NET SDK
-  - mini-racer
-  - lightning-fabric
+  - utilsforecast       
+  - lightning
+  - pytorch
+  - pytorch-cuda
   - pytorch-lightning
-  - torch
   - py-cpuinfo
   - glances
-  # - pip:
+  - pip:
+    - zentorch
+    - akshare
+    - mini-racer
+    - stock-indicators # Requires manual installation of .NET SDK
     # The following packages require special handling:
     # - neuralprophet               # Needs installation from source
     # - neuralforecast            # Install from carusyte's repo
