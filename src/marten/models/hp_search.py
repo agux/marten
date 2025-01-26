@@ -1473,7 +1473,7 @@ def covar_metric(
     #             num_symbols += len(cov_symbols)
 
     # await_futures(covar_futures)
-    with worker_client:
+    with worker_client():
         done, _ = wait(covar_futures)
         for f in done:
             get_result(f)
