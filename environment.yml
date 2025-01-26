@@ -33,7 +33,7 @@ dependencies:
   - py-cpuinfo
   - glances
   - pip:
-    - zentorch
+    # - zentorch    #not available in python>3.11
     - akshare
     - mini-racer
     - stock-indicators # Requires manual installation of .NET SDK
