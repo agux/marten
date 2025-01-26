@@ -52,6 +52,7 @@ from torch.profiler import profile, ProfilerActivity
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from utilsforecast.losses import _pl_agg_expr, _base_docstring, mae, rmse
 from utilsforecast.evaluation import evaluate
@@ -60,7 +61,7 @@ from utilsforecast.compat import DataFrame, pl
 from dask.distributed import get_worker, Semaphore
 
 from marten.utils.logger import get_logger
-from marten.utils.trainer import is_cuda_error
+from marten.utils.trainer import is_cuda_error, huber_loss
 from marten.utils.system import bool_envar
 from marten.utils.worker import (
     release_lock,
@@ -73,53 +74,53 @@ from marten.utils.worker import (
 )
 
 
-@_base_docstring
-def huber_loss(
-    df: DataFrame,
-    models: List[str],
-    delta: float = 1.0,
-    id_col: str = "unique_id",
-    target_col: str = "y",
-) -> DataFrame:
-    r"""
-    Huber Loss
+# @_base_docstring
+# def huber_loss(
+#     df: DataFrame,
+#     models: List[str],
+#     delta: float = 1.0,
+#     id_col: str = "unique_id",
+#     target_col: str = "y",
+# ) -> DataFrame:
+#     r"""
+#     Huber Loss
 
-    Huber Loss is a loss function used in robust regression that is less sensitive to outliers in data than the squared error loss.
-    It is defined as:
-    L_{\delta}(a) =
-        0.5 * a^2                  if |a| <= delta
-        delta * (|a| - 0.5 * delta) otherwise
-    where a = y - y_hat and delta is a threshold parameter.
-    """
-    if isinstance(df, pd.DataFrame):
+#     Huber Loss is a loss function used in robust regression that is less sensitive to outliers in data than the squared error loss.
+#     It is defined as:
+#     L_{\delta}(a) =
+#         0.5 * a^2                  if |a| <= delta
+#         delta * (|a| - 0.5 * delta) otherwise
+#     where a = y - y_hat and delta is a threshold parameter.
+#     """
+#     if isinstance(df, pd.DataFrame):
 
-        def huber(a):
-            return np.where(
-                np.abs(a) <= delta, 0.5 * a**2, delta * (np.abs(a) - 0.5 * delta)
-            )
+#         def huber(a):
+#             return np.where(
+#                 np.abs(a) <= delta, 0.5 * a**2, delta * (np.abs(a) - 0.5 * delta)
+#             )
 
-        res = (
-            df[models]
-            .sub(df[target_col], axis=0)
-            .apply(huber)
-            .groupby(df[id_col], observed=True)
-            .mean()
-        )
-        res.index.name = id_col
-        res = res.reset_index()
-    else:
+#         res = (
+#             df[models]
+#             .sub(df[target_col], axis=0)
+#             .apply(huber)
+#             .groupby(df[id_col], observed=True)
+#             .mean()
+#         )
+#         res.index.name = id_col
+#         res = res.reset_index()
+#     else:
 
-        def gen_expr(model):
-            a = pl.col(target_col).sub(pl.col(model))
-            return (
-                pl.when(a.abs() <= delta)
-                .then(0.5 * a.pow(2))
-                .otherwise(delta * (a.abs() - 0.5 * delta))
-                .alias(model)
-            )
+#         def gen_expr(model):
+#             a = pl.col(target_col).sub(pl.col(model))
+#             return (
+#                 pl.when(a.abs() <= delta)
+#                 .then(0.5 * a.pow(2))
+#                 .otherwise(delta * (a.abs() - 0.5 * delta))
+#                 .alias(model)
+#             )
 
-        res = _pl_agg_expr(df, models, id_col, gen_expr)
-    return res
+#         res = _pl_agg_expr(df, models, id_col, gen_expr)
+#     return res
 
 
 class BaseModel(ABC):
@@ -370,29 +371,30 @@ class BaseModel(ABC):
 
         loss = loss_val = eval_mae = eval_rmse = eval_mae_val = eval_rmse_val = np.nan
         if kwargs["validate"]:
-            loss = self._evaluate_cross_validation(
-                forecast[: -self.val_size], huber_loss
-            ).iloc[0, 0]
-            eval_mae = self._evaluate_cross_validation(
-                forecast[: -self.val_size], mae
-            ).iloc[0, 0]
-            eval_rmse = self._evaluate_cross_validation(
-                forecast[: -self.val_size], rmse
-            ).iloc[0, 0]
+            train_set = forecast[: -self.val_size]
+            val_set = forecast[-self.val_size :]
 
-            loss_val = self._evaluate_cross_validation(
-                forecast[-self.val_size :], huber_loss
-            ).iloc[0, 0]
-            eval_mae_val = self._evaluate_cross_validation(
-                forecast[-self.val_size :], mae
-            ).iloc[0, 0]
-            eval_rmse_val = self._evaluate_cross_validation(
-                forecast[-self.val_size :], rmse
-            ).iloc[0, 0]
+            loss = huber_loss(train_set["y"], train_set[str(self.nf.model)])
+            eval_mae = mean_absolute_error(
+                train_set["y"], train_set[str(self.nf.model)]
+            )
+            eval_rmse = np.sqrt(
+                mean_squared_error(train_set["y"], train_set[str(self.nf.model)])
+            )
+
+            loss_val = huber_loss(val_set["y"], val_set[str(self.nf.model)])
+            eval_mae_val = mean_absolute_error(
+                val_set["y"], val_set[str(self.nf.model)]
+            )
+            eval_rmse_val = np.sqrt(
+                mean_squared_error(val_set["y"], val_set[str(self.nf.model)])
+            )
         else:
-            loss = self._evaluate_cross_validation(forecast, huber_loss).iloc[0, 0]
-            eval_mae = self._evaluate_cross_validation(forecast, mae).iloc[0, 0]
-            eval_rmse = self._evaluate_cross_validation(forecast, rmse).iloc[0, 0]
+            loss = huber_loss(forecast["y"], forecast[str(self.nf.model)])
+            eval_mae = mean_absolute_error(forecast["y"], forecast[str(self.nf.model)])
+            eval_rmse = np.sqrt(
+                mean_squared_error(forecast["y"], forecast[str(self.nf.model)])
+            )
 
         # shutil.rmtree(self.csvLogger.log_dir)
 

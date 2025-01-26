@@ -450,11 +450,11 @@ def _pair_covar_metrics(
             )
         # if too much pending task, then slow down for the tasks to be digested
         # await_futures(covar_futures, False, multiplier=0.5, max_delay=300)
-        if len(covar_futures) > cpu_count:
-            done, undone = wait(covar_futures, return_when="FIRST_COMPLETED")
+        if len(covar_futures) > cpu_count * 2:
+            _, undone = wait(covar_futures, return_when="FIRST_COMPLETED")
             covar_futures = list(undone)
-            for f in done:
-                get_result(f)
+            # for f in done:
+            #     get_result(f)
     # wait(covar_fut)
     # await_futures(covar_futures)
 

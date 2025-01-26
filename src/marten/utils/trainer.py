@@ -158,3 +158,39 @@ def remove_singular_variables(df):
         # Drop singular variables
         df = df.drop(columns=singular_vars)
     return df, singular_vars
+
+
+def huber_loss(y_true, y_pred, delta=1.0):
+    """
+    Calculate the Huber loss between y_true and y_pred.
+
+    Parameters:
+    y_true : array_like
+        True values.
+    y_pred : array_like
+        Predicted values.
+    delta : float, optional
+        The threshold parameter that controls the point where the loss function changes from quadratic to linear.
+        Default is 1.0.
+
+    Returns:
+    float
+        The computed Huber loss.
+    """
+    # Compute the residuals
+    r = y_true - y_pred
+
+    # Compute the absolute residuals
+    abs_r = np.abs(r)
+
+    # Use np.minimum to get the quadratic term where abs_r <= delta
+    quadratic_term = np.minimum(abs_r, delta)
+
+    # Compute the linear term (the difference between abs_r and the quadratic term)
+    linear_term = abs_r - quadratic_term
+
+    # Compute the Huber loss without any explicit conditionals or branches
+    loss = 0.5 * quadratic_term**2 + delta * linear_term
+
+    # Sum over all the elements to get the total loss
+    return np.mean(loss)
