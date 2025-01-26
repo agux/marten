@@ -31,6 +31,7 @@ dependencies:
   - pytorch-lightning
   - torch
   - py-cpuinfo
+  - glances
   # - pip:
     # The following packages require special handling:
     # - neuralprophet               # Needs installation from source
