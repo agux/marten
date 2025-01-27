@@ -6,10 +6,16 @@ from dask.distributed import Client, LocalCluster, wait
 total_workload = 2e4
 n_workers = 16
 
+
 def dummy_task(i):
     print(f"working on task #{i}")
-    time.sleep(random.randint(1,5))
-    return True
+    duration = random.randint(5, 10)
+    end_time = time.perf_counter() + duration
+    result = 0
+    while time.perf_counter() < end_time:
+        result += 1
+    return result
+
 
 def main():
     cluster = LocalCluster(
@@ -28,6 +34,7 @@ def main():
         if len(futures) > n_workers * 3:
             _, undone = wait(futures, return_when="FIRST_COMPLETED")
             futures = list(undone)
+
 
 if __name__ == "__main__":
     main()
