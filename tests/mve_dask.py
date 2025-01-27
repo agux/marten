@@ -45,6 +45,8 @@ def main():
             #     upscaled = True
             _, undone = wait(futures, return_when="FIRST_COMPLETED")
             futures = list(undone)
+    
+    wait(futures)
 
 
 if __name__ == "__main__":
