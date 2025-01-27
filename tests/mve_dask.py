@@ -4,21 +4,23 @@ faulthandler.enable()
 
 import random
 import logging
+import uuid
 import time
 from datetime import datetime
 from dask.distributed import Client, LocalCluster, worker_client, get_worker, wait
 
-total_workload = 2e5
 n_workers = 16
+num_tier1_tasks = 10
+num_tier2_tasks = 2e5
 
 logger = logging.getLogger(__name__)
 
 
-def tier2_task(i):
+def tier2_task(i1, i2):
     logger.error(
-        f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i}'
+        f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i1}:{i2}'
     )
-    duration = random.randint(5, 10)
+    duration = random.uniform(5, 20)
     end_time = time.perf_counter() + duration
     result = 0
     while time.perf_counter() < end_time:
@@ -26,11 +28,19 @@ def tier2_task(i):
     return result
 
 
-def tier1_task(p):
+def tier1_task(i1, p):
     futures = []
     with worker_client() as client:
-        for i in range(int(total_workload)):
-            futures.append(client.submit(tier2_task, i, priority=p))
+        for i2 in range(int(num_tier2_tasks)):
+            futures.append(
+                client.submit(
+                    tier2_task,
+                    i1,
+                    i2,
+                    priority=p,
+                    key=f"tier2_task_{i1}:{i2}-{uuid.uuid4().hex}",
+                )
+            )
             if len(futures) > n_workers:
                 _, undone = wait(futures, return_when="FIRST_COMPLETED")
                 futures = list(undone)
@@ -52,10 +62,14 @@ def main():
 
     futures = []
 
-    for i in range(10):
-        p = 10 - i
-        futures.append(client.submit(tier1_task, p, priority=p))
-        if len(futures) > 1:
+    for i1 in range(num_tier1_tasks):
+        p = num_tier1_tasks - i1
+        futures.append(
+            client.submit(
+                tier1_task, i1, p, priority=p, key=f"tier1_task_{i1}-{uuid.uuid4().hex}"
+            )
+        )
+        if len(futures) > 3:
             _, undone = wait(futures, return_when="FIRST_COMPLETED")
             futures = list(undone)
 
