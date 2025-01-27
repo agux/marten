@@ -448,11 +448,11 @@ def _pair_covar_metrics(
                     priority=p_order,
                 )
             )
-        # if too much pending task, then slow down for the tasks to be digested
-        # await_futures(covar_futures, False, multiplier=0.5, max_delay=300)
-        if len(covar_futures) > cpu_count * 2:
-            _, undone = wait(covar_futures, return_when="FIRST_COMPLETED")
-            covar_futures = list(undone)
+            # if too much pending task, then slow down for the tasks to be digested
+            # await_futures(covar_futures, False, multiplier=0.5, max_delay=300)
+            if len(covar_futures) > cpu_count * 2:
+                _, undone = wait(covar_futures, return_when="FIRST_COMPLETED")
+                covar_futures = list(undone)
             # for f in done:
             #     get_result(f)
     # wait(covar_fut)
@@ -480,7 +480,7 @@ def _load_covar_set(covar_set_id, model, alchemyEngine):
                     paired_correlation t2
                 ON
                     t1.symbol = t2.symbol
-                    t1.symbol_table = t2.symbol_table
+                    AND t1.symbol_table = t2.symbol_table
                     AND t1.cov_table = t2.cov_table
                     AND t1.cov_symbol = t2.cov_symbol
                     AND t1.cov_feature = t2.feature
