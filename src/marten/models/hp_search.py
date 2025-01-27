@@ -1850,11 +1850,11 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
                 + f"{cov_table}({len(features)})_{len(keys) - i}",
             )
         )
-        if i > 0:
-            done, undone = wait(futures, return_when="FIRST_COMPLETED")
+        if len(futures) > 1:
+            _, undone = wait(futures, return_when="FIRST_COMPLETED")
             futures = list(undone)
-            for f in done:
-                get_result(f)
+            # for f in done:
+            #     get_result(f)
 
 
 def univariate_baseline(anchor_df, hps_id, args):
