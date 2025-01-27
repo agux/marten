@@ -38,7 +38,7 @@ def tier1_task(i1, p):
                     i1,
                     i2,
                     priority=p,
-                    key=f"tier2_task_{i1}:{i2}-{uuid.uuid4().hex}",
+                    key=f"tier2_task_{i1}-{uuid.uuid4().hex}",
                 )
             )
             if len(futures) > n_workers:
