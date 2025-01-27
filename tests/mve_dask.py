@@ -26,18 +26,18 @@ def tier2_task(i):
     return result
 
 
-def tier1_task():
+def tier1_task(p):
     futures = []
     with worker_client() as client:
         for i in range(int(total_workload)):
-            futures.append(client.submit(tier2_task, i))
+            futures.append(client.submit(tier2_task, i, priority=p))
             if len(futures) > n_workers:
                 _, undone = wait(futures, return_when="FIRST_COMPLETED")
                 futures = list(undone)
-    logger.error(
-        f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} waiting ALL_COMPLETED'
-    )
-    wait(futures)
+        logger.error(
+            f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} waiting ALL_COMPLETED'
+        )
+        wait(futures)
 
 
 def main():
@@ -52,8 +52,9 @@ def main():
 
     futures = []
 
-    for _ in range(10):
-        futures.append(client.submit(tier1_task))
+    for i in range(10):
+        p = 10 - i
+        futures.append(client.submit(tier1_task, p, priority=p))
         if len(futures) > 1:
             _, undone = wait(futures, return_when="FIRST_COMPLETED")
             futures = list(undone)
