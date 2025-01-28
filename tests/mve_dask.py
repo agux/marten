@@ -58,10 +58,12 @@ def main():
         silence_logs=logging.INFO,
     )
     client = Client(cluster)
-    
+
+    time.sleep(5)
     cluster.scale(1)
+    time.sleep(5)
     cluster.scale(n_workers)
-    
+
     futures = []
     for i1 in range(num_tier1_tasks):
         p = num_tier1_tasks - i1
