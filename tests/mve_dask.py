@@ -30,11 +30,6 @@ cluster = None
 client = None
 
 
-
-
-
-
-
 class LocalWorkerPlugin(WorkerPlugin):
     def __init__(self):
         self.prop = None
@@ -42,11 +37,13 @@ class LocalWorkerPlugin(WorkerPlugin):
     def setup(self, worker):
         worker.logger = logging.getLogger()
 
+
 def scale():
     global cluster, n_workers
     # cluster.scale(1)
     time.sleep(10)
     cluster.scale(n_workers)
+
 
 def main():
     global client, cluster
@@ -83,7 +80,13 @@ def main():
         p = num_tier1_tasks - i1
         futures.append(
             client.submit(
-                tier1_task, i1, p, priority=p, key=f"tier1_task_{i1}-{uuid.uuid4().hex}"
+                tier1_task,
+                i1,
+                p,
+                n_workers,
+                num_tier2_tasks,
+                priority=p,
+                key=f"tier1_task_{i1}-{uuid.uuid4().hex}",
             )
         )
         if len(futures) > 1:
