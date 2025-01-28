@@ -23,7 +23,8 @@ num_tier1_tasks = 10
 num_tier2_tasks = 2e5
 
 logger = logging.getLogger(__name__)
-
+cluster = None
+client = None
 
 def tier2_task(i1, i2):
     logger.error(
@@ -66,6 +67,10 @@ class LocalWorkerPlugin(WorkerPlugin):
     def setup(self, worker):
         worker.logger = logging.getLogger()
 
+def scale():
+    # cluster.scale(1)
+    time.sleep(10)
+    cluster.scale(n_workers)
 
 def main():
     dask.config.set(
@@ -89,13 +94,11 @@ def main():
         processes=True,
         silence_logs=logging.INFO,
     )
-    client = Client(cluster)
+    client = Client(cluster, direct_to_workers=True, connection_limit=4096)
     client.register_plugin(LocalWorkerPlugin())
+    client.forward_logging()
 
-    time.sleep(5)
-    cluster.scale(1)
-    time.sleep(5)
-    cluster.scale(n_workers)
+    threading.Timer(10, scale).start()
 
     futures = []
     for i1 in range(num_tier1_tasks):
