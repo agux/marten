@@ -48,6 +48,11 @@ def scale():
 def main():
     global client, cluster
 
+    logger.info(
+        "distributed.admin.event-loop: %s",
+        dask.config.get("distributed.admin.event-loop"),
+    )
+    
     dask.config.set(
         {
             "distributed.worker.memory.terminate": False,

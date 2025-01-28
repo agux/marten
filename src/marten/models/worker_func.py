@@ -2344,7 +2344,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     # scale up the cluster to args.max_worker
     logger.info("Scaling dask cluster to %s", args.max_worker)
     # client.cluster.scale(args.max_worker)
-    scale_cluster_and_wait(client, args.max_worker)
+    # scale_cluster_and_wait(client, args.max_worker)
 
     if args.resume in ("none", "covar"):
         # run covariate loss calculation in batch

@@ -228,11 +228,12 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
         # host="localhost",
         scheduler_port=getattr(args, "scheduler_port", 0),
         # scheduler_kwargs={"external_address": "localhost"},
-        n_workers=getattr(
-            args,
-            "min_worker",
-            int(max_worker) if max_worker > 0 else multiprocessing.cpu_count(),
-        ),
+        # n_workers=getattr(
+        #     args,
+        #     "min_worker",
+        #     int(max_worker) if max_worker > 0 else multiprocessing.cpu_count(),
+        # ),
+        n_workers=int(max_worker),
         threads_per_worker=threads,
         processes=True,
         dashboard_address=":8787" if dashboard_port is None else f":{dashboard_port}",
