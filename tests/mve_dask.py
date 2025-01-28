@@ -73,7 +73,7 @@ def main():
         n_workers=n_workers,
         threads_per_worker=1,
         scheduler_port=1234,
-        dashboard_address=":8787"
+        dashboard_address=":8787",
         processes=True,
         silence_logs=logging.INFO,
     )
