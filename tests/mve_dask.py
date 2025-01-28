@@ -21,9 +21,9 @@ from dask.distributed import (
 
 from dummy import tier1_task, tier2_task
 
-n_workers = 16
+n_workers = 64
 num_tier1_tasks = 10
-num_tier2_tasks = 1e6
+num_tier2_tasks = 2e4
 
 logger = logging.getLogger(__name__)
 cluster = None
