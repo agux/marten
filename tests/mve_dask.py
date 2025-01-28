@@ -69,7 +69,7 @@ def main():
         )
         if len(futures) > 1:
             if not scaled:
-                cluster.scale(n_workers)
+                client.cluster.scale(n_workers)
                 scaled = True
             _, undone = wait(futures, return_when="FIRST_COMPLETED")
             futures = list(undone)
