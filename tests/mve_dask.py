@@ -7,6 +7,8 @@ import logging
 import uuid
 import time
 from datetime import datetime
+
+import dask
 from dask.distributed import Client, LocalCluster, worker_client, get_worker, wait
 
 n_workers = 16
@@ -51,6 +53,7 @@ def tier1_task(i1, p):
 
 
 def main():
+    dask.config.set(scheduler="processes")
     cluster = LocalCluster(
         n_workers=n_workers,
         threads_per_worker=1,
