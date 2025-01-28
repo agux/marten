@@ -310,10 +310,9 @@ class BaseModel(ABC):
             task_key = worker.get_current_task()
             if worker.client.get_metadata([task_key, "CUDA error"], False):
                 accelerator = "cpu"
-                
-            if accelerator == "gpu":
-                if int(worker.name) > self.locks["gpu"].max_leases:
-                    accelerator = "cpu"
+
+            if int(worker.name) > self.locks["gpu"].max_leases:
+                accelerator = "cpu"
 
         accelerator = "gpu" if accelerator == "auto" else accelerator
 
