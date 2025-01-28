@@ -18,7 +18,7 @@ from dask.distributed import (
     WorkerPlugin,
 )
 
-n_workers = 16
+n_workers = 64
 num_tier1_tasks = 10
 num_tier2_tasks = 2e5
 
@@ -70,7 +70,7 @@ class LocalWorkerPlugin(WorkerPlugin):
 def main():
     dask.config.set(scheduler="processes")
     cluster = LocalCluster(
-        n_workers=n_workers,
+        n_workers=4,
         threads_per_worker=1,
         scheduler_port=1234,
         dashboard_address=":8787",
