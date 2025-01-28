@@ -18,7 +18,7 @@ from dask.distributed import (
     WorkerPlugin,
 )
 
-n_workers = 64
+n_workers = 16
 num_tier1_tasks = 10
 num_tier2_tasks = 2e5
 
@@ -68,7 +68,19 @@ class LocalWorkerPlugin(WorkerPlugin):
 
 
 def main():
-    dask.config.set(scheduler="processes")
+    dask.config.set(
+        {
+            "distributed.worker.memory.terminate": False,
+            "distributed.worker.resources.POWER": 2,
+            "distributed.worker.multiprocessing-method": "spawn",
+            "distributed.deploy.lost-worker-timeout": "2 hours",
+            "distributed.scheduler.locks.lease-timeout": "15 minutes",
+            "distributed.comm.retry.count": 10,
+            "distributed.admin.log-length": 0,
+            "distributed.admin.low-level-log-length": 0,
+            "distributed.admin.system-monitor.log-length": 0,
+        }
+    )
     cluster = LocalCluster(
         n_workers=4,
         threads_per_worker=1,
