@@ -68,6 +68,7 @@ def main():
         dashboard_address=":8787",
         processes=True,
         silence_logs=logging.INFO,
+        memory_limit=0,
     )
     client = Client(cluster, direct_to_workers=True, connection_limit=4096)
     client.register_plugin(LocalWorkerPlugin())
