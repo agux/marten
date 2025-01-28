@@ -75,6 +75,8 @@ def scale():
     cluster.scale(n_workers)
 
 def main():
+    global client, cluster
+    
     dask.config.set(
         {
             "distributed.worker.memory.terminate": False,
