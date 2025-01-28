@@ -69,6 +69,7 @@ class LocalWorkerPlugin(WorkerPlugin):
         worker.logger = logging.getLogger()
 
 def scale():
+    global cluster
     # cluster.scale(1)
     time.sleep(10)
     cluster.scale(n_workers)
