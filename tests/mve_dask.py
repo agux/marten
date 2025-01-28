@@ -9,7 +9,14 @@ import time
 from datetime import datetime
 
 import dask
-from dask.distributed import Client, LocalCluster, worker_client, get_worker, wait
+from dask.distributed import (
+    Client,
+    LocalCluster,
+    worker_client,
+    get_worker,
+    wait,
+    WorkerPlugin,
+)
 
 n_workers = 16
 num_tier1_tasks = 10
@@ -52,6 +59,14 @@ def tier1_task(i1, p):
         wait(futures)
 
 
+class LocalWorkerPlugin(WorkerPlugin):
+    def __init__(self):
+        self.prop = None
+
+    def setup(self, worker):
+        worker.logger = logging.getLogger()
+
+
 def main():
     dask.config.set(scheduler="processes")
     cluster = LocalCluster(
@@ -61,6 +76,7 @@ def main():
         silence_logs=logging.INFO,
     )
     client = Client(cluster)
+    client.register_plugin(LocalWorkerPlugin())
 
     time.sleep(5)
     cluster.scale(1)
