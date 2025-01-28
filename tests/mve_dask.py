@@ -23,7 +23,7 @@ from dummy import tier1_task, tier2_task
 
 n_workers = 16
 num_tier1_tasks = 10
-num_tier2_tasks = 2e5
+num_tier2_tasks = 1e6
 
 logger = logging.getLogger(__name__)
 cluster = None
@@ -48,11 +48,11 @@ def scale():
 def main():
     global client, cluster
 
-    logger.info(
+    logger.error(
         "distributed.admin.event-loop: %s",
         dask.config.get("distributed.admin.event-loop"),
     )
-    
+
     dask.config.set(
         {
             "distributed.worker.memory.terminate": False,
@@ -67,7 +67,7 @@ def main():
         }
     )
     cluster = LocalCluster(
-        n_workers=4,
+        n_workers=n_workers,
         threads_per_worker=1,
         scheduler_port=1234,
         dashboard_address=":8787",
@@ -81,7 +81,7 @@ def main():
 
     client.submit(tier2_task, 0, 0).result()
 
-    scale()
+    # scale()
 
     futures = []
     for i1 in range(num_tier1_tasks):
