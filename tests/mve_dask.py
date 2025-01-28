@@ -19,7 +19,7 @@ from dask.distributed import (
     WorkerPlugin,
 )
 
-from .dummy import tier1_task
+from dummy import tier1_task
 
 n_workers = 16
 num_tier1_tasks = 10
