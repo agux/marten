@@ -17,6 +17,8 @@ from dask.distributed import (
 logger = logging.getLogger(__name__)
 
 def tier2_task(i1, i2):
+    worker = get_worker()
+    
     logger.error(
         f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i1}:{i2}'
     )

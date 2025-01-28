@@ -19,7 +19,7 @@ from dask.distributed import (
     WorkerPlugin,
 )
 
-from dummy import tier1_task
+from dummy import tier1_task, tier2_task
 
 n_workers = 16
 num_tier1_tasks = 10
@@ -41,7 +41,7 @@ class LocalWorkerPlugin(WorkerPlugin):
 def scale():
     global cluster, n_workers
     # cluster.scale(1)
-    time.sleep(10)
+    # time.sleep(10)
     cluster.scale(n_workers)
 
 
@@ -74,7 +74,9 @@ def main():
     client.register_plugin(LocalWorkerPlugin())
     client.forward_logging()
 
-    threading.Timer(10, scale).start()
+    client.submit(tier2_task, 0, 0).result()
+
+    scale()
 
     futures = []
     for i1 in range(num_tier1_tasks):
