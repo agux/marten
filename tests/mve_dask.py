@@ -52,14 +52,17 @@ def tier1_task(i1, p):
 
 def main():
     cluster = LocalCluster(
-        n_workers=n_workers//2,
+        n_workers=n_workers,
         threads_per_worker=1,
         processes=True,
         silence_logs=logging.INFO,
     )
     client = Client(cluster)
+    
+    cluster.scale(1)
+    cluster.scale(n_workers)
+    
     futures = []
-    scaled = False
     for i1 in range(num_tier1_tasks):
         p = num_tier1_tasks - i1
         futures.append(
@@ -68,9 +71,6 @@ def main():
             )
         )
         if len(futures) > 1:
-            if not scaled:
-                client.cluster.scale(n_workers)
-                scaled = True
             _, undone = wait(futures, return_when="FIRST_COMPLETED")
             futures = list(undone)
 
