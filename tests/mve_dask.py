@@ -2,11 +2,11 @@ import faulthandler
 
 faulthandler.enable()
 
-import random
-import logging
+
 import threading
 import uuid
 import time
+import logging
 from datetime import datetime
 
 import dask
@@ -19,6 +19,8 @@ from dask.distributed import (
     WorkerPlugin,
 )
 
+from .dummy import tier1_task
+
 n_workers = 16
 num_tier1_tasks = 10
 num_tier2_tasks = 2e5
@@ -27,38 +29,10 @@ logger = logging.getLogger(__name__)
 cluster = None
 client = None
 
-def tier2_task(i1, i2):
-    logger.error(
-        f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i1}:{i2}'
-    )
-    duration = random.uniform(5, 20)
-    end_time = time.perf_counter() + duration
-    result = 0
-    while time.perf_counter() < end_time:
-        result += random.uniform(-1, 1)
-    return result
 
 
-def tier1_task(i1, p):
-    futures = []
-    with worker_client() as client:
-        for i2 in range(int(num_tier2_tasks)):
-            futures.append(
-                client.submit(
-                    tier2_task,
-                    i1,
-                    i2,
-                    priority=p,
-                    key=f"tier2_task_{i1}-{uuid.uuid4().hex}",
-                )
-            )
-            if len(futures) > n_workers:
-                _, undone = wait(futures, return_when="FIRST_COMPLETED")
-                futures = list(undone)
-        logger.error(
-            f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} waiting ALL_COMPLETED'
-        )
-        wait(futures)
+
+
 
 
 class LocalWorkerPlugin(WorkerPlugin):
@@ -76,7 +50,7 @@ def scale():
 
 def main():
     global client, cluster
-    
+
     dask.config.set(
         {
             "distributed.worker.memory.terminate": False,
