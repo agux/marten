@@ -283,6 +283,9 @@ def fit_with_covar(
                             cov_table,
                             feature,
                         )
+                        merged_df.to_pickle(
+                            f"{anchor_symbol}-{cov_table}-{feature}-{cov_symbol}-unimputed.pkl"
+                        )
                         merged_df, singular_vars = remove_singular_variables(merged_df)
                         if len(singular_vars) > 0:
                             logger.warning(
@@ -296,6 +299,9 @@ def fit_with_covar(
                         merged_df.dropna(axis=1, how="any", inplace=True)
                         if impute_df is not None:
                             impute_df.dropna(axis=1, how="all", inplace=True)
+
+                merged_df.to_pickle(f'{anchor_symbol}-{cov_table}-{feature}-{cov_symbol}.pkl')
+
                 metrics = model.train(merged_df, **config)
                 # except Exception as e:
                 #     raise e

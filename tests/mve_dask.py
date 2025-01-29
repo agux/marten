@@ -109,7 +109,7 @@ def main():
             futures = list(undone)
 
     wait(futures)
-    logger.info("all tasks completed.")
+    logger.error("all tasks completed.")
 
 
 if __name__ == "__main__":
