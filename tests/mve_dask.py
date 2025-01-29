@@ -83,7 +83,7 @@ def main():
     client = init_client(
         "mve",
         max_worker=n_workers,
-        args=SimpleNamespace(model="tsmixerx"),
+        args=SimpleNamespace(model="tsmixerx", dask_log=True),
     )
 
     client.submit(tier2_task, 0, 0).result()
