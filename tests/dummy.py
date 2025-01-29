@@ -44,7 +44,7 @@ def tier2_task(i1, i2):
     config["random_seed"] = 7
     config["locks"] = get_accelerator_locks(0, gpu_leases=2, timeout="20s")
     merged_df = pd.read_hdf(
-        "159985-bond_metrics_em_view-us_yield_5y_change_rate-bond-unimputed.h5", 'df'
+        "dummy_data.h5", 'df'
     )
     if not model.accept_missing_data():
         df_na = merged_df.iloc[:, 1:].isna()
