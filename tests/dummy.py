@@ -22,7 +22,7 @@ def tier2_task(i1, i2):
     logger.error(
         f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i1}:{i2}'
     )
-    duration = random.uniform(1, 3)
+    duration = random.uniform(5, 15)
     end_time = time.perf_counter() + duration
     result = 0
     while time.perf_counter() < end_time:
@@ -32,8 +32,8 @@ def tier2_task(i1, i2):
 
 def tier1_task(i1, p, n_workers, num_tier2_tasks):
     futures = []
-    with worker_client() as client:
-        for i2 in range(int(num_tier2_tasks)):
+    for i2 in range(int(num_tier2_tasks)):
+        with worker_client() as client:
             futures.append(
                 client.submit(
                     tier2_task,
@@ -46,7 +46,9 @@ def tier1_task(i1, p, n_workers, num_tier2_tasks):
             if len(futures) > 500:
                 _, undone = wait(futures, return_when="FIRST_COMPLETED")
                 futures = list(undone)
-        logger.error(
-            f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} waiting ALL_COMPLETED'
-        )
+    
+    logger.error(
+        f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} waiting ALL_COMPLETED'
+    )
+    with worker_client():
         wait(futures)
