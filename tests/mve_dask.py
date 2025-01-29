@@ -28,6 +28,7 @@ num_tier1_tasks = 10
 num_tier2_tasks = 2e4
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 cluster = None
 client = None
 
@@ -109,7 +110,7 @@ def main():
             futures = list(undone)
 
     wait(futures)
-    logger.error("all tasks completed.")
+    logger.info("all tasks completed.")
 
 
 if __name__ == "__main__":
