@@ -53,7 +53,7 @@ def sim_model():
 def tier2_task(i1, i2):
     worker = get_worker()
 
-    logger.info(
+    print(
         f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i1}:{i2}'
     )
     duration = random.uniform(5, 10)
@@ -81,7 +81,7 @@ def tier1_task(i1, p, n_workers, num_tier2_tasks):
                 _, undone = wait(futures, return_when="FIRST_COMPLETED")
                 futures = list(undone)
     
-    logger.info(
+    print(
         f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} waiting ALL_COMPLETED'
     )
     with worker_client():
