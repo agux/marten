@@ -70,7 +70,10 @@ def tier2_task(i1, i2):
 
 def tier1_task(i1, p, n_workers, num_tier2_tasks):
     futures = []
-    for i2 in range(int(num_tier2_tasks)):
+    start_time = datetime.now()
+    i2 = 0
+    # for i2 in range(int(num_tier2_tasks)):
+    while (datetime.now() - start_time).seconds < 60*50:
         with worker_client() as client:
             futures.append(
                 client.submit(
@@ -84,7 +87,7 @@ def tier1_task(i1, p, n_workers, num_tier2_tasks):
             if len(futures) > 200:
                 _, undone = wait(futures, return_when="FIRST_COMPLETED")
                 futures = list(undone)
-    
+        i2 += 1
     print(
         f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} waiting ALL_COMPLETED on tier1: #{i1}'
     )
