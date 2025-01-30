@@ -25,7 +25,7 @@ from dummy import tier1_task, tier2_task
 
 n_workers = 16
 num_tier1_tasks = 10
-num_tier2_tasks = 2e3
+num_tier2_tasks = 2e2
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
