@@ -1,3 +1,7 @@
+import faulthandler
+
+faulthandler.enable()
+
 import random
 import logging
 import uuid
@@ -82,7 +86,7 @@ def tier1_task(i1, p, n_workers, num_tier2_tasks):
                 futures = list(undone)
     
     print(
-        f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} waiting ALL_COMPLETED'
+        f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} waiting ALL_COMPLETED on tier1: #{i1}'
     )
     with worker_client():
         wait(futures)

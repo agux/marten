@@ -25,7 +25,7 @@ from dummy import tier1_task, tier2_task
 
 n_workers = 16
 num_tier1_tasks = 10
-num_tier2_tasks = 2e2
+num_tier2_tasks = 2e4
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -110,7 +110,7 @@ def main():
             futures = list(undone)
 
     wait(futures)
-    logger.info("all tasks completed.")
+    print("all tasks completed.")
 
 
 if __name__ == "__main__":
