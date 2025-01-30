@@ -450,7 +450,8 @@ def _pair_covar_metrics(
             )
             # if too much pending task, then slow down for the tasks to be digested
             # await_futures(covar_futures, False, multiplier=0.5, max_delay=300)
-            if len(covar_futures) > cpu_count * 2:
+        if len(covar_futures) > cpu_count * 2:
+            with worker_client():
                 _, undone = wait(covar_futures, return_when="FIRST_COMPLETED")
                 covar_futures = list(undone)
             # for f in done:
@@ -1350,7 +1351,6 @@ def covar_metric(
         "looking for covariate symbols for %s features in %s", len(features), cov_table
     )
 
-    cov_symbols_fut = []
     covar_futures = []
     num_symbols = 0
     # with worker_client() as client:

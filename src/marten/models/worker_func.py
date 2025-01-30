@@ -284,11 +284,11 @@ def fit_with_covar(
                             cov_table,
                             feature,
                         )
-                        merged_df.to_hdf(
-                            f"{anchor_symbol}-{cov_table}-{feature}-{cov_symbol}-unimputed.h5",
-                            key="df",
-                            mode="w",
-                        )
+                        # merged_df.to_hdf(
+                        #     f"{anchor_symbol}-{cov_table}-{feature}-{cov_symbol}-unimputed.h5",
+                        #     key="df",
+                        #     mode="w",
+                        # )
                         merged_df, singular_vars = remove_singular_variables(merged_df)
                         if len(singular_vars) > 0:
                             logger.warning(
@@ -303,11 +303,11 @@ def fit_with_covar(
                         if impute_df is not None:
                             impute_df.dropna(axis=1, how="all", inplace=True)
 
-                merged_df.to_hdf(
-                    f"{anchor_symbol}-{cov_table}-{feature}-{cov_symbol}.h5",
-                    key="df",
-                    mode="w",
-                )
+                # merged_df.to_hdf(
+                #     f"{anchor_symbol}-{cov_table}-{feature}-{cov_symbol}.h5",
+                #     key="df",
+                #     mode="w",
+                # )
 
                 metrics = model.train(merged_df, **config)
                 # except Exception as e:
