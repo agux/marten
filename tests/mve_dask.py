@@ -88,7 +88,7 @@ def main():
         args=SimpleNamespace(model="tsmixerx", dask_log=True),
     )
 
-    client.submit(tier2_task, 0, 0).result()
+    client.submit(tier2_task, 0, 0, task_memory).result()
 
     # scale()
 
