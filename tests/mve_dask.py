@@ -26,6 +26,7 @@ from dummy import tier1_task, tier2_task
 n_workers = 16
 num_tier1_tasks = 10
 num_tier2_tasks = 2e4
+task_memory = 1_073_741_824 # 1GB
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -99,7 +100,7 @@ def main():
                 tier1_task,
                 i1,
                 p,
-                n_workers,
+                task_memory,
                 num_tier2_tasks,
                 priority=p,
                 key=f"tier1_task_{i1}-{uuid.uuid4().hex}",

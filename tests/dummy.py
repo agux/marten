@@ -54,21 +54,26 @@ def sim_model():
 
     return metrics
 
-def tier2_task(i1, i2):
+
+def tier2_task(i1, i2, task_memory):
     worker = get_worker()
 
     print(
         f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i1}:{i2}'
     )
+
+    data = np.zeros(task_memory, dtype=np.uint8)
+
     duration = random.uniform(5, 10)
     end_time = time.perf_counter() + duration
     result = 0
     while time.perf_counter() < end_time:
         result += random.uniform(-1, 1)
+        
     return result
 
 
-def tier1_task(i1, p, n_workers, num_tier2_tasks):
+def tier1_task(i1, p, task_memory, num_tier2_tasks):
     futures = []
     start_time = datetime.now()
     i2 = 0
@@ -80,6 +85,7 @@ def tier1_task(i1, p, n_workers, num_tier2_tasks):
                     tier2_task,
                     i1,
                     i2,
+                    task_memory,
                     priority=p,
                     key=f"tier2_task_{i1}-{uuid.uuid4().hex}",
                 )

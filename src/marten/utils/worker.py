@@ -267,8 +267,8 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     )
     get_logger(name).info("dask scheduler address: %s", cluster.scheduler_address)
     get_logger(name).info(
-        "distributed.admin.event-loop: %s",
-        dask.config.get("distributed.admin.event-loop"),
+        "dask config: %s",
+        dask.config.config,
     )
 
     return client
