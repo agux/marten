@@ -2,6 +2,8 @@ import faulthandler
 
 faulthandler.enable()
 
+import os
+os.environ["PYTHONUNBUFFERED"] = 1
 
 import threading
 import uuid
@@ -26,7 +28,7 @@ from dummy import tier1_task, tier2_task
 n_workers = 16
 num_tier1_tasks = 10
 num_tier2_tasks = 2e4
-task_memory = 1_073_741_824 # 1GB
+task_memory = 2147483648  # 2 GB
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
