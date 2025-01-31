@@ -452,8 +452,18 @@ def _pair_covar_metrics(
             # await_futures(covar_futures, False, multiplier=0.5, max_delay=300)
         if len(covar_futures) > cpu_count * 2:
             with worker_client():
-                _, undone = wait(covar_futures, return_when="FIRST_COMPLETED")
+                try:
+                    _, undone = wait(covar_futures, return_when="FIRST_COMPLETED")
+                except Exception as e:
+                    logger.exception(
+                        "failed to wait covar_futures: %s", e, exc_info=True
+                    )
+                    client.dump_cluster_state(
+                        "cluster_state_dump", write_from_scheduler=True
+                    )
+                    
                 covar_futures = list(undone)
+
             # for f in done:
             #     get_result(f)
     # wait(covar_fut)
@@ -1474,9 +1484,9 @@ def covar_metric(
 
     # await_futures(covar_futures)
     with worker_client():
-        done, _ = wait(covar_futures)
-        for f in done:
-            get_result(f)
+        wait(covar_futures)
+        # for f in done:
+        #     get_result(f)
 
     logger.info(
         "finished covar_metric for %s features in %s, total covar symbols: %s",

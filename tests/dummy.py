@@ -55,8 +55,9 @@ def sim_model():
     return metrics
 
 
-def tier2_task(i1, i2, task_memory):
+def tier2_task(i1, i2, task_memory, sem):
     worker = get_worker()
+    sem.max_leases
 
     print(
         f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i1}:{i2}, memory: {task_memory}'
@@ -75,7 +76,8 @@ def tier2_task(i1, i2, task_memory):
     return result
 
 
-def tier1_task(i1, p, task_memory, num_tier2_tasks):
+def tier1_task(i1, p, task_memory, num_tier2_tasks, sem):
+    sem.max_leases
     futures = []
     start_time = datetime.now()
     i2 = 0
@@ -88,6 +90,7 @@ def tier1_task(i1, p, task_memory, num_tier2_tasks):
                     i1,
                     i2,
                     task_memory,
+                    sem,
                     priority=p,
                     key=f"tier2_task_{i1}-{uuid.uuid4().hex}",
                 )

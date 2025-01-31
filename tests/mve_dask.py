@@ -3,6 +3,7 @@ import faulthandler
 faulthandler.enable()
 
 import os
+
 os.environ["PYTHONUNBUFFERED"] = "1"
 
 import threading
@@ -20,6 +21,7 @@ from dask.distributed import (
     get_worker,
     wait,
     WorkerPlugin,
+    Semaphore,
 )
 
 from marten.utils.worker import init_client
@@ -28,7 +30,7 @@ from dummy import tier1_task, tier2_task
 n_workers = 16
 num_tier1_tasks = 10
 num_tier2_tasks = 2e4
-task_memory = 2.5 * 1024 ** 3  # 2.5 GB
+task_memory = 2.5 * 1024**3  # 2.5 GB
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -90,7 +92,10 @@ def main():
         args=SimpleNamespace(model="tsmixerx", dask_log=True),
     )
 
-    client.submit(tier2_task, 0, 0, task_memory).result()
+    # TODO introduce locks to test
+    sem = Semaphore(max_leases=2, name="dummy_semaphore")
+
+    client.submit(tier2_task, 0, 0, task_memory, sem).result()
 
     # scale()
 
@@ -104,6 +109,7 @@ def main():
                 p,
                 task_memory,
                 num_tier2_tasks,
+                sem,
                 priority=p,
                 key=f"tier1_task_{i1}-{uuid.uuid4().hex}",
             )
