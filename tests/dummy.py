@@ -62,14 +62,16 @@ def tier2_task(i1, i2, task_memory):
         f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i1}:{i2}, memory: {task_memory}'
     )
 
-    data = np.zeros(task_memory, dtype=np.uint8)
+    start_time = time.perf_counter()
+
+    data = np.ones(task_memory, dtype=np.uint8)
 
     duration = random.uniform(5, 10)
-    end_time = time.perf_counter() + duration
+    end_time = start_time + duration
     result = 0
     while time.perf_counter() < end_time:
         result += random.uniform(-1, 1)
-        
+
     return result
 
 
