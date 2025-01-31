@@ -64,7 +64,7 @@ def tier2_task(i1, i2, task_memory):
 
     start_time = time.perf_counter()
 
-    data = np.ones(task_memory, dtype=np.uint8)
+    data = np.ones(int(task_memory), dtype=np.uint8)
 
     duration = random.uniform(5, 10)
     end_time = start_time + duration
