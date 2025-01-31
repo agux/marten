@@ -30,7 +30,7 @@ from dummy import tier1_task, tier2_task
 n_workers = 64
 num_tier1_tasks = 10
 num_tier2_tasks = 2e4
-task_memory = 1 * 1024**3  # 1 GB
+task_memory = 0.45 * 1024**3  # 1 GB
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
