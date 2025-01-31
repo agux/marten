@@ -59,7 +59,7 @@ def tier2_task(i1, i2, task_memory):
     worker = get_worker()
 
     print(
-        f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i1}:{i2}'
+        f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i1}:{i2}, memory: {task_memory}'
     )
 
     data = np.zeros(task_memory, dtype=np.uint8)

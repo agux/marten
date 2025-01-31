@@ -28,7 +28,7 @@ from dummy import tier1_task, tier2_task
 n_workers = 16
 num_tier1_tasks = 10
 num_tier2_tasks = 2e4
-task_memory = 2147483648  # 2 GB
+task_memory = 2 * 1024 ** 3  # 2 GB
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -52,7 +52,7 @@ def scale():
 
 
 def main():
-    global client, cluster
+    global client, cluster, task_memory
 
     # logger.error(
     #     "distributed.admin.event-loop: %s",
