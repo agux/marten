@@ -3,7 +3,7 @@ import faulthandler
 faulthandler.enable()
 
 import os
-os.environ["PYTHONUNBUFFERED"] = 1
+os.environ["PYTHONUNBUFFERED"] = "1"
 
 import threading
 import uuid
