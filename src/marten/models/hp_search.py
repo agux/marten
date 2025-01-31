@@ -453,7 +453,9 @@ def _pair_covar_metrics(
         if len(covar_futures) > cpu_count * 2:
             with worker_client():
                 try:
-                    _, undone = wait(covar_futures, return_when="FIRST_COMPLETED")
+                    done, undone = wait(covar_futures, return_when="FIRST_COMPLETED")
+                    if len(done)+len(undone) != len(covar_futures):
+                        logger.warning("done(%s) + undone(%s) != total(%s)", len(done), len(undone), len(covar_futures))
                 except Exception as e:
                     logger.exception(
                         "failed to wait covar_futures: %s", e, exc_info=True

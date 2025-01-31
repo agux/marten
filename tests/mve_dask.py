@@ -30,7 +30,6 @@ from dummy import tier1_task, tier2_task
 n_workers = 64
 num_tier1_tasks = 10
 num_tier2_tasks = 2e4
-task_memory = 0.45 * 1024**3  # 1 GB
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -54,7 +53,7 @@ def scale():
 
 
 def main():
-    global client, cluster, task_memory
+    global client, cluster
 
     # logger.error(
     #     "distributed.admin.event-loop: %s",
@@ -95,7 +94,7 @@ def main():
     # TODO introduce locks to test
     sem = Semaphore(max_leases=2, name="dummy_semaphore")
 
-    client.submit(tier2_task, 0, 0, task_memory, sem).result()
+    client.submit(tier2_task, 0, 0, sem).result()
 
     # scale()
 
@@ -107,7 +106,6 @@ def main():
                 tier1_task,
                 i1,
                 p,
-                task_memory,
                 num_tier2_tasks,
                 sem,
                 priority=p,

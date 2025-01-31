@@ -30,6 +30,7 @@ from marten.utils.trainer import (
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+
 def sim_model():
     worker = get_worker()
     model = worker.model
@@ -55,17 +56,18 @@ def sim_model():
     return metrics
 
 
-def tier2_task(i1, i2, task_memory, sem):
+def tier2_task(i1, i2, sem):
     worker = get_worker()
     sem.max_leases
 
     print(
-        f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i1}:{i2}, memory: {task_memory}'
+        f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i1}:{i2}'
     )
 
     start_time = time.perf_counter()
+    task_memory = random.randint(200 * 1024**2, 800 * 1024**2)
 
-    data = np.ones(int(task_memory), dtype=np.uint8)
+    data = np.ones(task_memory, dtype=np.uint8)
 
     duration = random.uniform(5, 10)
     end_time = start_time + duration
@@ -76,20 +78,19 @@ def tier2_task(i1, i2, task_memory, sem):
     return result
 
 
-def tier1_task(i1, p, task_memory, num_tier2_tasks, sem):
+def tier1_task(i1, p, num_tier2_tasks, sem):
     sem.max_leases
     futures = []
     start_time = datetime.now()
     i2 = 0
     # for i2 in range(int(num_tier2_tasks)):
-    while (datetime.now() - start_time).seconds < 60*50:
+    while (datetime.now() - start_time).seconds < 60 * 50:
         with worker_client() as client:
             futures.append(
                 client.submit(
                     tier2_task,
                     i1,
                     i2,
-                    task_memory,
                     sem,
                     priority=p,
                     key=f"tier2_task_{i1}-{uuid.uuid4().hex}",
