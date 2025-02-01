@@ -21,6 +21,7 @@ from marten.models.worker_func import (
     predict_best,
     # predict_adhoc,
     covars_and_search,
+    covars_and_search_dummy,
     ensemble_topk_prediction,
 )
 
@@ -92,7 +93,7 @@ def main(args):
     for symbol in args.symbols:
         if args.adhoc:
             # future = client.submit(predict_adhoc, symbol, args)
-            hps_id, cutoff_date, ranked_features, df = covars_and_search(
+            hps_id, cutoff_date, ranked_features, df = covars_and_search_dummy(
                 model, client, symbol, alchemyEngine, logger, args
             )
             logger.info("Starting adhoc prediction")
