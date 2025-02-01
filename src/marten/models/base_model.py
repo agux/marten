@@ -308,9 +308,11 @@ class BaseModel(ABC):
         worker = get_worker()
         if worker is not None:
             task_key = worker.get_current_task()
-            if worker.client.get_metadata([task_key, "CUDA error"], False):
-                accelerator = "cpu"
-            elif int(worker.name) > self.locks["gpu"].max_leases:
+            #FIXME: suspect calling client.get_metadata may impact scheduler performance?
+            # if worker.client.get_metadata([task_key, "CUDA error"], False):
+            #     accelerator = "cpu"
+            # elif int(worker.name) > self.locks["gpu"].max_leases:
+            if int(worker.name) > self.locks["gpu"].max_leases:
                 accelerator = "cpu"
 
         accelerator = "gpu" if accelerator == "auto" else accelerator

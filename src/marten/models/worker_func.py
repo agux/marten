@@ -315,39 +315,40 @@ def fit_with_covar(
                 # finally:
                 #     release_cpu_cores(alchemyEngine, cores)
 
-        #FIXME: temporarily comment the persistence block to rule out dask scheduler issue
-        # fit_time = time.time() - start_time
-        # # get the row count in merged_df as timesteps
-        # timesteps = len(merged_df)
-        # # get merged_df's right-most column's nan count.
-        # ts_cutoff_date = merged_df["ds"].max().strftime("%Y-%m-%d")
-        # with alchemyEngine.begin() as conn:
-        #     save_covar_metrics(
-        #         args.model,
-        #         anchor_symbol,
-        #         args.symbol_table,
-        #         cov_table,
-        #         cov_symbol,
-        #         feature,
-        #         metrics,
-        #         fit_time,
-        #         timesteps,
-        #         nan_count,
-        #         ts_cutoff_date,
-        #         conn,
-        #     )
-        # if impute_df is not None:
-        #     logger.info(
-        #         "saving imputated data points for %s, %s.%s: %s",
-        #         cov_symbol,
-        #         cov_table,
-        #         feature,
-        #         impute_df.shape,
-        #     )
-        #     save_impute_data(
-        #         impute_df, cov_table, cov_symbol, feature, alchemyEngine, logger
-        #     )
-        return metrics
+        fit_time = time.time() - start_time
+        # get the row count in merged_df as timesteps
+        timesteps = len(merged_df)
+        # get merged_df's right-most column's nan count.
+        ts_cutoff_date = merged_df["ds"].max().strftime("%Y-%m-%d")
+        with alchemyEngine.begin() as conn:
+            save_covar_metrics(
+                args.model,
+                anchor_symbol,
+                args.symbol_table,
+                cov_table,
+                cov_symbol,
+                feature,
+                metrics,
+                fit_time,
+                timesteps,
+                nan_count,
+                ts_cutoff_date,
+                conn,
+            )
+        if impute_df is not None:
+            logger.info(
+                "saving imputated data points for %s, %s.%s: %s",
+                cov_symbol,
+                cov_table,
+                feature,
+                impute_df.shape,
+            )
+            save_impute_data(
+                impute_df, cov_table, cov_symbol, feature, alchemyEngine, logger
+            )
+        # return metrics
+        #FIXME: returning None to see if it can fix scheduler performance issue
+        return None
 
     try:
         return _func()
@@ -2219,11 +2220,12 @@ def _univariate_default_hp(model, client, anchor_df, args, hps_id):
         params,
         args.epochs,
         args.random_seed,
-        select_device(
-            args.accelerator,
-            getattr(args, "gpu_util_threshold", None),
-            getattr(args, "gpu_ram_threshold", None),
-        ),
+        # select_device(
+        #     args.accelerator,
+        #     getattr(args, "gpu_util_threshold", None),
+        #     getattr(args, "gpu_ram_threshold", None),
+        # ),
+        "auto",
         0,
         hps_id,
         args.early_stopping,

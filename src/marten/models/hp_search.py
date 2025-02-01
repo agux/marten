@@ -395,7 +395,7 @@ def _pair_endogenous_covar_metrics(
         futures.append(future)
         # await_futures(futures, False)
         if len(futures) > psutil.cpu_count(logical=False):
-            _, undone = wait(futures, return_when='FIRST_COMPLETED')
+            _, undone = wait(futures, return_when="FIRST_COMPLETED")
             futures = list(undone)
 
 
@@ -453,12 +453,17 @@ def _pair_covar_metrics(
             )
             # if too much pending task, then slow down for the tasks to be digested
             # await_futures(covar_futures, False, multiplier=0.5, max_delay=300)
-        if len(covar_futures) > cpu_count * 2:
-            with worker_client():
+            if len(covar_futures) > cpu_count * 2:
+            # with worker_client():
                 try:
                     done, undone = wait(covar_futures, return_when="FIRST_COMPLETED")
-                    if len(done)+len(undone) != len(covar_futures):
-                        logger.warning("done(%s) + undone(%s) != total(%s)", len(done), len(undone), len(covar_futures))
+                    if len(done) + len(undone) != len(covar_futures):
+                        logger.warning(
+                            "done(%s) + undone(%s) != total(%s)",
+                            len(done),
+                            len(undone),
+                            len(covar_futures),
+                        )
                 except Exception as e:
                     logger.exception(
                         "failed to wait covar_futures: %s", e, exc_info=True
@@ -466,7 +471,8 @@ def _pair_covar_metrics(
                     client.dump_cluster_state(
                         "cluster_state_dump", write_from_scheduler=True
                     )
-                    
+                    raise e
+
                 covar_futures = list(undone)
 
             # for f in done:
@@ -1499,7 +1505,7 @@ def covar_metric(
         cov_table,
         num_symbols,
     )
-    return True
+    return None
 
 
 def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=None):
@@ -1862,7 +1868,8 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
                 p_order=len(keys) - i,
                 priority=len(keys) - i,
                 key=f"{covar_metric.__name__}_{keys[i].lower()}({len(features)})-"
-                + f"{cov_table}({len(features)})_{len(keys) - i}",
+                # + f"{cov_table}({len(features)})_{len(keys) - i}",
+                + uuid.uuid4().hex,
             )
         )
         if len(futures) > 1:
