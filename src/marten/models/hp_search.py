@@ -347,7 +347,7 @@ def covar_symbols_from_table(
 
 
 def _pair_endogenous_covar_metrics(
-    anchor_symbol, anchor_df, cov_table, features, args, cutoff_date, sem, locks
+    anchor_symbol, anchor_df, cov_table, features, args, cutoff_date
 ):
     global client, futures, logger, alchemyEngine
 
@@ -392,8 +392,8 @@ def _pair_endogenous_covar_metrics(
             "auto",
             args.early_stopping,
             args.infer_holiday,
-            sem,
-            locks,
+            None,
+            None,
         )
         futures.append(future)
         # await_futures(futures, False)
@@ -1582,8 +1582,6 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
         endogenous_features,
         args,
         cutoff_date,
-        sem,
-        locks,
     )
 
     _, undone = wait(futures)

@@ -105,10 +105,15 @@ def main():
         args=SimpleNamespace(
             model="tsmixerx", 
             dask_log=True,
-            scheduler_port=8999),
+            scheduler_port=8999,
+            min_worker=4,
+            max_worker=32,
+            ),
     )
 
+    dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
     sem = Semaphore(max_leases=2, name="dummy_semaphore")
+
     df = make_df()
 
     client.submit(tier2_task, 0, 0, sem, df).result()

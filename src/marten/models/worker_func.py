@@ -64,7 +64,6 @@ def merge_covar_df(
     feature,
     min_date,
     alchemyEngine,
-    sem=None,
 ):
 
     if (
@@ -210,7 +209,6 @@ def fit_with_covar(
             feature,
             min_date,
             alchemyEngine,
-            sem,
         )
 
         if merged_df is None:

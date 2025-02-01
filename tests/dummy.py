@@ -57,26 +57,27 @@ def sim_model():
 
 
 def tier2_task(i1, i2, sem, df):
-    worker = get_worker()
+    # worker = get_worker()
     sem.max_leases
 
     print(
         f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i1}:{i2}'
     )
 
-    start_time = time.perf_counter()
-    df = df.copy()
-    task_memory = random.randint(100 * 1024**2, 500 * 1024**2)
+    # start_time = time.perf_counter()
+    # df = df.copy()
+    # task_memory = random.randint(100 * 1024**2, 500 * 1024**2)
 
-    data = np.ones(task_memory, dtype=np.uint8)
+    # data = np.ones(task_memory, dtype=np.uint8)
 
     duration = random.uniform(5, 10)
-    end_time = start_time + duration
-    result = 0
-    while time.perf_counter() < end_time:
-        result += random.uniform(-1, 1)
+    time.sleep(duration)
+    # end_time = start_time + duration
+    # result = 0
+    # while time.perf_counter() < end_time:
+    #     result += random.uniform(-1, 1)
 
-    return df
+    return None
 
 
 def tier1_task(i1, p, num_tier2_tasks, sem, df):

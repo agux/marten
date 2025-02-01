@@ -96,6 +96,10 @@ def main_dummy(args):
 
 
 def main(args):
+    #FIXME for debugging purpose
+    main_dummy(args)
+    return
+
     global client, alchemyEngine, logger, model
 
     t_start = time.time()
