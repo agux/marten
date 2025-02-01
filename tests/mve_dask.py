@@ -21,39 +21,7 @@ from dask.distributed import (
     Semaphore,
 )
 
-from marten.utils.worker import init_client
-
-n_workers = 8
-num_tier1_tasks = 10
-
-
-class LocalWorkerPlugin(WorkerPlugin):
-    def __init__(self):
-        self.prop = None
-
-    def setup(self, worker):
-        worker.logger = logging.getLogger()
-
-
-def scale():
-    global cluster, n_workers
-    # cluster.scale(1)
-    # time.sleep(10)
-    cluster.scale(n_workers)
-
-
-def make_df():
-    start_date = "2000-01-01"
-    end_date = "2025-02-01"
-
-    date_range = pd.date_range(start=start_date, end=end_date, freq="B")
-    np.random.seed(0)
-
-    val1 = np.random.randn(len(date_range))
-    val2 = np.random.rand(len(date_range)) * 100
-
-    return pd.DataFrame({"Date": date_range, "val1": val1, "val2": val2})
-
+n_workers = 16
 
 def tier1_task(i1, p, locks):
     futures = []
@@ -82,9 +50,9 @@ def tier1_task(i1, p, locks):
         wait(futures)
 
 
-def tier2_task(i1, i2, locks):
+def tier2_task(i, locks):
     print(
-        f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i1}:{i2}'
+        f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i}'
     )
 
     duration = random.uniform(3, 8)
@@ -103,25 +71,41 @@ def main():
 
     locks = {}
     for i in range (10):
-        locks[f"lock{i}"] = Semaphore(max_leases=1, name=f"dummy_semaphore{i}")
+        locks[f"lock{i}"] = Semaphore(max_leases=10, name=f"dummy_semaphore{i}")
 
     futures = []
-    for i1 in range(num_tier1_tasks):
-        p = num_tier1_tasks - i1
+    i = 0
+    while True:
         futures.append(
             client.submit(
-                tier1_task,
-                i1,
-                p,
+                tier2_task,
+                i,
                 locks,
             )
         )
-        if len(futures) > 1:
+        if len(futures) > n_workers * 2:
             _, undone = wait(futures, return_when="FIRST_COMPLETED")
             futures = list(undone)
+        i += 1
+    # wait(futures)
 
-    wait(futures)
-    print("all tasks completed.")
+    # futures = []
+    # for i1 in range(num_tier1_tasks):
+    #     p = num_tier1_tasks - i1
+    #     futures.append(
+    #         client.submit(
+    #             tier1_task,
+    #             i1,
+    #             p,
+    #             locks,
+    #         )
+    #     )
+    #     if len(futures) > 1:
+    #         _, undone = wait(futures, return_when="FIRST_COMPLETED")
+    #         futures = list(undone)
+
+    # wait(futures)
+    # print("all tasks completed.")
 
 
 if __name__ == "__main__":
