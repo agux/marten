@@ -102,8 +102,8 @@ def main():
     client = Client(cluster)
 
     locks = {
-        "lock1": Semaphore(max_leases=1, name="dummy_semaphore1"),
-        "lock2": Semaphore(max_leases=1, name="dummy_semaphore2"),
+        "lock1": Semaphore(max_leases=10, name="dummy_semaphore1"),
+        "lock2": Semaphore(max_leases=10, name="dummy_semaphore2"),
     }
 
     futures = []
