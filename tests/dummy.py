@@ -76,7 +76,7 @@ def tier2_task(i1, i2, sem, df):
     while time.perf_counter() < end_time:
         result += random.uniform(-1, 1)
 
-    return result
+    return df
 
 
 def tier1_task(i1, p, num_tier2_tasks, sem, df):
