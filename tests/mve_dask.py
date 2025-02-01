@@ -23,9 +23,8 @@ from dask.distributed import (
 
 from marten.utils.worker import init_client
 
-n_workers = 64
+n_workers = 8
 num_tier1_tasks = 10
-num_tier2_tasks = 2e4
 
 
 class LocalWorkerPlugin(WorkerPlugin):
@@ -56,7 +55,7 @@ def make_df():
     return pd.DataFrame({"Date": date_range, "val1": val1, "val2": val2})
 
 
-def tier1_task(i1, p, num_tier2_tasks, locks):
+def tier1_task(i1, p, locks):
     futures = []
     start_time = datetime.now()
     i2 = 0
@@ -72,7 +71,7 @@ def tier1_task(i1, p, num_tier2_tasks, locks):
                     key=f"tier2_task_{i1}-{uuid.uuid4().hex}",
                 )
             )
-            if len(futures) > 500:
+            if len(futures) > 100:
                 _, undone = wait(futures, return_when="FIRST_COMPLETED")
                 futures = list(undone)
         i2 += 1
@@ -115,7 +114,6 @@ def main():
                 tier1_task,
                 i1,
                 p,
-                num_tier2_tasks,
                 locks,
             )
         )
