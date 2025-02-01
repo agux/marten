@@ -163,6 +163,23 @@ def merge_covar_df(
 
     return merged_df
 
+def fit_with_covar_dummy(
+    anchor_symbol,
+    anchor_df,
+    cov_table,
+    cov_symbol,
+    min_date,
+    random_seed,
+    feature,
+    accelerator,
+    early_stopping,
+    infer_holiday,
+    sem=None,
+    locks=None,
+):
+    import random
+    time.sleep(random.uniform(3,10))
+    return None
 
 def fit_with_covar(
     anchor_symbol,

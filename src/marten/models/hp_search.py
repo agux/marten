@@ -49,6 +49,7 @@ from marten.utils.trainer import (
 )
 from marten.models.worker_func import (
     fit_with_covar,
+    fit_with_covar_dummy,
     log_metrics_for_hyper_params,
     validate_hyperparams,
     get_hpid,
@@ -429,7 +430,9 @@ def _pair_covar_metrics(
         with worker_client() as client:
             covar_futures.append(
                 client.submit(
-                    fit_with_covar,
+                    #FIXME: use dummy function for debugging purpose
+                    # fit_with_covar,
+                    fit_with_covar_dummy,
                     anchor_symbol,
                     anchor_df,
                     cov_table,
@@ -454,7 +457,7 @@ def _pair_covar_metrics(
             # if too much pending task, then slow down for the tasks to be digested
             # await_futures(covar_futures, False, multiplier=0.5, max_delay=300)
             if len(covar_futures) > cpu_count * 2:
-            # with worker_client():
+                # with worker_client():
                 try:
                     done, undone = wait(covar_futures, return_when="FIRST_COMPLETED")
                     if len(done) + len(undone) != len(covar_futures):

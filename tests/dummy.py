@@ -98,7 +98,7 @@ def tier1_task(i1, p, num_tier2_tasks, sem, df):
                     key=f"tier2_task_{i1}-{uuid.uuid4().hex}",
                 )
             )
-            if len(futures) > 200:
+            if len(futures) > 500:
                 _, undone = wait(futures, return_when="FIRST_COMPLETED")
                 futures = list(undone)
         i2 += 1
