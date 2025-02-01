@@ -2291,7 +2291,7 @@ def min_covar_loss_val(alchemyEngine, model, symbol, symbol_table, ts_date):
 def covars_and_search_dummy(model, client, symbol, alchemyEngine, logger, args):
     import marten.models.hp_search as hps
     from marten.models.hp_search import (
-        prep_covar_baseline_metrics,
+        prep_covar_baseline_metrics_dummy,
         _get_cutoff_date,
         load_anchor_ts,
     )
@@ -2303,7 +2303,7 @@ def covars_and_search_dummy(model, client, symbol, alchemyEngine, logger, args):
         args.symbol, args.timestep_limit, alchemyEngine, cutoff_date, args.symbol_table
     )
 
-    prep_covar_baseline_metrics(anchor_df, anchor_table, args, None, None)
+    prep_covar_baseline_metrics_dummy(anchor_df, anchor_table, args, None, None)
 
     wait(hps.futures)
 
