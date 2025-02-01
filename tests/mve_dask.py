@@ -102,7 +102,10 @@ def main():
     client = init_client(
         "mve",
         max_worker=n_workers,
-        args=SimpleNamespace(model="tsmixerx", dask_log=True),
+        args=SimpleNamespace(
+            model="tsmixerx", 
+            dask_log=True,
+            scheduler_port=8999),
     )
 
     sem = Semaphore(max_leases=2, name="dummy_semaphore")

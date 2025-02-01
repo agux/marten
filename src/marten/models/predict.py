@@ -84,6 +84,17 @@ def print_sys_info():
     import torch
     logger.info(torch.__config__.show())
 
+
+def main_dummy(args):
+    global client, alchemyEngine, logger, model
+
+    init(args)
+
+    covars_and_search_dummy(
+        model, client, args.symbols[0], alchemyEngine, logger, args
+    )
+
+
 def main(args):
     global client, alchemyEngine, logger, model
 
@@ -93,7 +104,7 @@ def main(args):
     for symbol in args.symbols:
         if args.adhoc:
             # future = client.submit(predict_adhoc, symbol, args)
-            hps_id, cutoff_date, ranked_features, df = covars_and_search_dummy(
+            hps_id, cutoff_date, ranked_features, df = covars_and_search(
                 model, client, symbol, alchemyEngine, logger, args
             )
             logger.info("Starting adhoc prediction")
