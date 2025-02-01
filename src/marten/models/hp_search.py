@@ -1546,6 +1546,7 @@ def covar_metric(
     return None
 
 def prep_covar_baseline_metrics_dummy(anchor_df, anchor_table, args, sem=None, locks=None):
+    futures = []
     table_features = {
         "CN_Index": (
             "index_daily_em_view",
@@ -1835,7 +1836,7 @@ def prep_covar_baseline_metrics_dummy(anchor_df, anchor_table, args, sem=None, l
             ],
         ),
     }
-    
+
     min_count = int(len(anchor_df) * (1 - args.nan_limit))
     dates = anchor_df["ds"].dt.date.tolist()
 
@@ -1865,6 +1866,8 @@ def prep_covar_baseline_metrics_dummy(anchor_df, anchor_table, args, sem=None, l
         if len(futures) > 1:
             _, undone = wait(futures, return_when="FIRST_COMPLETED")
             futures = list(undone)
+    
+    wait(futures)
 
 def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=None):
     global random_seed, client, futures
