@@ -21,7 +21,7 @@ from sqlalchemy import text
 from psycopg2.extras import execute_values
 from neuralprophet.event_utils import get_all_holidays
 import dask
-from dask.distributed import get_worker, worker_client, Semaphore
+from dask.distributed import get_worker, worker_client, Semaphore, wait
 from types import SimpleNamespace
 from tenacity import (
     stop_after_attempt,
@@ -31,7 +31,7 @@ from tenacity import (
 
 from marten.data.worker_func import impute
 from marten.utils.worker import (
-    await_futures,
+    # await_futures,
     scale_cluster_and_wait,
     restart_all_workers,
     num_workers,
@@ -2366,7 +2366,8 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
         t1_start = time.time()
         prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem, locks)
         # logger.info("waiting dask futures: %s", len(hps.futures))
-        await_futures(hps.futures, hard_wait=True)
+        wait(hps.futures)
+        # await_futures(hps.futures, hard_wait=True)
         logger.info(
             "%s covariate baseline metric computation completed. Time taken: %s seconds",
             args.symbol,
@@ -2421,6 +2422,6 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
         args.symbol,
         round(time.time() - t2_start, 3),
     )
-    await_futures(hps.futures)
+    wait(hps.futures)
 
     return hps_id, cutoff_date, ranked_features, df

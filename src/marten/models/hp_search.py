@@ -393,7 +393,10 @@ def _pair_endogenous_covar_metrics(
             locks,
         )
         futures.append(future)
-        await_futures(futures, False)
+        # await_futures(futures, False)
+        if len(futures) > psutil.cpu_count(logical=False):
+            _, undone = wait(futures, return_when='FIRST_COMPLETED')
+            futures = list(undone)
 
 
 def _pair_covar_metrics(
