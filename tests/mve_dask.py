@@ -91,7 +91,6 @@ def main():
         args=SimpleNamespace(model="tsmixerx", dask_log=True),
     )
 
-    # TODO introduce locks to test
     sem = Semaphore(max_leases=2, name="dummy_semaphore")
 
     client.submit(tier2_task, 0, 0, sem).result()

@@ -444,7 +444,7 @@ def _pair_covar_metrics(
                     args.infer_holiday,
                     sem=sem,
                     locks=locks,
-                    key=f"{fit_with_covar.__name__}({cov_table})--{uuid.uuid4().hex}",
+                    key=f"{fit_with_covar.__name__}({cov_table})-{uuid.uuid4().hex}",
                     priority=p_order,
                 )
             )

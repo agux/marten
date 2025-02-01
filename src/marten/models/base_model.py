@@ -345,7 +345,6 @@ class BaseModel(ABC):
         return evals
 
     def _get_metrics(self, **kwargs: Any) -> dict:
-        # TODO: speed up this part
         train_trajectories = self.nf.models[0].train_trajectories
         if kwargs["accelerator"] == "gpu" and not self.is_baseline(**self.model_args):
             # without exclusive lock, it may fail due to insufficient GPU memory.
