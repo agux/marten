@@ -6,9 +6,9 @@ import os
 
 os.environ["PYTHONUNBUFFERED"] = "1"
 
-import threading
 import uuid
 import time
+import random
 import logging
 import pandas as pd
 import numpy as np
@@ -27,7 +27,6 @@ from dask.distributed import (
 )
 
 from marten.utils.worker import init_client
-from dummy import tier1_task, tier2_task
 
 n_workers = 64
 num_tier1_tasks = 10
@@ -53,6 +52,7 @@ def scale():
     # time.sleep(10)
     cluster.scale(n_workers)
 
+
 def make_df():
     start_date = "2000-01-01"
     end_date = "2025-02-01"
@@ -64,6 +64,45 @@ def make_df():
     val2 = np.random.rand(len(date_range)) * 100
 
     return pd.DataFrame({"Date": date_range, "val1": val1, "val2": val2})
+
+
+def tier1_task(i1, p, num_tier2_tasks, locks, df):
+    futures = []
+    start_time = datetime.now()
+    i2 = 0
+    while (datetime.now() - start_time).seconds < 60 * 50:
+        with worker_client() as client:
+            futures.append(
+                client.submit(
+                    tier2_task,
+                    i1,
+                    i2,
+                    locks,
+                    df,
+                    priority=p,
+                    key=f"tier2_task_{i1}-{uuid.uuid4().hex}",
+                )
+            )
+            if len(futures) > 500:
+                _, undone = wait(futures, return_when="FIRST_COMPLETED")
+                futures = list(undone)
+        i2 += 1
+    print(
+        f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} waiting ALL_COMPLETED on tier1: #{i1}'
+    )
+    with worker_client():
+        wait(futures)
+
+
+def tier2_task(i1, i2, locks, df):
+    print(
+        f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i1}:{i2}'
+    )
+
+    duration = random.uniform(5, 10)
+    time.sleep(duration)
+
+    return None
 
 
 def main():
@@ -103,22 +142,23 @@ def main():
         "mve",
         max_worker=n_workers,
         args=SimpleNamespace(
-            model="tsmixerx", 
+            model="tsmixerx",
             dask_log=True,
             scheduler_port=8999,
             min_worker=4,
             max_worker=32,
-            ),
+        ),
     )
 
-    dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
-    sem = Semaphore(max_leases=2, name="dummy_semaphore")
+    # dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
+    locks = {
+        "lock1": Semaphore(max_leases=1, name="dummy_semaphore1"),
+        "lock2": Semaphore(max_leases=1, name="dummy_semaphore1"),
+    }
 
     df = make_df()
 
-    client.submit(tier2_task, 0, 0, sem, df).result()
-
-    # scale()
+    client.submit(tier2_task, 0, 0, locks, df).result()
 
     futures = []
     for i1 in range(num_tier1_tasks):
@@ -129,7 +169,7 @@ def main():
                 i1,
                 p,
                 num_tier2_tasks,
-                sem,
+                locks,
                 df,
                 priority=p,
                 key=f"tier1_task_{i1}-{uuid.uuid4().hex}",

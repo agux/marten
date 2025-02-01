@@ -56,11 +56,11 @@ def sim_model():
     return metrics
 
 
-def tier2_task(i1, i2, sem, df):
+def tier2_task(i1, i2, locks, df):
     # worker = get_worker()
-    if i2 == 0:
-        with sem:
-            print(f'using semaphore: {sem.max_leases}')
+    # if i2 == 0:
+    #     with sem:
+    #         print(f'using semaphore: {sem.max_leases}')
 
     print(
         f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i1}:{i2}'
@@ -82,8 +82,7 @@ def tier2_task(i1, i2, sem, df):
     return None
 
 
-def tier1_task(i1, p, num_tier2_tasks, sem, df):
-    sem.max_leases
+def tier1_task(i1, p, num_tier2_tasks, locks, df):
     futures = []
     start_time = datetime.now()
     i2 = 0
@@ -95,7 +94,7 @@ def tier1_task(i1, p, num_tier2_tasks, sem, df):
                     tier2_task,
                     i1,
                     i2,
-                    sem,
+                    locks,
                     df,
                     priority=p,
                     key=f"tier2_task_{i1}-{uuid.uuid4().hex}",
