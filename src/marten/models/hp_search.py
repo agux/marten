@@ -1586,6 +1586,9 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
         locks,
     )
 
+    _, undone = wait(futures)
+    futures = list(undone)
+
     # for the rest of exogenous covariates, keep only the core features of anchor_df
     anchor_df = anchor_df[["ds", "y"]].copy()
 
