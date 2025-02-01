@@ -58,7 +58,9 @@ def sim_model():
 
 def tier2_task(i1, i2, sem, df):
     # worker = get_worker()
-    sem.max_leases
+    if i2 % 10 == 0:
+        with sem:
+            print(f'using semaphore: {sem.max_leases}')
 
     print(
         f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} on tier2 task #{i1}:{i2}'
