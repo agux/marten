@@ -101,10 +101,9 @@ def main():
     )
     client = Client(cluster)
 
-    locks = {
-        "lock1": Semaphore(max_leases=10, name="dummy_semaphore1"),
-        "lock2": Semaphore(max_leases=10, name="dummy_semaphore2"),
-    }
+    locks = {}
+    for i in range (10):
+        locks[f"lock{i}"] = Semaphore(max_leases=1, name=f"dummy_semaphore{i}")
 
     futures = []
     for i1 in range(num_tier1_tasks):
