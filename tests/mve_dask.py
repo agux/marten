@@ -10,6 +10,8 @@ import threading
 import uuid
 import time
 import logging
+import pandas as pd
+import numpy as np
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -50,6 +52,18 @@ def scale():
     # cluster.scale(1)
     # time.sleep(10)
     cluster.scale(n_workers)
+
+def make_df():
+    start_date = "2000-01-01"
+    end_date = "2025-02-01"
+
+    date_range = pd.date_range(start=start_date, end=end_date, freq="B")
+    np.random.seed(0)
+
+    val1 = np.random.randn(len(date_range))
+    val2 = np.random.rand(len(date_range)) * 100
+
+    return pd.DataFrame({"Date": date_range, "val1": val1, "val2": val2})
 
 
 def main():
@@ -92,8 +106,9 @@ def main():
     )
 
     sem = Semaphore(max_leases=2, name="dummy_semaphore")
+    df = make_df()
 
-    client.submit(tier2_task, 0, 0, sem).result()
+    client.submit(tier2_task, 0, 0, sem, df).result()
 
     # scale()
 
@@ -107,6 +122,7 @@ def main():
                 p,
                 num_tier2_tasks,
                 sem,
+                df,
                 priority=p,
                 key=f"tier1_task_{i1}-{uuid.uuid4().hex}",
             )
