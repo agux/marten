@@ -2216,7 +2216,7 @@ def update_covar_set_id(alchemyEngine, hps_id, covar_set_id):
 
 
 def _univariate_default_hp(model, client, anchor_df, args, hps_id):
-    df = anchor_df[["ds", "y"]]
+    df = anchor_df[["ds", "y"]].copy()
     params = None
     match args.model:
         case "NeuralProphet":
@@ -2296,6 +2296,22 @@ def covars_and_search_dummy(model, client, symbol, alchemyEngine, logger, args):
         load_anchor_ts,
     )
 
+    sem = None
+    max_leases = (
+        args.resource_intensive_sql_semaphore
+        if args.resource_intensive_sql_semaphore > 0
+        else int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker))
+    )
+    if max_leases > 0:
+        dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
+        sem = Semaphore(
+            max_leases=max_leases,
+            name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
+        )
+    locks = get_accelerator_locks(0, gpu_leases=2, timeout="20s")
+
+    logger.info("sem: %s, locks: %s", sem, locks)
+
     args = init_hps(hps, model, symbol, args, client, alchemyEngine, logger)
 
     cutoff_date = _get_cutoff_date(args)
@@ -2303,7 +2319,7 @@ def covars_and_search_dummy(model, client, symbol, alchemyEngine, logger, args):
         args.symbol, args.timestep_limit, alchemyEngine, cutoff_date, args.symbol_table
     )
 
-    prep_covar_baseline_metrics_dummy(anchor_df, anchor_table, args, None, None)
+    prep_covar_baseline_metrics_dummy(anchor_df, anchor_table, args, sem, locks)
 
     wait(hps.futures)
 
@@ -2390,8 +2406,8 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
             base_loss,
         )
 
-    # scale up the cluster to args.max_worker
-    logger.info("Scaling dask cluster to %s", args.max_worker)
+    # FIXME scale up the cluster to args.max_worker, disabled for troubleshooting purpose
+    # logger.info("Scaling dask cluster to %s", args.max_worker)
     # client.cluster.scale(args.max_worker)
     # scale_cluster_and_wait(client, args.max_worker)
 

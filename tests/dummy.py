@@ -58,7 +58,7 @@ def sim_model():
 
 def tier2_task(i1, i2, sem, df):
     # worker = get_worker()
-    if i2 % 10 == 0:
+    if i2 == 0:
         with sem:
             print(f'using semaphore: {sem.max_leases}')
 
