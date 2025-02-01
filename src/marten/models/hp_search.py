@@ -448,7 +448,7 @@ def _pair_covar_metrics(
                     sem=sem,
                     locks=locks,
                     key=f"{fit_with_covar.__name__}({cov_table})-{uuid.uuid4().hex}",
-                    priority=p_order,
+                    # priority=p_order,
                 )
             )
             # if too much pending task, then slow down for the tasks to be digested
@@ -1866,7 +1866,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
                 sem,
                 locks,
                 p_order=len(keys) - i,
-                priority=len(keys) - i,
+                # priority=len(keys) - i,
                 key=f"{covar_metric.__name__}_{keys[i].lower()}({len(features)})-"
                 # + f"{cov_table}({len(features)})_{len(keys) - i}",
                 + uuid.uuid4().hex,
