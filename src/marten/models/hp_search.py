@@ -365,6 +365,8 @@ def _pair_endogenous_covar_metrics(
     if not features:
         return
 
+    cpu_count = psutil.cpu_count(logical=False)
+
     for feature in features:
         logger.debug(
             "submitting fit_with_covar:\nanchor_symbol:%s\ncov_table:%s\ncov_symbol:%s\nfeature:%s",
@@ -395,7 +397,7 @@ def _pair_endogenous_covar_metrics(
         )
         futures.append(future)
         # await_futures(futures, False)
-        if len(futures) > psutil.cpu_count(logical=False):
+        if len(futures) > cpu_count:
             _, undone = wait(futures, return_when="FIRST_COMPLETED")
             futures = list(undone)
 
@@ -430,7 +432,7 @@ def _pair_covar_metrics(
         with worker_client() as client:
             covar_futures.append(
                 client.submit(
-                    #FIXME: use dummy function for debugging purpose
+                    # FIXME: use dummy function for debugging purpose
                     # fit_with_covar,
                     fit_with_covar_dummy,
                     anchor_symbol,
@@ -1331,6 +1333,39 @@ def _remove_measured_features(
     return features
 
 
+def covar_metric_dummy(
+    anchor_symbol,
+    anchor_df,
+    cov_table,
+    features,
+    dates,
+    min_count,
+    args,
+    sem,
+    locks,
+    p_order,
+):
+    covar_futures = []
+    _pair_covar_metrics(
+        # client,
+        anchor_symbol,
+        anchor_df,
+        cov_table,
+        [1] * random.randint(1000, 5000),
+        None,
+        None,
+        args,
+        sem,
+        locks,
+        p_order,
+        covar_futures,
+    )
+    with worker_client():
+        wait(covar_futures)
+
+    return None
+
+
 def covar_metric(
     anchor_symbol,
     anchor_df,
@@ -1552,7 +1587,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
     )
 
     # for the rest of exogenous covariates, keep only the core features of anchor_df
-    anchor_df = anchor_df[["ds", "y"]]
+    anchor_df = anchor_df[["ds", "y"]].copy()
 
     table_features = {
         "CN_Index": (
@@ -1858,7 +1893,8 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
         cov_table, features = table_features[keys[i]]
         futures.append(
             client.submit(
-                covar_metric,
+                # FIXME use dummy func for debugging purpose
+                covar_metric_dummy,
                 anchor_symbol,
                 anchor_df,
                 cov_table,
