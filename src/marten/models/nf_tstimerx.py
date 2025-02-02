@@ -185,6 +185,8 @@ class TSMixerxModel(BaseModel):
 
         if model_config["accelerator"] == "gpu" and torch.cuda.is_bf16_supported():
             model_args["precision"] = "bf16-mixed"
+        elif model_config["accelerator"] == "cpu":
+            model_args["precision"] = "16-mixed"
 
         self.model = TSMixerx(**model_args)
 

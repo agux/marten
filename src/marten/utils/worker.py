@@ -224,7 +224,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     )
     mem_limit = os.getenv("dask_worker_memory_limit")
     cluster = LocalCluster(
-        # host="0.0.0.0", #NOTE: if not using 0.0.0.0, remote machines may not be able to join the cluster
+        host="0.0.0.0",  # NOTE: if not using 0.0.0.0, remote machines may not be able to join the cluster
         # host="localhost",
         scheduler_port=getattr(args, "scheduler_port", 0),
         # scheduler_kwargs={"external_address": "localhost"},
@@ -237,7 +237,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
         threads_per_worker=threads,
         processes=True,
         dashboard_address=":8787" if dashboard_port is None else f":{dashboard_port}",
-        # worker_dashboard_address=":0",
+        worker_dashboard_address=":0",
         silence_logs=logging.INFO if getattr(args, "dask_log", False) else logging.WARN,
         # memory_limit="2GB",
         memory_limit=mem_limit if mem_limit else 0,  # 0=no limit
@@ -426,6 +426,8 @@ def num_workers(local=True):
             if any(
                 ip in worker_key
                 or (isinstance(worker_info["name"], str) and ip in worker_info["name"])
+                or "127.0.0.1" in worker_key
+                or "127.0.0.1" in worker_info["name"]
                 for ip in machine_ips
             ):
                 count += 1
