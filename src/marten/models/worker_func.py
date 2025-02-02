@@ -191,8 +191,6 @@ def fit_with_covar(
     accelerator,
     early_stopping,
     infer_holiday,
-    sem=None,
-    locks=None,
 ):
     # Local import of get_worker to avoid circular import issue?
     worker = get_worker()
@@ -281,7 +279,7 @@ def fit_with_covar(
                 )
                 config["validate"] = True
                 config["random_seed"] = random_seed
-                config["locks"] = locks
+                # config["locks"] = locks
                 # get_logger().info("fit_with_covar : %s", locks)
                 merged_df = merged_df.replace([np.inf, -np.inf], np.nan)
                 # cores = []
@@ -369,8 +367,7 @@ def fit_with_covar(
         return _func()
     except Exception as e:
         logger.error(
-            "failed to fit covar (locks:%s) %s @ %s.%s",
-            locks,
+            "failed to fit covar %s @ %s.%s",
             cov_symbol,
             cov_table,
             feature,
@@ -2337,19 +2334,19 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
 
     # worker = get_worker()
     # alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
-    sem = None
-    max_leases = (
-        args.resource_intensive_sql_semaphore
-        if args.resource_intensive_sql_semaphore > 0
-        else int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker))
-    )
-    if max_leases > 0:
-        dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
-        sem = Semaphore(
-            max_leases=max_leases,
-            name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
-        )
-    locks = get_accelerator_locks(0, gpu_leases=2, mps_leases=0, timeout="20s")
+    # sem = None
+    # max_leases = (
+    #     args.resource_intensive_sql_semaphore
+    #     if args.resource_intensive_sql_semaphore > 0
+    #     else int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker))
+    # )
+    # if max_leases > 0:
+    #     dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
+    #     sem = Semaphore(
+    #         max_leases=max_leases,
+    #         name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
+    #     )
+    # locks = get_accelerator_locks(0, gpu_leases=2, mps_leases=0, timeout="20s")
 
     args = init_hps(hps, model, symbol, args, client, alchemyEngine, logger)
     cutoff_date = _get_cutoff_date(args)
@@ -2394,7 +2391,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
             base_loss,
         )
         df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
-            anchor_df, args, alchemyEngine, logger, cutoff_date, sem
+            anchor_df, args, alchemyEngine, logger, cutoff_date
         )
         # df_future = client.scatter(df)
         # ranked_features_future = client.scatter(ranked_features)
@@ -2415,7 +2412,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
         # run covariate loss calculation in batch
         logger.info("Starting covariate loss calculation")
         t1_start = time.time()
-        prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem, locks)
+        prep_covar_baseline_metrics(anchor_df, anchor_table, args)
         # logger.info("waiting dask futures: %s", len(hps.futures))
         wait(hps.futures)
         # await_futures(hps.futures, hard_wait=True)
@@ -2447,7 +2444,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     # NOTE: if data is scattered before scale-down, the error will be thrown:
     # Removing worker 'tcp://<worker IP & port>' caused the cluster to lose scattered data, which can't be recovered
     df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
-        anchor_df, args, alchemyEngine, logger, cutoff_date, sem
+        anchor_df, args, alchemyEngine, logger, cutoff_date
     )
     # df_future = client.scatter(df)
     # ranked_features_future = client.scatter(ranked_features)

@@ -303,21 +303,29 @@ class BaseModel(ABC):
             accelerator = "mps"
         elif accelerator in ("gpu", "auto") and not torch.cuda.is_available():
             accelerator = "cpu"
+        elif accelerator in ("gpu", "auto"):
+            accelerator = "gpu"
+            if not self.locks:
+                self.locks = {}
+            is_baseline = self.is_baseline(**self.model_args)
+            name = f"""{socket.gethostname()}::GPU-auto"""
+            if "gpu" not in self.locks.keys() or (
+                is_baseline and self.locks["gpu"].max_leases != 2
+            ):
+                self.locks["gpu"] = Semaphore(max_leases=2, name=name)
+            elif "gpu" not in self.locks.keys() or (
+                not is_baseline and self.locks["gpu"].max_leases != 1
+            ):
+                self.locks["gpu"] = Semaphore(max_leases=1, name=name)
 
         # gpu or auto
         worker = get_worker()
         if worker is not None:
             task_key = worker.get_current_task()
-            #FIXME: suspect calling client.get_metadata may impact scheduler performance?
-            # if worker.client.get_metadata([task_key, "CUDA error"], False):
-            #     accelerator = "cpu"
-            # elif int(worker.name) > self.locks["gpu"].max_leases:
-            if int(worker.name) > self.locks["gpu"].max_leases:
+            if worker.client.get_metadata([task_key, "CUDA error"], False):
                 accelerator = "cpu"
-
-        accelerator = "gpu" if accelerator == "auto" else accelerator
-
-        
+            elif int(worker.name) > self.locks["gpu"].max_leases:
+                accelerator = "cpu"
 
         # self.release_accelerator_lock()
         # accelerator = self._lock_accelerator(accelerator)
@@ -392,7 +400,9 @@ class BaseModel(ABC):
             )
         else:
             loss = huber_loss(forecast["y"], forecast[str(self.nf.models[0])])
-            eval_mae = mean_absolute_error(forecast["y"], forecast[str(self.nf.models[0])])
+            eval_mae = mean_absolute_error(
+                forecast["y"], forecast[str(self.nf.models[0])]
+            )
             eval_rmse = np.sqrt(
                 mean_squared_error(forecast["y"], forecast[str(self.nf.models[0])])
             )

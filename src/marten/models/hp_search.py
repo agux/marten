@@ -224,7 +224,6 @@ def covar_symbols_from_table(
     feature,
     ts_date,
     min_count,
-    sem,
 ):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
@@ -308,29 +307,10 @@ def covar_symbols_from_table(
             ecs.cov_symbol IS NULL
     """
 
-    if sem:
-        with sem:
-            # raw_conn = alchemyEngine.raw_connection()
-            # try:
-            #     cursor = raw_conn.cursor()
-            #     final_query = cursor.mogrify(query, params)
-            #     logger.info("SQL query:\n%s", final_query)
-            #     cursor.close()
-            # finally:
-            #     raw_conn.close()
-
-            with alchemyEngine.connect() as conn:
-                cov_symbols = pd.read_sql(
-                    query,
-                    conn,
-                    params=params,
-                    dtype={"symbol": "string", "num": "int32"},
-                )
-    else:
-        with alchemyEngine.connect() as conn:
-            cov_symbols = pd.read_sql(
-                query, conn, params=params, dtype={"symbol": "string", "num": "int32"}
-            )
+    with alchemyEngine.connect() as conn:
+        cov_symbols = pd.read_sql(
+            query, conn, params=params, dtype={"symbol": "string", "num": "int32"}
+        )
 
     cov_symbols = cov_symbols[["symbol"]]
     cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
@@ -392,8 +372,6 @@ def _pair_endogenous_covar_metrics(
             "auto",
             args.early_stopping,
             args.infer_holiday,
-            None,
-            None,
         )
         futures.append(future)
         # await_futures(futures, False)
@@ -448,8 +426,6 @@ def _pair_covar_metrics(
                     "auto",
                     args.early_stopping,
                     args.infer_holiday,
-                    sem=sem,
-                    locks=locks,
                     key=f"{fit_with_covar.__name__}({cov_table})-{uuid.uuid4().hex}",
                     # priority=p_order,
                 )
@@ -713,7 +689,7 @@ def _load_covars(
     return df, covar_set_id
 
 
-def _load_covar_feature(cov_table, feature, symbols, start_date, end_date, sem=None):
+def _load_covar_feature(cov_table, feature, symbols, start_date, end_date):
     worker = get_worker()
     alchemyEngine = worker.alchemyEngine
     params = {"start_date": start_date, "end_date": end_date}
@@ -757,15 +733,15 @@ def _load_covar_feature(cov_table, feature, symbols, start_date, end_date, sem=N
                 WHERE ("table", symbol) IN ({values_list})
                 and date between %(start_date)s and %(end_date)s
             """
-            if sem:
-                with sem:
-                    table_feature_df = pd.read_sql(
-                        query, alchemyEngine, params=params, parse_dates=["ds"]
-                    )
-            else:
-                table_feature_df = pd.read_sql(
-                    query, alchemyEngine, params=params, parse_dates=["ds"]
-                )
+            # if sem:
+            #     with sem:
+            #         table_feature_df = pd.read_sql(
+            #             query, alchemyEngine, params=params, parse_dates=["ds"]
+            #         )
+            # else:
+            table_feature_df = pd.read_sql(
+                query, alchemyEngine, params=params, parse_dates=["ds"]
+            )
         case _:
             query = f"""
                 SELECT symbol ID, date DS, {feature} y
@@ -781,7 +757,7 @@ def _load_covar_feature(cov_table, feature, symbols, start_date, end_date, sem=N
 
 
 def augment_anchor_df_with_covars(
-    df, args, alchemyEngine, logger, cutoff_date, sem=None
+    df, args, alchemyEngine, logger, cutoff_date
 ):
     global client
     # date_col = "ds" if args.model == "NeuralProphet" else "date"
@@ -845,7 +821,6 @@ def augment_anchor_df_with_covars(
                 sdf1["cov_symbol"],
                 start_date,
                 end_date,
-                sem,
             )
         )
 
@@ -1372,8 +1347,6 @@ def covar_metric(
     dates,
     min_count,
     args,
-    sem,
-    locks,
     p_order,
 ):
     worker = get_worker()
@@ -1424,8 +1397,6 @@ def covar_metric(
                     feature,
                     min_date,
                     args,
-                    sem,
-                    locks,
                     p_order,
                     covar_futures,
                 )
@@ -1440,8 +1411,6 @@ def covar_metric(
                     feature,
                     min_date,
                     args,
-                    sem,
-                    locks,
                     p_order,
                     covar_futures,
                 )
@@ -1456,7 +1425,6 @@ def covar_metric(
                     feature,
                     cutoff_date,
                     min_count,
-                    sem,
                 )
                 _pair_covar_metrics(
                     # client,
@@ -1467,67 +1435,10 @@ def covar_metric(
                     feature,
                     min_date,
                     args,
-                    sem,
-                    locks,
                     p_order,
                     covar_futures,
                 )
                 num_symbols += len(cov_symbols)
-                # with worker_client() as client:
-                #     cov_symbols_fut.append(
-                #         client.submit(
-                #             covar_symbols_from_table,
-                #             args.model,
-                #             anchor_symbol,
-                #             args.symbol_table,
-                #             dates,
-                #             cov_table,
-                #             feature,
-                #             cutoff_date,
-                #             min_count,
-                #             sem,
-                #             key=f"{covar_symbols_from_table.__name__}({cov_table})--{feature}_{uuid.uuid4().hex}",
-                #             priority=p_order + 1,
-                #         )
-                #     )
-                # cov_symbols = _covar_symbols_from_table(
-                #     args.model,
-                #     anchor_symbol,
-                #     dates,
-                #     cov_table,
-                #     feature,
-                #     cutoff_date,
-                #     min_count,
-                # )
-                # remove duplicate records in cov_symbols dataframe, by checking the `symbol` column values.
-                # cov_symbols.drop_duplicates(subset=["symbol"], inplace=True)
-        # logger.info("[DEBUG] len(futures): %s in %s", len(cov_symbols_fut), cov_table)
-
-    # if cov_symbols_fut:
-    #     for batch in as_completed(cov_symbols_fut).batches():
-    #         for future in batch:
-    #             cov_symbols, feature = future.result()
-    #             # logger.info(
-    #             #     "identified %s symbols for %s.%s",
-    #             #     len(cov_symbols),
-    #             #     cov_table,
-    #             #     feature
-    #             # )
-    #             _pair_covar_metrics(
-    #                 # client,
-    #                 anchor_symbol,
-    #                 anchor_df,
-    #                 cov_table,
-    #                 cov_symbols,
-    #                 feature,
-    #                 min_date,
-    #                 args,
-    #                 sem,
-    #                 locks,
-    #                 p_order,
-    #                 covar_futures,
-    #             )
-    #             num_symbols += len(cov_symbols)
 
     # await_futures(covar_futures)
     with worker_client():
@@ -1867,7 +1778,7 @@ def prep_covar_baseline_metrics_dummy(anchor_df, anchor_table, args, sem=None, l
     
     wait(futures)
 
-def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=None):
+def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     global random_seed, client, futures
 
     anchor_symbol = args.symbol
@@ -1877,20 +1788,20 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
     min_count = int(len(anchor_df) * (1 - args.nan_limit))
     dates = anchor_df["ds"].dt.date.tolist()
 
-    if not sem:
-        max_leases = (
-            args.resource_intensive_sql_semaphore
-            if args.resource_intensive_sql_semaphore > 0
-            else int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker))
-        )
-        if max_leases > 0:
-            dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
-            sem = Semaphore(
-                max_leases=max_leases,
-                name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
-            )
-    if not locks:
-        locks = get_accelerator_locks(0, gpu_leases=2, mps_leases=0, timeout="20s")
+    # if not sem:
+    #     max_leases = (
+    #         args.resource_intensive_sql_semaphore
+    #         if args.resource_intensive_sql_semaphore > 0
+    #         else int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker))
+    #     )
+    #     if max_leases > 0:
+    #         dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
+    #         sem = Semaphore(
+    #             max_leases=max_leases,
+    #             name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
+    #         )
+    # if not locks:
+    #     locks = get_accelerator_locks(0, gpu_leases=2, mps_leases=0, timeout="20s")
 
     # init_cpu_core_id(alchemyEngine)
 
@@ -2223,8 +2134,6 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
                 dates,
                 min_count,
                 args,
-                sem,
-                locks,
                 p_order=len(keys) - i,
                 # priority=len(keys) - i,
                 key=f"{covar_metric.__name__}_{keys[i].lower()}({len(features)})-"
