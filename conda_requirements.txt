@@ -2,6 +2,7 @@
 torch
 torchvision
 torchaudio
+ml_dtypes
 glances
 akshare
 mini-racer

@@ -506,8 +506,9 @@ def restart_worker(exception):
 def release_lock(lock: Lock, after=10):
     if (
         lock is None
-        or (isinstance(lock, Lock) and not lock.locked)
-        or (isinstance(lock, Semaphore) and lock.get_value() <= 0)
+        or lock.get_value() <= 0
+        # or (isinstance(lock, Lock) and not lock.locked)
+        # or (isinstance(lock, Semaphore) and lock.get_value() <= 0)
     ):
         return
 

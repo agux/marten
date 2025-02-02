@@ -133,6 +133,16 @@ class _dummyLock():
             self.lock = Lock(f"""{socket.gethostname()}::GPU-auto""")
         return self.lock.acquire(timeout)
 
+    def release(self):
+        self.lock.release()
+    
+    @property
+    def locked(self):
+        return self.lock.locked
+    
+    def get_value(self):
+        return self.lock.get_value()
+
 class BaseModel(ABC):
 
     def __init__(self) -> None:
