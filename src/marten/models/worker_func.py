@@ -615,7 +615,7 @@ def reg_search_params(params):
         params["trend_reg"] = round(params["trend_reg"], 5)
 
 
-def validate_hyperparams(args, df, covar_set_id, hps_id, params, locks):
+def validate_hyperparams(args, df, covar_set_id, hps_id, params):
     reg_params = params.copy()
     if args.model == "NeuralProphet":
         reg_search_params(reg_params)
@@ -631,7 +631,6 @@ def validate_hyperparams(args, df, covar_set_id, hps_id, params, locks):
             hps_id,
             args.early_stopping,
             args.infer_holiday,
-            locks,
         )
     except Exception as e:
         get_logger().error(
@@ -663,7 +662,6 @@ def log_metrics_for_hyper_params(
     hps_id,
     early_stopping,
     infer_holiday,
-    locks=None,
 ):
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
@@ -772,7 +770,6 @@ def log_metrics_for_hyper_params(
             params["accelerator"] = (
                 "auto" if accelerator == True or accelerator is None else accelerator
             )
-            params["locks"] = locks
             last_metric = model.train(df, **params)
 
     fit_time = time.time() - start_time
@@ -2168,7 +2165,6 @@ def fast_bayesopt(
             args.mini_itr,
             domain_size,
             args.resume.lower() != "none" or i > 0,
-            locks,
         )
 
         if min_loss is None or min_loss > base_loss:

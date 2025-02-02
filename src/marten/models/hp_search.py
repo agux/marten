@@ -1061,7 +1061,6 @@ def _bayesopt_run(
     iteration,
     domain_size,
     resume,
-    locks,
 ):
     global logger, client, model
 
@@ -1105,7 +1104,6 @@ def _bayesopt_run(
                 params,
                 resources={"POWER": power_demand(args, params)},
                 retries=1,
-                locks=locks,
                 key=f"{validate_hyperparams.__name__}-{hpid}",
                 priority=priority,
             )
