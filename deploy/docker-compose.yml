@@ -27,11 +27,11 @@ services:
     shm_size: '16gb'
     command: >
       postgres
-      -c max_connections=1024
-      -c shared_buffers=16GB
+      -c max_connections=200
+      -c shared_buffers=8GB
       -c work_mem=64MB
       -c maintenance_work_mem=256MB
-      -c effective_cache_size=16GB
+      -c effective_cache_size=12GB
       -c effective_io_concurrency=32
       -c max_parallel_workers=16
       -c max_parallel_maintenance_workers=8
@@ -44,8 +44,8 @@ services:
       -c checkpoint_timeout=15min
       -c checkpoint_completion_target=0.5
       -c wal_buffers=16MB
-      -c max_wal_size=16GB
-      -c bgwriter_lru_maxpages=2000
+      -c max_wal_size=8GB
+      -c bgwriter_lru_maxpages=1000
       -c temp_file_limit=8GB
     networks:
       - pchn_network
