@@ -677,6 +677,7 @@ def _load_covars(
             table_df = df.rename(
                 columns={"feature": "cov_feature", "loss_val": "score"}
             )
+            table_df["symbol_table"] = symbol_table
             table_df["symbol"] = anchor_symbol
             table_df["id"] = covar_set_id
             table_df.to_sql("covar_set", con=conn, if_exists="append", index=False)
