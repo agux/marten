@@ -130,7 +130,7 @@ class BaseModel(ABC):
         self.device = None
         self.model_args = None
         self.accelerator_lock = None
-        self.locks = None
+        self.locks = {}
         self.profiler = None
         self.trainLogger = None
 
@@ -305,8 +305,6 @@ class BaseModel(ABC):
             accelerator = "cpu"
         elif accelerator in ("gpu", "auto"):
             accelerator = "gpu"
-            if not self.locks:
-                self.locks = {}
             is_baseline = self.is_baseline(**self.model_args)
             name = f"""{socket.gethostname()}::GPU-auto"""
             if "gpu" not in self.locks.keys() or (
@@ -503,7 +501,7 @@ class BaseModel(ABC):
                 - machine: which machine the model is trained on. Can be obtained from socket.gethostname()
         """
         # get_logger().info("training : %s", kwargs["locks"])
-        self.locks = kwargs["locks"]
+        # self.locks = kwargs["locks"]
         df = df.copy()
         df.insert(0, "unique_id", "0")
         self.model_args = kwargs
