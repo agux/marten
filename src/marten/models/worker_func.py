@@ -559,7 +559,6 @@ def train(
     country=None,
     validate=True,
     save_model_file=False,
-    locks=None,
     **kwargs,
 ):
     worker = get_worker()
@@ -602,7 +601,7 @@ def train(
             config["max_steps"] = epochs
             config["h"] = args.future_steps
             metrics = model.train(
-                df, random_seed=random_seed, validate=validate, locks=locks, **config
+                df, random_seed=random_seed, validate=validate, **config
             )
             return (None, metrics)
 
@@ -1433,7 +1432,6 @@ def train_predict(
     country,
     validate,
     future_steps,
-    locks,
     **kwargs,
 ):
     try:
@@ -1447,7 +1445,6 @@ def train_predict(
             validate=validate,
             n_forecasts=future_steps,
             save_model_file=True,
-            locks=locks,
             **kwargs,
         )
 
@@ -1506,8 +1503,6 @@ def forecast(
     region,
     cutoff_date,
     group_id,
-    sem,
-    locks,
 ):
     worker = get_worker()
     alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
@@ -1548,7 +1543,6 @@ def forecast(
             hps_metric["feature"],
             df["ds"].min().strftime("%Y-%m-%d"),
             alchemyEngine,
-            sem,
         )
     else:
         if hps_metric["sub_topk"] is None:
@@ -1595,7 +1589,6 @@ def forecast(
                 validate=True,
                 country=region,
                 changepoints_range=1.0,
-                locks=locks,
                 # save_model_file=True,
                 **hyperparams,
             )
@@ -1618,7 +1611,6 @@ def forecast(
                 future_steps=args.future_steps,
                 changepoints_range=1.0,
                 accelerator="gpu" if args.accelerator else None,
-                locks=locks,
                 **hyperparams,
                 # resources={"MEMORY": worker_mem_needed},
             )
@@ -1717,7 +1709,7 @@ def ensemble_topk_prediction(
     logger.info("Scaling dask cluster to %s", args.min_worker)
     scale_cluster_and_wait(client, args.min_worker)
     # client.cluster.scale(args.min_worker)
-    locks = get_accelerator_locks(cpu_leases=0, timeout="60s")
+    # locks = get_accelerator_locks(cpu_leases=0, timeout="60s")
     futures = []
     for _, row in settings.iterrows():
         futures.append(
@@ -1731,8 +1723,8 @@ def ensemble_topk_prediction(
                 region,
                 cutoff_date,
                 group_id,
-                sem=None,
-                locks=locks,
+                # sem=None,
+                # locks=locks,
             )
         )
 
@@ -2152,7 +2144,7 @@ def fast_bayesopt(
     if model is not None and not model.accept_missing_data():
         df, _ = model.impute(df, random_seed=args.random_seed)
 
-    locks = get_accelerator_locks(cpu_leases=0, timeout="60s")
+    # locks = get_accelerator_locks(cpu_leases=0, timeout="60s")
     # split large iterations into smaller runs to avoid OOM / memory leak
     for i in range(args.max_itr):
         logger.info(

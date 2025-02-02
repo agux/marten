@@ -58,7 +58,7 @@ from utilsforecast.losses import _pl_agg_expr, _base_docstring, mae, rmse
 from utilsforecast.evaluation import evaluate
 from utilsforecast.compat import DataFrame, pl
 
-from dask.distributed import get_worker, Semaphore
+from dask.distributed import get_worker, Lock, Semaphore
 
 from marten.utils.logger import get_logger
 from marten.utils.trainer import is_cuda_error, huber_loss
@@ -122,6 +122,10 @@ from marten.utils.worker import (
 #         res = _pl_agg_expr(df, models, id_col, gen_expr)
 #     return res
 
+class _dummyLock():
+    def __init__(self, max_leases, name):
+        self.max_leases = max_leases
+        self.name = name
 
 class BaseModel(ABC):
 
@@ -169,8 +173,8 @@ class BaseModel(ABC):
             return
 
         if "profiler" not in self.locks:
-            self.locks["profiler"] = Semaphore(
-                max_leases=1, name=f"""{socket.gethostname()}::profiler"""
+            self.locks["profiler"] = Lock(
+                name=f"""{socket.gethostname()}::profiler"""
             )
 
         if not self.locks["profiler"].acquire(2):
@@ -310,11 +314,11 @@ class BaseModel(ABC):
             if "gpu" not in self.locks.keys() or (
                 is_baseline and self.locks["gpu"].max_leases != 2
             ):
-                self.locks["gpu"] = Semaphore(max_leases=2, name=name)
+                self.locks["gpu"] = _dummyLock(max_leases=2, name=name)
             elif "gpu" not in self.locks.keys() or (
                 not is_baseline and self.locks["gpu"].max_leases != 1
             ):
-                self.locks["gpu"] = Semaphore(max_leases=1, name=name)
+                self.locks["gpu"] = Lock(name=name)
 
         # gpu or auto
         worker = get_worker()
