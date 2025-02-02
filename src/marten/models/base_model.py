@@ -126,6 +126,12 @@ class _dummyLock():
     def __init__(self, max_leases, name):
         self.max_leases = max_leases
         self.name = name
+        self.lock = None
+
+    def acquire(self, timeout):
+        if not self.lock:
+            self.lock = Lock(f"""{socket.gethostname()}::GPU-auto""")
+        return self.lock.acquire(timeout)
 
 class BaseModel(ABC):
 

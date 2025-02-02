@@ -176,17 +176,17 @@ class TSMixerxModel(BaseModel):
             "accelerator": model_config["accelerator"],
             # devices="auto",  #NOTE: not workable for CPU
             "devices": model_config["devices"],
-            # precision="bf16-mixed",  #NOTE: saves GPU mem but slower on CPU
+            "precision": "bf16-mixed",  #NOTE: saves GPU mem but slower on CPU?
             "enable_checkpointing": False,
             "logger": self.trainLogger,  # NOTE: can't disable logger as early stopping rely on it
             "log_every_n_steps": 10,
             # barebones=True, # NOTE: this disable logger as well
         }
 
-        if model_config["accelerator"] == "gpu" and torch.cuda.is_bf16_supported():
-            model_args["precision"] = "bf16-mixed"
-        elif model_config["accelerator"] == "cpu":
-            model_args["precision"] = "16-mixed"
+        # if model_config["accelerator"] == "gpu" and torch.cuda.is_bf16_supported():
+        #     model_args["precision"] = "bf16-mixed"
+        # elif model_config["accelerator"] == "cpu":
+        #     model_args["precision"] = "16-mixed"
 
         self.model = TSMixerx(**model_args)
 

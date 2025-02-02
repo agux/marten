@@ -770,6 +770,9 @@ def log_metrics_for_hyper_params(
             params["accelerator"] = (
                 "auto" if accelerator == True or accelerator is None else accelerator
             )
+            # FIXME: see if any alternatives to avoid using lock due to performance impact to dask scheduler
+            # if "gpu" not in model.locks.keys():
+            #     model.locks["gpu"] = Lock(name=f"""{socket.gethostname()}::GPU-auto""")
             last_metric = model.train(df, **params)
 
     fit_time = time.time() - start_time

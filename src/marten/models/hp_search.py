@@ -389,13 +389,8 @@ def _pair_covar_metrics(
     feature,
     min_date,
     args,
-    sem,
-    locks,
-    p_order=0,
     covar_futures=None,
 ):
-    if not covar_futures:
-        covar_futures = []
     worker = get_worker()
     logger = worker.logger
     cpu_count = psutil.cpu_count()
@@ -1326,9 +1321,6 @@ def covar_metric_dummy(
         None,
         None,
         args,
-        sem,
-        locks,
-        p_order,
         covar_futures,
     )
     with worker_client():
@@ -1345,7 +1337,6 @@ def covar_metric(
     dates,
     min_count,
     args,
-    p_order,
 ):
     worker = get_worker()
     logger = worker.logger
@@ -1395,7 +1386,6 @@ def covar_metric(
                     feature,
                     min_date,
                     args,
-                    p_order,
                     covar_futures,
                 )
                 num_symbols += 1
@@ -1409,7 +1399,6 @@ def covar_metric(
                     feature,
                     min_date,
                     args,
-                    p_order,
                     covar_futures,
                 )
                 num_symbols += 1
@@ -1433,7 +1422,6 @@ def covar_metric(
                     feature,
                     min_date,
                     args,
-                    p_order,
                     covar_futures,
                 )
                 num_symbols += len(cov_symbols)
@@ -2132,7 +2120,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
                 dates,
                 min_count,
                 args,
-                p_order=len(keys) - i,
+                # p_order=len(keys) - i,
                 # priority=len(keys) - i,
                 key=f"{covar_metric.__name__}_{keys[i].lower()}({len(features)})-"
                 # + f"{cov_table}({len(features)})_{len(keys) - i}",
