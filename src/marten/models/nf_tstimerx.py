@@ -27,12 +27,17 @@ from marten.utils.logger import get_logger
 
 default_params = {
     "h": 20,
-    "batch_size": 32,  # NOTE: bigger batch_size seems slower on CPU, while GPU can train on larger batch
+    # "batch_size": 32,  # NOTE: bigger batch_size seems slower on CPU, while GPU can train on larger batch
     "max_steps": 1000,
     "val_check_steps": 50,
     "num_lr_decays": -1,
     "early_stop_patience_steps": 10,
     "accelerator": "auto",
+}
+
+batch_sizes = {
+    "cpu": 32,
+    "gpu": 256,
 }
 
 baseline_params = {
@@ -92,13 +97,13 @@ class TSMixerxModel(BaseModel):
                 (
                     kwargs["ff_dim"]
                     * kwargs["n_block"]
-                    * kwargs["batch_size"]
+                    # * kwargs["batch_size"]
                     * kwargs["input_size"]
                     * kwargs["num_covars"]
                 ),
                 0.2,
             )
-            < 70
+            < 55
         )
         # return True
 
@@ -118,6 +123,7 @@ class TSMixerxModel(BaseModel):
         model_config.update(kwargs)
         # prep the parameters and df
         optimizer, optim_args = self._select_optimizer(**model_config)
+        model_config["batch_size"] = batch_sizes[model_config["accelerator"]]
 
         seed_logger = logging.getLogger("lightning_fabric.utilities.seed")
         from lightning_utilities.core.rank_zero import log as rank_zero_logger

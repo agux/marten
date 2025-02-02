@@ -58,7 +58,7 @@ from utilsforecast.losses import _pl_agg_expr, _base_docstring, mae, rmse
 from utilsforecast.evaluation import evaluate
 from utilsforecast.compat import DataFrame, pl
 
-from dask.distributed import get_worker, Lock, Semaphore
+from dask.distributed import get_worker, Lock
 
 from marten.utils.logger import get_logger
 from marten.utils.trainer import is_cuda_error, huber_loss
