@@ -36,7 +36,7 @@ default_params = {
 }
 
 batch_sizes = {
-    "cpu": 32,
+    "cpu": 16,
     "gpu": 64,
 }
 
