@@ -203,7 +203,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
                 args, "dask_multiprocessing", "spawn"
             ),
             # "distributed.worker.memory.recent-to-old-time": "45 minutes",
-            "distributed.deploy.lost-worker-timeout": "2 hours",
+            # "distributed.deploy.lost-worker-timeout": "2 hours",
             # "distributed.scheduler.work-stealing-interval": "5 seconds",
             # "distributed.scheduler.worker-ttl": "8 hours",
             # "distributed.scheduler.worker-saturation": 0.0001,
@@ -256,8 +256,8 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
     # )
     client = Client(
         cluster,
-        direct_to_workers=True,
-        connection_limit=4096,
+        # direct_to_workers=True,
+        # connection_limit=512,
         # security=False
     )
     client.register_plugin(LocalWorkerPlugin(name, args))
