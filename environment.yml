@@ -27,18 +27,22 @@ dependencies:
   - statsmodels>=0.14.2
   - utilsforecast       
   - lightning
-  - pytorch
-  - pytorch-cuda
+  # - pytorch
+  # - pytorch-cuda
   - pytorch-lightning
   - py-cpuinfo
   - pynvml
   - pytables
   - pip:
+    - -r conda_requirements.txt
     # - zentorch    #not available in python>3.11
-    - glances
-    - akshare
-    - mini-racer
-    - stock-indicators # Requires manual installation of .NET SDK
+    # - torch # --index-url https://download.pytorch.org/whl/cu126
+    # - torchvision
+    # - torchaudio
+    # - glances
+    # - akshare
+    # - mini-racer
+    # - stock-indicators # Requires manual installation of .NET SDK
     # The following packages require special handling:
     # - neuralprophet               # Needs installation from source
     # - neuralforecast            # Install from carusyte's repo

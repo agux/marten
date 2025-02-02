@@ -432,7 +432,7 @@ def _pair_covar_metrics(
             )
             # if too much pending task, then slow down for the tasks to be digested
             # await_futures(covar_futures, False, multiplier=0.5, max_delay=300)
-            if len(covar_futures) > cpu_count * 2:
+            if len(covar_futures) > cpu_count * 3:
                 # with worker_client():
                 try:
                     done, undone = wait(covar_futures, return_when="FIRST_COMPLETED")
