@@ -2349,7 +2349,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
             max_leases=max_leases,
             name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
         )
-    locks = get_accelerator_locks(0, gpu_leases=2, timeout="20s")
+    locks = get_accelerator_locks(0, gpu_leases=2, mps_leases=0, timeout="20s")
 
     args = init_hps(hps, model, symbol, args, client, alchemyEngine, logger)
     cutoff_date = _get_cutoff_date(args)

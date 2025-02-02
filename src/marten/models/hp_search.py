@@ -432,9 +432,7 @@ def _pair_covar_metrics(
         with worker_client() as client:
             covar_futures.append(
                 client.submit(
-                    # FIXME: use dummy function for debugging purpose
-                    # fit_with_covar,
-                    fit_with_covar_dummy,
+                    fit_with_covar,
                     anchor_symbol,
                     anchor_df,
                     cov_table,
@@ -1892,7 +1890,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
                 name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
             )
     if not locks:
-        locks = get_accelerator_locks(0, gpu_leases=2, timeout="20s")
+        locks = get_accelerator_locks(0, gpu_leases=2, mps_leases=0, timeout="20s")
 
     # init_cpu_core_id(alchemyEngine)
 
@@ -1907,8 +1905,8 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
         cutoff_date,
     )
 
-    _, undone = wait(futures)
-    futures = list(undone)
+    # _, undone = wait(futures)
+    # futures = list(undone)
 
     # for the rest of exogenous covariates, keep only the core features of anchor_df
     anchor_df = anchor_df[["ds", "y"]].copy()
@@ -2217,8 +2215,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args, sem=None, locks=N
         cov_table, features = table_features[keys[i]]
         futures.append(
             client.submit(
-                # FIXME use dummy func for debugging purpose
-                covar_metric_dummy,
+                covar_metric,
                 anchor_symbol,
                 anchor_df,
                 cov_table,
