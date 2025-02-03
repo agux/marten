@@ -994,6 +994,10 @@ def preload_warmstart_tuples(
         for row in results:
             # param_dict = json.loads(row[0], object_hook=hp_deserializer)
             param_dict = row[0]
+            
+            if "num_covars" in param_dict:
+                param_dict.pop("num_covars")
+
             match model_name:
                 case "NeuralProphet":
                     # Fill in default values if not exists in historical HP
@@ -1089,7 +1093,7 @@ def _bayesopt_run(
             )
             if model:
                 priority = (
-                    priority + 1 if model.trainable_on_cpu(**params) else priority
+                    priority + 10 if model.trainable_on_cpu(**params) else priority
                 )
             future = client.submit(
                 validate_hyperparams,
@@ -1121,6 +1125,8 @@ def _bayesopt_run(
         params, loss = zip(*results)
         params = list(params)
         loss = list(loss)
+        for param in params:
+            param.pop("num_covars", None)
         logger.info("Elapsed: %s, Successful results: %s", elapsed, len(results))
         # restart client here to free up memory
         if args.restart_workers:

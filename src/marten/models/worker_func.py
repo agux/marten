@@ -638,9 +638,6 @@ def validate_hyperparams(args, df, covar_set_id, hps_id, params):
         )
         raise e
     
-    if "num_covars" in params.keys():
-        params.pop("num_covars")
-        
     return (params, loss_val)
 
 
