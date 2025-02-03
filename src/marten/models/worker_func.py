@@ -637,6 +637,10 @@ def validate_hyperparams(args, df, covar_set_id, hps_id, params):
             "encountered error with train params: %s", reg_params, exc_info=True
         )
         raise e
+    
+    if "num_covars" in params.keys():
+        params.pop("num_covars")
+        
     return (params, loss_val)
 
 

@@ -960,7 +960,7 @@ def hp_deserializer(dct):
 
 
 def preload_warmstart_tuples(
-    model_name, anchor_symbol, symbol_table, covar_set_id, hps_id, limit, feat_size
+    model_name, anchor_symbol, symbol_table, covar_set_id, hps_id, feat_size
 ):
     global alchemyEngine, logger, model
 
@@ -1136,7 +1136,6 @@ def _bayesopt_run(
             args.symbol_table,
             covar_set_id,
             hps_id,
-            args.batch_size * iteration * 2,
             len(ranked_features),
         )
     if warmstart_tuples is not None:

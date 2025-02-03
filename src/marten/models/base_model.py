@@ -292,8 +292,11 @@ class BaseModel(ABC):
                     else:
                         return "gpu"
 
-            if not self.accelerator_lock and self._check_cpu():
-                return "cpu"
+            if not self.accelerator_lock:
+                if self._check_cpu():
+                    return "cpu"
+                else:
+                    continue
 
             stop_at = time.time() + self.resource_wait_time
             if accelerator == "mps":
@@ -319,13 +322,13 @@ class BaseModel(ABC):
         accelerator = self.model_args["accelerator"].lower()
         # if accelerator == "cpu":
         #     return accelerator
+        is_baseline = self.is_baseline(**self.model_args)
         if accelerator in ("mps", "auto") and torch.backends.mps.is_available():
             accelerator = "mps"
         elif accelerator in ("gpu", "auto") and not torch.cuda.is_available():
             accelerator = "cpu"
         elif accelerator in ("gpu", "auto"):
             accelerator = "gpu"
-            is_baseline = self.is_baseline(**self.model_args)
             name = f"""{socket.gethostname()}::GPU-auto"""
             if "gpu" not in self.locks.keys() or (
                 is_baseline and self.locks["gpu"].max_leases != 2
@@ -337,21 +340,23 @@ class BaseModel(ABC):
                 self.locks["gpu"] = Lock(name=name)
 
         # gpu or auto
-        worker = get_worker()
-        if worker is not None:
-            task_key = worker.get_current_task()
-            if worker.client.get_metadata([task_key, "CUDA error"], False):
-                accelerator = "cpu"
-            elif int(worker.name) > self.locks["gpu"].max_leases:
-                accelerator = "cpu"
+        if accelerator == "gpu":
+            worker = get_worker()
+            if worker is not None:
+                task_key = worker.get_current_task()
+                if worker.client.get_metadata([task_key, "CUDA error"], False):
+                    accelerator = "cpu"
+                elif is_baseline and int(worker.name) > self.locks["gpu"].max_leases:
+                    accelerator = "cpu"
 
-        # self.release_accelerator_lock()
-        # accelerator = self._lock_accelerator(accelerator)
-        # self.release_accelerator_lock(
-        #     self.device_lock_release_delay
-        #     if self.is_baseline(**self.model_args)
-        #     else self.device_lock_release_delay_large
-        # )
+        if accelerator != "cpu":
+            self.release_accelerator_lock()
+            accelerator = self._lock_accelerator(accelerator)
+            self.release_accelerator_lock(
+                self.device_lock_release_delay
+                if is_baseline
+                else self.device_lock_release_delay_large
+            )
         return accelerator
 
     def _evaluate_cross_validation(self, df, metric):
