@@ -103,7 +103,7 @@ class TSMixerxModel(BaseModel):
                 ),
                 0.2,
             )
-            < 70
+            < 60
         )
         # return True
 

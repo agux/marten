@@ -14,6 +14,7 @@ import pandas as pd
 import numpy as np
 import uuid
 import psutil
+import torch
 
 from dotenv import load_dotenv
 
@@ -752,9 +753,7 @@ def _load_covar_feature(cov_table, feature, symbols, start_date, end_date):
     return table_feature_df
 
 
-def augment_anchor_df_with_covars(
-    df, args, alchemyEngine, logger, cutoff_date
-):
+def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
     global client
     # date_col = "ds" if args.model == "NeuralProphet" else "date"
     merged_df = df[["ds", "y"]]
@@ -994,7 +993,7 @@ def preload_warmstart_tuples(
         for row in results:
             # param_dict = json.loads(row[0], object_hook=hp_deserializer)
             param_dict = row[0]
-            
+
             if "num_covars" in param_dict:
                 param_dict.pop("num_covars")
 
@@ -1072,9 +1071,11 @@ def _bayesopt_run(
         client.set_metadata(["workload_info", "total"], len(params_batch))
         client.set_metadata(["workload_info", "workers"], nworker)
         client.set_metadata(["workload_info", "finished"], 0)
-        for i, params in enumerate(params_batch):
+        tasks = []
+        cpu_task_pos = 0
+        num_gpu = torch.cuda.device_count()
+        for params in params_batch:
             new_df = df.copy()
-            hpid, _ = get_hpid(params)
             priority = 1
             if "topk_covar" in params:
                 if "covar_dist" in params:
@@ -1091,10 +1092,17 @@ def _bayesopt_run(
             params["num_covars"] = len(
                 [c for c in new_df.columns if c not in ("ds", "y")]
             )
-            if model:
-                priority = (
-                    priority + 10 if model.trainable_on_cpu(**params) else priority
-                )
+            if model and model.trainable_on_cpu(**params):
+                tasks.insert(cpu_task_pos, (new_df, params, priority + 10))
+            else:
+                if num_gpu > 0:
+                    tasks.insert(0, (new_df, params, priority))
+                    cpu_task_pos += 1
+                    num_gpu -= 1
+                else:
+                    tasks.append((new_df, params, priority))
+
+        for i, (new_df, params, priority) in enumerate(tasks):
             future = client.submit(
                 validate_hyperparams,
                 args,
@@ -1104,14 +1112,13 @@ def _bayesopt_run(
                 params,
                 resources={"POWER": power_demand(args, params)},
                 retries=1,
-                key=f"{validate_hyperparams.__name__}-{hpid}",
+                key=f"{validate_hyperparams.__name__}-{uuid.uuid4().hex}",
                 priority=priority,
             )
             future.add_done_callback(hps_task_callback)
             jobs.append(future)
             if i < nworker:
-                interval = random.randint(1000, 5000) / 1000.0
-                time.sleep(interval)
+                time.sleep(random.uniform(1, 5))
         results = client.gather(jobs, errors="skip")
         elapsed = round(time.time() - t1, 3)
         # logger.info("gathered results type %s, len: %s", type(results), len(results))
@@ -1446,7 +1453,10 @@ def covar_metric(
     )
     return None
 
-def prep_covar_baseline_metrics_dummy(anchor_df, anchor_table, args, sem=None, locks=None):
+
+def prep_covar_baseline_metrics_dummy(
+    anchor_df, anchor_table, args, sem=None, locks=None
+):
     futures = []
     table_features = {
         "CN_Index": (
@@ -1767,8 +1777,9 @@ def prep_covar_baseline_metrics_dummy(anchor_df, anchor_table, args, sem=None, l
         if len(futures) > 1:
             _, undone = wait(futures, return_when="FIRST_COMPLETED")
             futures = list(undone)
-    
+
     wait(futures)
+
 
 def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     global random_seed, client, futures

@@ -162,6 +162,7 @@ def merge_covar_df(
 
     return merged_df
 
+
 def fit_with_covar_dummy(
     anchor_symbol,
     anchor_df,
@@ -177,8 +178,10 @@ def fit_with_covar_dummy(
     locks=None,
 ):
     import random
-    time.sleep(random.uniform(3,10))
+
+    time.sleep(random.uniform(3, 10))
     return None
+
 
 def fit_with_covar(
     anchor_symbol,
@@ -360,7 +363,7 @@ def fit_with_covar(
                 impute_df, cov_table, cov_symbol, feature, alchemyEngine, logger
             )
         # return metrics
-        #FIXME: returning None to see if it can fix scheduler performance issue
+        # FIXME: returning None to see if it can fix scheduler performance issue
         return None
 
     try:
@@ -637,7 +640,7 @@ def validate_hyperparams(args, df, covar_set_id, hps_id, params):
             "encountered error with train params: %s", reg_params, exc_info=True
         )
         raise e
-    
+
     return (params, loss_val)
 
 
@@ -968,7 +971,7 @@ def get_topk_foundation_settings(
         case _:
             with_clause = """
                 WITH univ_baseline_nc as (
-                    select cov_table, cov_symbol, feature, symbol
+                    select cov_table, cov_symbol, feature, symbol, symbol_table
                     from paired_correlation
                     where 
                         model = %(model)s
@@ -987,7 +990,7 @@ def get_topk_foundation_settings(
             select
                 hm.hyper_params, hm.mae, hm.rmse, hm.loss, hm.mae_val, 
                 hm.rmse_val, hm.loss_val, hm.hpid, hm.epochs, hm.sub_topk,
-                hm.covar_set_id, hm.anchor_symbol symbol,
+                hm.covar_set_id, hm.anchor_symbol symbol, hm.symbol_table,
                 nc.cov_table, nc.cov_symbol, nc.feature
             from hps_metrics hm
             inner join univ_baseline_nc nc
@@ -1004,11 +1007,12 @@ def get_topk_foundation_settings(
             SELECT 
                 ub.hyper_params, nc.mae, nc.rmse, nc.loss, nc.mae_val,
                 nc.rmse_val, nc.loss_val, ub.hpid, nc.epochs, 1, 
-                0, nc.symbol, nc.cov_table, nc.cov_symbol, nc.feature
+                0, nc.symbol, nc.symbol_table, nc.cov_table, nc.cov_symbol, nc.feature
             FROM {table} nc
             INNER JOIN
                 univ_baseline ub
             ON nc.symbol = ub.symbol
+               and nc.symbol_table = ub.symbol_table 
             where 1=1
                 {model_cond}
                 and nc.ts_date = %(ts_date)s
@@ -1021,12 +1025,12 @@ def get_topk_foundation_settings(
             SELECT 
                 ub.hyper_params, nc.mae, nc.rmse, nc.loss, nc.mae_val,
                 nc.rmse_val, nc.loss_val, ub.hpid, nc.epochs, 1, 
-                0, nc.symbol, nc.cov_table, nc.cov_symbol, nc.feature
+                0, nc.symbol, nc.symbol_table, nc.cov_table, nc.cov_symbol, nc.feature
             FROM {table} nc
             INNER JOIN
                 univ_baseline ub
             ON nc.symbol = ub.symbol
-                and nc.symbol_table = ub.symbol_table
+               and nc.symbol_table = ub.symbol_table
             where 1=1
                 {model_cond}
                 and nc.ts_date = %(ts_date)s
@@ -1056,6 +1060,7 @@ def get_topk_foundation_settings(
 
     df = pd.read_sql(query, alchemyEngine, params=params)
     df.drop("symbol", axis=1, inplace=True)
+    df.drop("symbol_table", axis=1, inplace=True)
 
     return df
 
@@ -2277,6 +2282,7 @@ def min_covar_loss_val(alchemyEngine, model, symbol, symbol_table, ts_date):
                 )
         return result.fetchone()[0]
 
+
 def covars_and_search_dummy(model, client, symbol, alchemyEngine, logger, args):
     import marten.models.hp_search as hps
     from marten.models.hp_search import (
@@ -2311,6 +2317,7 @@ def covars_and_search_dummy(model, client, symbol, alchemyEngine, logger, args):
     prep_covar_baseline_metrics_dummy(anchor_df, anchor_table, args, sem, locks)
 
     wait(hps.futures)
+
 
 def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     global LOSS_CAP
@@ -2428,8 +2435,9 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
 
     # scale-in to preserve more memory for hps
     if args.model != "NeuralProphet":
-        worker_size = int(math.sqrt(args.min_worker * args.max_worker))
+        # worker_size = int(math.sqrt(args.min_worker * args.max_worker))
         # worker_size = args.min_worker
+        worker_size = min(math.ceil(args.batch_size / 2.0), args.max_worker)
         logger.info("Scaling down dask cluster to %s", worker_size)
         scale_cluster_and_wait(client, worker_size)
 
