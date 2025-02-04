@@ -767,6 +767,8 @@ def log_metrics_for_hyper_params(
                     if covar_set_id == 0
                     else "baseline,multivariate"
                 )
+            else:
+                params["enable_lr_find"] = True
             params["h"] = args.future_steps
             params["max_steps"] = epochs
             params["validate"] = True
@@ -774,9 +776,6 @@ def log_metrics_for_hyper_params(
             params["accelerator"] = (
                 "auto" if accelerator == True or accelerator is None else accelerator
             )
-            # FIXME: see if any alternatives to avoid using lock due to performance impact to dask scheduler
-            # if "gpu" not in model.locks.keys():
-            #     model.locks["gpu"] = Lock(name=f"""{socket.gethostname()}::GPU-auto""")
             last_metric = model.train(df, **params)
 
     fit_time = time.time() - start_time
@@ -786,6 +785,7 @@ def log_metrics_for_hyper_params(
         args.model,
         anchor_symbol,
         args.symbol_table,
+        params,
         hpid,
         last_metric["epoch"] + 1,
         last_metric,
@@ -821,6 +821,7 @@ def update_metrics_table(
     model,
     anchor_symbol,
     symbol_table,
+    hyper_params,
     hpid,
     epochs,
     last_metric,
@@ -841,19 +842,58 @@ def update_metrics_table(
         device_info["cpu_cores"] = last_metric["cpu_cores"]
     device_info = json.dumps(device_info, sort_keys=True)
 
+    model_config = {}
+    if "model_config" in last_metric:
+        model_config = json.dumps(last_metric["model_config"], sort_keys=True)
+
     fit_time_str = None
     if "fit_time" in last_metric:
         fit_time_str = str(last_metric["fit_time"]) + " seconds"
     elif fit_time is not None:
         fit_time_str = str(fit_time) + " seconds"
 
+    params = {
+        "model": model,
+        "anchor_symbol": anchor_symbol,
+        "symbol_table": symbol_table,
+        "hpid": hpid,
+        "covar_set_id": covar_set_id,
+        "tag": tag,
+        "mae_val": last_metric["MAE_val"],
+        "rmse_val": last_metric["RMSE_val"],
+        "loss_val": last_metric["Loss_val"],
+        "mae": last_metric["MAE"],
+        "rmse": last_metric["RMSE"],
+        "loss": last_metric["Loss"],
+        "fit_time": fit_time_str,
+        "epochs": epochs,
+        "sub_topk": topk_covar,
+        "hps_id": hps_id,
+        "device_info": device_info,
+        "covars": covars,
+        "model_config": model_config,
+    }
+
+    set_hyper_params = ""
+    if (
+        "learning_rate" not in hyper_params
+        and "learning_rate" in last_metric["model_config"]
+    ) or (
+        "learning_rate" in hyper_params
+        and "learning_rate" in last_metric["model_config"]
+        and hyper_params["learning_rate"] != last_metric["model_config"]
+    ):
+        set_hyper_params = "hyper_params = jsonb_set(hyper_params, '{learning_rate}', ':learning_rate'::jsonb),"
+        params["learning_rate"] = last_metric["model_config"]["learning_rate"]
+
     def action():
         with alchemyEngine.begin() as conn:
             conn.execute(
                 text(
-                    """
+                    f"""
                     UPDATE hps_metrics
                     SET 
+                        {set_hyper_params}
                         mae_val = :mae_val, 
                         rmse_val = :rmse_val, 
                         loss_val = :loss_val, 
@@ -865,7 +905,8 @@ def update_metrics_table(
                         tag = :tag,
                         sub_topk = :sub_topk,
                         device_info = :device_info,
-                        covars = :covars
+                        covars = :covars,
+                        model_config = :model_config
                     WHERE
                         model = :model
                         AND anchor_symbol = :anchor_symbol
@@ -875,26 +916,7 @@ def update_metrics_table(
                         AND hps_id = :hps_id
                 """
                 ),
-                {
-                    "model": model,
-                    "anchor_symbol": anchor_symbol,
-                    "symbol_table": symbol_table,
-                    "hpid": hpid,
-                    "covar_set_id": covar_set_id,
-                    "tag": tag,
-                    "mae_val": last_metric["MAE_val"],
-                    "rmse_val": last_metric["RMSE_val"],
-                    "loss_val": last_metric["Loss_val"],
-                    "mae": last_metric["MAE"],
-                    "rmse": last_metric["RMSE"],
-                    "loss": last_metric["Loss"],
-                    "fit_time": fit_time_str,
-                    "epochs": epochs,
-                    "sub_topk": topk_covar,
-                    "hps_id": hps_id,
-                    "device_info": device_info,
-                    "covars": covars,
-                },
+                params,
             )
 
     for attempt in Retrying(
@@ -1504,7 +1526,6 @@ def forecast(
     model,
     symbol,
     df,
-    ranked_features,
     hps_metric,
     region,
     cutoff_date,
@@ -1675,7 +1696,6 @@ def ensemble_topk_prediction(
     topk,
     hps_id,
     cutoff_date,
-    ranked_features,
     df,
     alchemyEngine,
     logger,
@@ -1724,13 +1744,10 @@ def ensemble_topk_prediction(
                 args.model,
                 symbol,
                 df,
-                ranked_features,
                 row,
                 region,
                 cutoff_date,
                 group_id,
-                # sem=None,
-                # locks=locks,
             )
         )
 

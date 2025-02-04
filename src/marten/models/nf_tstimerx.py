@@ -33,6 +33,7 @@ default_params = {
     "num_lr_decays": -1,
     "early_stop_patience_steps": 10,
     "accelerator": "auto",
+    "learning_rate": 1e-3,  #NOTE: actual lr will be enforced by lr_finder if enabled
 }
 
 batch_sizes = {
@@ -72,6 +73,10 @@ class TSMixerxModel(BaseModel):
         # torch.set_num_interop_threads(1)
 
     def restore_params(self, params: dict, **kwargs: Any) -> dict:
+        if "learning_rate" in params:
+            params.pop("learning_rate")
+        if "batch_size" in params:
+            params.pop("batch_size")
         return params
 
     def power_demand(self, args: SimpleNamespace, params: dict) -> int:
@@ -183,6 +188,9 @@ class TSMixerxModel(BaseModel):
             # barebones=True, # NOTE: this disable logger as well
         }
 
+        if "enable_lr_find" in model_config:
+            model_args["enable_lr_find"] = model_config["enable_lr_find"]
+
         # if model_config["accelerator"] == "gpu" and torch.cuda.is_bf16_supported():
         #     model_args["precision"] = "bf16-mixed"
         # elif model_config["accelerator"] == "cpu":
@@ -222,6 +230,9 @@ class TSMixerxModel(BaseModel):
         seed_logger.setLevel(orig_seed_log_level)
         rank_zero_logger.setLevel(orig_log_level)
 
+        if "enable_lr_find" in model_config and model_config["enable_lr_find"]:
+            model_config["learning_rate"] = self.nf.models[0].learning_rate
+
         return model_config
 
     def baseline_params(self) -> dict:
@@ -249,7 +260,6 @@ class TSMixerxModel(BaseModel):
             ff_dim=range(2, 256+1),
             dropout=uniform(0, 0.5),
             revin=[True, False],
-            learning_rate=loguniform(0.0001, 0.002),
             local_scaler_type=[None, "standard", "robust", "robust-iqr", "minmax"],
             topk_covar=list(range(0, {kwargs["topk_covars"]}+1)),
             covar_dist=dirichlet([float({kwargs["max_covars"]})]*{kwargs["max_covars"]}),

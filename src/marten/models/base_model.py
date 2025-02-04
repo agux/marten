@@ -590,6 +590,7 @@ class BaseModel(ABC):
         metrics["machine"] = socket.gethostname()
         metrics["cpu_cores"] = cpu_cores
         metrics["fit_time"] = fit_time
+        metrics["model_config"] = model_config
 
         self._export_profiles()
 

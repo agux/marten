@@ -108,7 +108,7 @@ def main(args):
     for symbol in args.symbols:
         if args.adhoc:
             # future = client.submit(predict_adhoc, symbol, args)
-            hps_id, cutoff_date, ranked_features, df = covars_and_search(
+            hps_id, cutoff_date, _, df = covars_and_search(
                 model, client, symbol, alchemyEngine, logger, args
             )
             logger.info("Starting adhoc prediction")
@@ -122,7 +122,6 @@ def main(args):
                 args.topk,
                 hps_id,
                 cutoff_date,
-                ranked_features,
                 df,
                 alchemyEngine,
                 logger,
