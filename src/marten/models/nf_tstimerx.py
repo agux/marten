@@ -33,7 +33,7 @@ default_params = {
     "num_lr_decays": -1,
     "early_stop_patience_steps": 10,
     "accelerator": "auto",
-    "learning_rate": 1e-3,  #NOTE: actual lr will be enforced by lr_finder if enabled
+    "learning_rate": 1e-3,  # NOTE: actual lr will be enforced by lr_finder if enabled
 }
 
 batch_sizes = {
@@ -70,6 +70,7 @@ class TSMixerxModel(BaseModel):
         self.nf = None
         self.val_size = None
 
+        self._max_complexity_cpu = 60
         # torch.set_num_interop_threads(1)
 
     def restore_params(self, params: dict, **kwargs: Any) -> dict:
@@ -94,23 +95,21 @@ class TSMixerxModel(BaseModel):
         else:
             return 40, 60
 
+    def _model_complexity(self, **kwargs: Any) -> float:
+        return math.pow(
+            (
+                kwargs["ff_dim"]
+                * kwargs["n_block"]
+                * kwargs["input_size"]
+                * (kwargs["num_covars"] if "num_covars" in kwargs else 1)
+            ),
+            0.2,
+        )
+
     def trainable_on_cpu(self, **kwargs: Any) -> bool:
         if "num_covars" not in kwargs:
             return True
-        return (
-            math.pow(
-                (
-                    kwargs["ff_dim"]
-                    * kwargs["n_block"]
-                    # * kwargs["batch_size"]
-                    * kwargs["input_size"]
-                    * kwargs["num_covars"]
-                ),
-                0.2,
-            )
-            < 60
-        )
-        # return True
+        return self._model_complexity(**kwargs) < self._max_complexity_cpu
 
     def torch_num_threads(self) -> float:
         is_baseline = self.is_baseline(**self.model_args)
@@ -120,8 +119,20 @@ class TSMixerxModel(BaseModel):
             n_workers = num_workers()
             cpu_count = psutil.cpu_count(logical=True)
             quotient = math.ceil(cpu_count / n_workers)
-            choices = [n for n in range(2, quotient + 3)]
-            return random.choice(choices)
+            x = self._model_complexity(**self.model_args)
+            min_x = 35
+            max_x = self._max_complexity_cpu - 5
+            min_y = 2
+            max_y = quotient + 3
+            if x <= min_x:
+                return min_y
+            elif x >= max_x:
+                return max_y
+            else:
+                slope = (max_y - min_y) / (max_x - min_x)
+                return math.round(slope * (x - min_x) + min_y)
+            # choices = [n for n in range(2, quotient + 3)]
+            # return random.choice(choices)
 
     def _train(self, df: pd.DataFrame, **kwargs: Any) -> dict:
         model_config = default_params.copy()
@@ -181,7 +192,7 @@ class TSMixerxModel(BaseModel):
             "accelerator": model_config["accelerator"],
             # devices="auto",  #NOTE: not workable for CPU
             "devices": model_config["devices"],
-            "precision": "bf16-mixed",  #NOTE: saves GPU mem but slower on CPU?
+            "precision": "bf16-mixed",  # NOTE: saves GPU mem but slower on CPU?
             "enable_checkpointing": False,
             "logger": self.trainLogger,  # NOTE: can't disable logger as early stopping rely on it
             "log_every_n_steps": 10,
