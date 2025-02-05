@@ -202,8 +202,9 @@ class TSMixerxModel(BaseModel):
         if "precision" in model_config:
             model_args["precision"] = model_config["precision"]
 
-        if "enable_lr_find" in model_config:
-            model_args["enable_lr_find"] = model_config["enable_lr_find"]
+        #FIXME: temp comment the lines for issue reproduction
+        # if "enable_lr_find" in model_config:
+        #     model_args["enable_lr_find"] = model_config["enable_lr_find"]
 
         # if model_config["accelerator"] == "gpu" and torch.cuda.is_bf16_supported():
         #     model_args["precision"] = "bf16-mixed"
