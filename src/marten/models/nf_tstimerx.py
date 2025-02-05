@@ -130,7 +130,7 @@ class TSMixerxModel(BaseModel):
                 return max_y
             else:
                 slope = (max_y - min_y) / (max_x - min_x)
-                return math.round(slope * (x - min_x) + min_y)
+                return round(slope * (x - min_x) + min_y)
             # choices = [n for n in range(2, quotient + 3)]
             # return random.choice(choices)
 
