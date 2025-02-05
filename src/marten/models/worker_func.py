@@ -282,15 +282,8 @@ def fit_with_covar(
                 )
                 config["validate"] = True
                 config["random_seed"] = random_seed
-                # config["locks"] = locks
-                # get_logger().info("fit_with_covar : %s", locks)
+                config["precision"] = "bf16-mixed"
                 merged_df = merged_df.replace([np.inf, -np.inf], np.nan)
-                # cores = []
-                # try:
-                #     cores = bind_cpu_cores(
-                #         alchemyEngine,
-                #         int(psutil.cpu_count(logical=False) / num_workers()),
-                #     )
                 if not model.accept_missing_data():
                     df_na = merged_df.iloc[:, 1:].isna()
                     if df_na.any().any():
@@ -300,11 +293,6 @@ def fit_with_covar(
                             cov_table,
                             feature,
                         )
-                        # merged_df.to_hdf(
-                        #     f"{anchor_symbol}-{cov_table}-{feature}-{cov_symbol}-unimputed.h5",
-                        #     key="df",
-                        #     mode="w",
-                        # )
                         merged_df, singular_vars = remove_singular_variables(merged_df)
                         if len(singular_vars) > 0:
                             logger.warning(
@@ -319,17 +307,7 @@ def fit_with_covar(
                         if impute_df is not None:
                             impute_df.dropna(axis=1, how="all", inplace=True)
 
-                # merged_df.to_hdf(
-                #     f"{anchor_symbol}-{cov_table}-{feature}-{cov_symbol}.h5",
-                #     key="df",
-                #     mode="w",
-                # )
-
                 metrics = model.train(merged_df, **config)
-                # except Exception as e:
-                #     raise e
-                # finally:
-                #     release_cpu_cores(alchemyEngine, cores)
 
         fit_time = time.time() - start_time
         # get the row count in merged_df as timesteps
