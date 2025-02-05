@@ -341,7 +341,6 @@ def fit_with_covar(
                 impute_df, cov_table, cov_symbol, feature, alchemyEngine, logger
             )
         # return metrics
-        # FIXME: returning None to see if it can fix scheduler performance issue
         return None
 
     try:
