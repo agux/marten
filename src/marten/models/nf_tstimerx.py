@@ -202,6 +202,7 @@ class TSMixerxModel(BaseModel):
 
         if "precision" in model_config:
             model_args["precision"] = model_config["precision"]
+            torch.set_float32_matmul_precision("medium")
 
         if "enable_lr_find" in model_config:
             model_args["enable_lr_find"] = model_config["enable_lr_find"]

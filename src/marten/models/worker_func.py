@@ -341,7 +341,6 @@ def fit_with_covar(
                 impute_df, cov_table, cov_symbol, feature, alchemyEngine, logger
             )
         # return metrics
-        # FIXME: returning None to see if it can fix scheduler performance issue
         return None
 
     try:
@@ -751,6 +750,7 @@ def log_metrics_for_hyper_params(
             params["max_steps"] = epochs
             params["validate"] = True
             params["random_seed"] = random_seed
+            params["precision"] = "bf16-mixed"
             params["accelerator"] = (
                 "auto" if accelerator == True or accelerator is None else accelerator
             )

@@ -601,14 +601,6 @@ def workload_stage():
     """
     client = get_client()
     # with worker_client() as client:
-    # FIXME this method gets stuck after the cluster has been running for a while
-    # call stack:
-    # wait (threading.py:331)
-    # wait (threading.py:629)
-    # wait (distributed/utils.py:425)
-    # sync (distributed/utils.py:436)
-    # sync (distributed/utils.py:363)
-    # get_metadata (distributed/client.py:4639)
     workload_info = client.get_metadata(["workload_info"], None)
     if workload_info is None:
         stage = "unknown"
