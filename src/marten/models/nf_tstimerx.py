@@ -96,14 +96,15 @@ class TSMixerxModel(BaseModel):
             return 40, 60
 
     def _model_complexity(self, **kwargs: Any) -> float:
+        if "num_covars" in kwargs and kwargs["num_covars"] > 0:
+            num_covars = kwargs["num_covars"]
+            p = 0.2
+        else:
+            num_covars = 1
+            p = 0.25
         return math.pow(
-            (
-                kwargs["ff_dim"]
-                * kwargs["n_block"]
-                * kwargs["input_size"]
-                * (kwargs["num_covars"] if "num_covars" in kwargs else 1)
-            ),
-            0.2,
+            (kwargs["ff_dim"] * kwargs["n_block"] * kwargs["input_size"] * num_covars),
+            p,
         )
 
     def trainable_on_cpu(self, **kwargs: Any) -> bool:
@@ -120,14 +121,14 @@ class TSMixerxModel(BaseModel):
             cpu_count = psutil.cpu_count(logical=True)
             quotient = math.ceil(cpu_count / n_workers)
             x = self._model_complexity(**self.model_args)
-            min_x = 35
+            min_x = 30
             max_x = self._max_complexity_cpu - 5
             min_y = 2
             max_y = quotient + 3
             if x <= min_x:
                 return min_y
-            elif x >= max_x:
-                return max_y
+            # elif x >= max_x:
+            #     return max_y
             else:
                 slope = (max_y - min_y) / (max_x - min_x)
                 return round(slope * (x - min_x) + min_y)
