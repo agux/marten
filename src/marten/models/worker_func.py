@@ -2139,6 +2139,8 @@ def fast_bayesopt(
         domain_size = base_ds * 10
     elif domain_size < base_ds:
         domain_size = base_ds
+    
+    domain_size_base = domain_size
 
     if args.model == "SOFTS":
         df, _ = impute(df, args.random_seed, client)
@@ -2170,9 +2172,13 @@ def fast_bayesopt(
             domain_size,
             args.resume.lower() != "none" or i > 0,
         )
-
+        
+        if domain_size:
+            domain_size += domain_size_base
+            
         if min_loss is None or min_loss > base_loss:
             continue
+
         topk_count = count_topk_hp(alchemyEngine, args.model, hps_id, base_loss)
 
         if topk_count >= args.topk:

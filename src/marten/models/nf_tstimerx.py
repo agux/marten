@@ -117,23 +117,23 @@ class TSMixerxModel(BaseModel):
         if is_baseline:
             return int(os.getenv("tsmixerx_torch_num_threads", 1))
         else:
+            # FIXME: temporarily enforce same thread count to identify best complexity algo
             n_workers = num_workers()
-            cpu_count = psutil.cpu_count(logical=True)
-            quotient = math.ceil(cpu_count / n_workers)
-            x = self._model_complexity(**self.model_args)
-            min_x = 30
-            max_x = self._max_complexity_cpu - 5
-            min_y = 2
-            max_y = quotient + 3
-            if x <= min_x:
-                return min_y
-            # elif x >= max_x:
-            #     return max_y
-            else:
-                slope = (max_y - min_y) / (max_x - min_x)
-                return round(slope * (x - min_x) + min_y)
-            # choices = [n for n in range(2, quotient + 3)]
-            # return random.choice(choices)
+            cpu_count = psutil.cpu_count(logical=False)
+            return math.ceil(cpu_count / n_workers)
+            # n_workers = num_workers()
+            # cpu_count = psutil.cpu_count(logical=True)
+            # quotient = math.ceil(cpu_count / n_workers)
+            # x = self._model_complexity(**self.model_args)
+            # min_x = 30
+            # max_x = self._max_complexity_cpu - 5
+            # min_y = 2
+            # max_y = quotient + 3
+            # if x <= min_x:
+            #     return min_y
+            # else:
+            #     slope = (max_y - min_y) / (max_x - min_x)
+            #     return round(slope * (x - min_x) + min_y)
 
     def _train(self, df: pd.DataFrame, **kwargs: Any) -> dict:
         model_config = default_params.copy()
