@@ -131,7 +131,7 @@ class _dummyLock():
     def acquire(self, timeout):
         if not self.lock:
             self.lock = Lock(f"""{socket.gethostname()}::GPU-auto""")
-        return self.lock.acquire(timeout)
+        return self.lock.acquire(timeout=timeout)
 
     def release(self):
         self.lock.release()
@@ -193,7 +193,7 @@ class BaseModel(ABC):
                 name=f"""{socket.gethostname()}::profiler"""
             )
 
-        if not self.locks["profiler"].acquire(2):
+        if not self.locks["profiler"].acquire(timeout=2):
             return
 
         activities = [
@@ -266,10 +266,10 @@ class BaseModel(ABC):
         # get_logger().info("locking accelerator: %s", self.locks)
 
         def lock_device(device):
-            nonlocal accelerator
+            nonlocal accelerator, self
             if self.accelerator_lock is None and accelerator in (device, "auto"):
                 lock = self.locks[device]
-                acquired = lock.acquire(f"{self.lock_wait_time}")
+                acquired = lock.acquire(timeout=f"{self.lock_wait_time}")
                 if acquired:
                     self.accelerator_lock = lock
                     get_logger().debug("lock acquired: %s", self.accelerator_lock.name)
