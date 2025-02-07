@@ -102,7 +102,7 @@ def init(args):
 
             model = TimeMixerModel()
         case "tsmixerx":
-            from marten.models.nf_tstimerx import TSMixerxModel
+            from marten.models.nf_tsmixerx import TSMixerxModel
 
             model = TSMixerxModel()
         case _:

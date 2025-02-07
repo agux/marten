@@ -96,16 +96,52 @@ class TSMixerxModel(BaseModel):
             return 40, 60
 
     def _model_complexity(self, **kwargs: Any) -> float:
-        if "num_covars" in kwargs and kwargs["num_covars"] > 0:
-            num_covars = kwargs["num_covars"]
-            p = 0.2
-        else:
-            num_covars = 1
-            p = 0.25
-        return math.pow(
-            (kwargs["ff_dim"] * kwargs["n_block"] * kwargs["input_size"] * num_covars),
-            p,
-        )
+        n_covars = kwargs["num_covars"] if "num_covars" in kwargs else 0
+        n_block = kwargs["n_block"]
+        input_size = kwargs["input_size"]
+        ff_dim = kwargs["ff_dim"]
+        lr_re = math.pow(
+            1 / kwargs["learning_rate"], 0.3
+        )  # FIXME this is not the real lr if lr_find is enabled
+
+        b = 0
+
+        if (ff_dim >= 10 and n_covars >= 10) and (
+            n_block >= 200 or input_size >= 350 or n_covars >= 290
+        ):
+            b += 15
+
+        if n_covars < 20:
+            b -= 20
+
+        if ff_dim < 20:
+            b -= 20
+        elif ff_dim < 64:
+            b -= 5
+
+        if n_block + ff_dim < 200:
+            b -= 15
+
+        if n_block < 64:
+            b -= 15
+
+        return (
+            0.24 * ff_dim
+            + 2.13 * n_block
+            + 0.11 * input_size
+            + 0.33 * n_covars
+            + 1.7 * lr_re
+        ) / 9 + b
+        # if "num_covars" in kwargs and kwargs["num_covars"] > 0:
+        #     num_covars = kwargs["num_covars"]
+        #     p = 0.2
+        # else:
+        #     num_covars = 1
+        #     p = 0.25
+        # return math.pow(
+        #     (kwargs["ff_dim"] * kwargs["n_block"] * kwargs["input_size"] * num_covars),
+        #     p,
+        # )
 
     def trainable_on_cpu(self, **kwargs: Any) -> bool:
         if "num_covars" not in kwargs:

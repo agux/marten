@@ -76,7 +76,7 @@ class LocalWorkerPlugin(WorkerPlugin):
 
                     worker.model = TimeMixerModel()
                 case "tsmixerx":
-                    from marten.models.nf_tstimerx import TSMixerxModel
+                    from marten.models.nf_tsmixerx import TSMixerxModel
 
                     worker.model = TSMixerxModel()
                 case _:
