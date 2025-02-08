@@ -100,9 +100,6 @@ class TSMixerxModel(BaseModel):
         n_block = kwargs["n_block"]
         input_size = kwargs["input_size"]
         ff_dim = kwargs["ff_dim"]
-        lr_re = math.pow(
-            1 / kwargs["learning_rate"], 0.3
-        )  # FIXME this is not the real lr if lr_find is enabled
 
         b = 0
 
