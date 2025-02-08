@@ -114,24 +114,34 @@ class TSMixerxModel(BaseModel):
         if n_covars < 20:
             b -= 20
 
-        if ff_dim < 20:
+        if input_size + ff_dim < 70:
+            b -= 30
+        elif input_size + ff_dim < 100:
             b -= 20
-        elif ff_dim < 64:
+        elif input_size + ff_dim < 150:
+            b -= 15
+        
+        if ff_dim < 10:
+            b -= 20
+        elif ff_dim < 20:
+            b -= 10
+        elif ff_dim < 30:
             b -= 5
 
-        if n_block + ff_dim < 200:
+        if n_block + ff_dim < 150:
+            b -= 10
+        elif n_block + ff_dim < 200:
             b -= 15
 
         if n_block < 64:
             b -= 15
 
         return (
-            0.24 * ff_dim
-            + 2.13 * n_block
-            + 0.11 * input_size
-            + 0.33 * n_covars
-            + 1.7 * lr_re
-        ) / 9 + b
+            0.45 * ff_dim
+            + 2.31 * n_block
+            + 0.28 * input_size
+            + 0.27 * n_covars
+        ) / 8.2 + b
         # if "num_covars" in kwargs and kwargs["num_covars"] > 0:
         #     num_covars = kwargs["num_covars"]
         #     p = 0.2
@@ -170,6 +180,11 @@ class TSMixerxModel(BaseModel):
             # else:
             #     slope = (max_y - min_y) / (max_x - min_x)
             #     return round(slope * (x - min_x) + min_y)
+
+    def _build_model(self, df: pd.DataFrame, **kwargs: Any):
+        #TODO: building the model relies on accelerator, but selecting accelerator depends on lr_find
+        # which must be run on the model.
+        pass
 
     def _train(self, df: pd.DataFrame, **kwargs: Any) -> dict:
         model_config = default_params.copy()

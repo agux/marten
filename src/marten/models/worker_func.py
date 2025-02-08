@@ -2151,10 +2151,11 @@ def fast_bayesopt(
     # split large iterations into smaller runs to avoid OOM / memory leak
     for i in range(args.max_itr):
         logger.info(
-            "running bayesopt mini-iteration %s/%s batch size: %s runs: %s",
+            "running bayesopt mini-iteration %s/%s batch size: %s  domain size: %s runs: %s",
             i + 1,
             args.max_itr,
             n_jobs,
+            domain_size,
             args.mini_itr,
         )
         min_loss = _bayesopt_run(
@@ -2174,8 +2175,8 @@ def fast_bayesopt(
         )
         
         if domain_size:
-            domain_size += domain_size_base
-            
+                domain_size += domain_size_base
+
         if min_loss is None or min_loss > base_loss:
             continue
 

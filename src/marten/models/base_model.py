@@ -632,6 +632,13 @@ class BaseModel(ABC):
         self.profiler.export_stacks(stacks_file)
 
     @abstractmethod
+    def _build_model(self, df: pd.DataFrame, **kwargs: Any):
+        """
+        Build the model and instantiates self.model, self.nf
+        """
+        pass
+        
+    @abstractmethod
     def trainable_on_cpu(self, **kwargs: Any) -> bool:
         """
         Indicates whether the model with the given parameter can be trained on CPU if the accelerator is busy.
