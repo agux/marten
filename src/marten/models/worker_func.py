@@ -2,11 +2,8 @@ import time
 import pandas as pd
 import json
 import hashlib
-import traceback
 import math
-import psutil
 import os
-import asyncio
 import logging
 
 logging.getLogger("NP.plotly").setLevel(logging.CRITICAL)
@@ -17,6 +14,7 @@ logging.getLogger("prophet.plot").disabled = True
 
 import numpy as np
 from datetime import datetime, timedelta
+from collections import deque
 from sqlalchemy import text
 from psycopg2.extras import execute_values
 from neuralprophet.event_utils import get_all_holidays
@@ -1414,9 +1412,6 @@ def save_forecast_snapshot(
                 forecast_params = get_worker().model.trim_forecast(forecast)
 
         forecast_params.rename(columns={"ds": "date"}, inplace=True)
-        forecast_params.loc[:, "symbol"] = symbol
-        forecast_params.loc[:, "symbol_table"] = symbol_table
-        forecast_params.loc[:, "snapshot_id"] = snapshot_id
         # country_holidays = get_country_holidays(region)
         country_holidays = get_all_holidays(
             years=forecast_params["date"].dt.year.unique(), country=region
@@ -1424,10 +1419,92 @@ def save_forecast_snapshot(
         forecast_params.loc[:, "holiday"] = forecast_params["date"].apply(
             lambda x: check_holiday(x, country_holidays)
         )
+        forecast_params.loc[:, "symbol"] = symbol
+        forecast_params.loc[:, "symbol_table"] = symbol_table
+        forecast_params.loc[:, "snapshot_id"] = snapshot_id
         forecast_params.to_sql("forecast_params", conn, if_exists="append", index=False)
 
     return snapshot_id, len(forecast_params)
 
+def shift_series_with_holiday(df: pd.DataFrame, region) -> pd.DataFrame:
+    df.set_index("date", inplace=True)
+    df.sort_index(inplace=True)
+
+    # Initialize variables
+    variable_queue = deque()
+    shifted_data = []
+
+    # Define all dates needed, extending beyond the original data if necessary
+    start_date = df.index.min()
+    # We add extra days to accommodate shifted values beyond the original date range
+    end_date = df.index.max() + pd.Timedelta(days=len(df))
+    all_dates = pd.DataFrame(
+        {"date": pd.bdate_range(start=start_date, end=end_date), "holiday": None}
+    )
+    country_holidays = get_all_holidays(
+        years=all_dates["date"].dt.year.unique(), country=region
+    )
+    all_dates.loc[:, "holiday"] = all_dates["date"].apply(
+        lambda x: check_holiday(x, country_holidays)
+    )
+
+    # Identify variable columns
+    variable_columns = [col for col in df.columns if col not in ("date", "holiday")]
+
+    for date_row in all_dates.itertuples():
+        current_date = date_row.date
+        # Check if we have exhausted the original data
+        if current_date in df.index:
+            row = df.loc[current_date]
+            holiday = date_row.holiday
+            if pd.notnull(holiday):
+                # Holiday: set variable values to zero for this date
+                shifted_row = {"date": current_date, "holiday": holiday}
+                shifted_row.update(
+                    {col: 0 if col == "yhat_n" else None for col in variable_columns}
+                )
+                shifted_data.append(shifted_row)
+                # Add the variable values to the queue for shifting
+                variable_queue.append({col: row[col] for col in variable_columns})
+            else:
+                if variable_queue:
+                    # Assign the oldest variable values from the queue
+                    shifted_values = variable_queue.popleft()
+                    shifted_row = {"date": current_date, "holiday": None}
+                    shifted_row.update(shifted_values)
+                    shifted_data.append(shifted_row)
+                    # Add the current variable values to the queue
+                    variable_queue.append({col: row[col] for col in variable_columns})
+                else:
+                    # No shifts needed, assign the current variable values
+                    shifted_row = {"date": current_date, "holiday": None}
+                    shifted_row.update({col: row[col] for col in variable_columns})
+                    shifted_data.append(shifted_row)
+        else:
+            # No more original data, but there may be queued values to assign
+            if variable_queue:
+                # Assign the oldest variable from the queue
+                shifted_values = variable_queue.popleft()
+                shifted_row = {"date": current_date, "holiday": None}
+                shifted_row.update(shifted_values)
+                shifted_data.append(shifted_row)
+            else:
+                # No data left to process
+                break
+
+    # Create the shifted DataFrame
+    shifted_df = pd.DataFrame(shifted_data)
+    shifted_df.set_index("date", inplace=True)
+
+    # Drop any dates beyond the last assigned variable
+    last_assigned_date = shifted_df["yhat_n"].last_valid_index()
+    shifted_df = shifted_df.loc[:last_assigned_date]
+
+    # Sort the DataFrame by date
+    shifted_df.sort_index(inplace=True)
+    shifted_df.reset_index(inplace=True)
+
+    return shifted_df
 
 def train_predict(
     model,

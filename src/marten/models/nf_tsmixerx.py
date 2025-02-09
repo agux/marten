@@ -87,7 +87,7 @@ class TSMixerxModel(BaseModel):
         if self.is_baseline(**self.model_args):
             return 40, 50
         else:
-            return 35, 35
+            return 10, 35
 
     def cpu_threshold(self) -> Tuple[float, float]:
         if self.is_baseline(**self.model_args):
@@ -322,10 +322,10 @@ class TSMixerxModel(BaseModel):
             input_size=range(5, 500+1),
             n_block=range(2, 256+1),
             ff_dim=range(2, 256+1),
-            dropout=uniform(0, 0.5),
+            dropout=uniform(0.1, 0.5),
             revin=[True, False],
             local_scaler_type=[None, "standard", "robust", "robust-iqr", "minmax"],
-            topk_covar=list(range(0, {kwargs["topk_covars"]}+1)),
+            topk_covar=range(0, {kwargs["topk_covars"]}+1),
             covar_dist=dirichlet([float({kwargs["max_covars"]})]*{kwargs["max_covars"]}),
             optimizer=["Adam", "AdamW", "SGD"],
         )"""
