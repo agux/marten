@@ -17,7 +17,8 @@ from datetime import datetime, timedelta
 from collections import deque
 from sqlalchemy import text
 from psycopg2.extras import execute_values
-from neuralprophet.event_utils import get_all_holidays
+# from neuralprophet.event_utils import get_all_holidays
+import holidays
 import dask
 from dask.distributed import get_worker, worker_client, Semaphore, wait
 from types import SimpleNamespace
@@ -1412,10 +1413,7 @@ def save_forecast_snapshot(
                 forecast_params = get_worker().model.trim_forecast(forecast)
 
         forecast_params.rename(columns={"ds": "date"}, inplace=True)
-        # country_holidays = get_country_holidays(region)
-        country_holidays = get_all_holidays(
-            years=forecast_params["date"].dt.year.unique(), country=region
-        )
+        country_holidays = holidays.country_holidays(years=forecast_params["date"].dt.year.unique(), country=region)
         forecast_params.loc[:, "holiday"] = forecast_params["date"].apply(
             lambda x: check_holiday(x, country_holidays)
         )
@@ -1441,7 +1439,7 @@ def shift_series_with_holiday(df: pd.DataFrame, region) -> pd.DataFrame:
     all_dates = pd.DataFrame(
         {"date": pd.bdate_range(start=start_date, end=end_date), "holiday": None}
     )
-    country_holidays = get_all_holidays(
+    country_holidays = holidays.country_holidays(
         years=all_dates["date"].dt.year.unique(), country=region
     )
     all_dates.loc[:, "holiday"] = all_dates["date"].apply(
@@ -2009,7 +2007,7 @@ def save_ensemble_snapshot(
             ]
         )
     )
-    country_holidays = get_all_holidays(years=years, country=region)
+    country_holidays = holidays.country_holidays(years=years, country=region)
     # country_holidays = get_country_holidays(region)
     hyper_params = json.dumps(
         [
