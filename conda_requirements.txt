@@ -6,6 +6,7 @@ ml_dtypes
 glances
 akshare
 mini-racer
+chinesecalendar
 stock-indicators # Requires manual installation of .NET SDK
     # The following packages require special handling:
     # neuralprophet               # Needs installation from source

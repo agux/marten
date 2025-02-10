@@ -19,6 +19,7 @@ from sqlalchemy import text
 from psycopg2.extras import execute_values
 # from neuralprophet.event_utils import get_all_holidays
 import holidays
+import chinese_calendar
 import dask
 from dask.distributed import get_worker, worker_client, Semaphore, wait
 from types import SimpleNamespace
@@ -1293,10 +1294,7 @@ def get_best_prediction_setting(alchemyEngine, logger, symbol, df, topk, nth_top
 
 # Function to check if a date is a holiday and return the holiday name
 def check_holiday(date, country_holidays):
-    for holiday_name, dates in country_holidays.items():
-        if date in dates:
-            return holiday_name
-    return None
+    return country_holidays[date] if date in country_holidays else None
 
 
 def trim_forecasts_by_dates(forecast):
@@ -1343,6 +1341,7 @@ def save_forecast_snapshot(
     future_df["plus_one"] = future_df["yhat_n"] / 100.0 + 1.0
     future_df["accumulated_returns"] = future_df["plus_one"].cumprod()
     cum_returns = (future_df["accumulated_returns"].iloc[-1] - 1.0) * 100.0
+    #TODO: record cum_returns for every row in the following forecast_params
 
     with alchemyEngine.begin() as conn:
         result = conn.execute(
@@ -1413,10 +1412,11 @@ def save_forecast_snapshot(
                 forecast_params = get_worker().model.trim_forecast(forecast)
 
         forecast_params.rename(columns={"ds": "date"}, inplace=True)
-        country_holidays = holidays.country_holidays(years=forecast_params["date"].dt.year.unique(), country=region)
-        forecast_params.loc[:, "holiday"] = forecast_params["date"].apply(
-            lambda x: check_holiday(x, country_holidays)
-        )
+        # country_holidays = get_holidays(years=forecast_params["date"].dt.year.unique(), country=region)
+        # forecast_params.loc[:, "holiday"] = forecast_params["date"].apply(
+        #     lambda x: check_holiday(x, country_holidays)
+        # )
+        forecast_params = shift_series_with_holiday(forecast_params, region)
         forecast_params.loc[:, "symbol"] = symbol
         forecast_params.loc[:, "symbol_table"] = symbol_table
         forecast_params.loc[:, "snapshot_id"] = snapshot_id
@@ -1424,7 +1424,23 @@ def save_forecast_snapshot(
 
     return snapshot_id, len(forecast_params)
 
+
+def get_holidays(years, region):
+    if region == "CN":
+        return {
+            pd.to_datetime(k): v
+            for k, v in chinese_calendar.constants.holidays.items()
+            if k.year in years
+        }
+    else:
+        return {
+            pd.to_datetime(k): v
+            for k, v in holidays.country_holidays(years=years, country=region)
+        }
+
+
 def shift_series_with_holiday(df: pd.DataFrame, region) -> pd.DataFrame:
+    df = df.copy()
     df.set_index("date", inplace=True)
     df.sort_index(inplace=True)
 
@@ -1439,9 +1455,8 @@ def shift_series_with_holiday(df: pd.DataFrame, region) -> pd.DataFrame:
     all_dates = pd.DataFrame(
         {"date": pd.bdate_range(start=start_date, end=end_date), "holiday": None}
     )
-    country_holidays = holidays.country_holidays(
-        years=all_dates["date"].dt.year.unique(), country=region
-    )
+    country_holidays = get_holidays(all_dates["date"].dt.year.unique(), region)
+    # all_dates["date"] = all_dates["date"].dt.strftime("%Y-%m-%d")
     all_dates.loc[:, "holiday"] = all_dates["date"].apply(
         lambda x: check_holiday(x, country_holidays)
     )
@@ -1451,10 +1466,10 @@ def shift_series_with_holiday(df: pd.DataFrame, region) -> pd.DataFrame:
 
     for date_row in all_dates.itertuples():
         current_date = date_row.date
+        holiday = date_row.holiday
         # Check if we have exhausted the original data
         if current_date in df.index:
             row = df.loc[current_date]
-            holiday = date_row.holiday
             if pd.notnull(holiday):
                 # Holiday: set variable values to zero for this date
                 shifted_row = {"date": current_date, "holiday": holiday}
@@ -1478,17 +1493,24 @@ def shift_series_with_holiday(df: pd.DataFrame, region) -> pd.DataFrame:
                     shifted_row = {"date": current_date, "holiday": None}
                     shifted_row.update({col: row[col] for col in variable_columns})
                     shifted_data.append(shifted_row)
-        else:
+        elif variable_queue:
             # No more original data, but there may be queued values to assign
-            if variable_queue:
+            if pd.notnull(holiday):
+                # Holiday: set variable values to zero for this date
+                shifted_row = {"date": current_date, "holiday": holiday}
+                shifted_row.update(
+                    {col: 0 if col == "yhat_n" else None for col in variable_columns}
+                )
+                shifted_data.append(shifted_row)
+            else:
                 # Assign the oldest variable from the queue
                 shifted_values = variable_queue.popleft()
                 shifted_row = {"date": current_date, "holiday": None}
                 shifted_row.update(shifted_values)
                 shifted_data.append(shifted_row)
-            else:
-                # No data left to process
-                break
+        else:
+            # No data left to process
+            break
 
     # Create the shifted DataFrame
     shifted_df = pd.DataFrame(shifted_data)
@@ -1501,8 +1523,10 @@ def shift_series_with_holiday(df: pd.DataFrame, region) -> pd.DataFrame:
     # Sort the DataFrame by date
     shifted_df.sort_index(inplace=True)
     shifted_df.reset_index(inplace=True)
+    shifted_df.replace({np.nan: None}, inplace=True)
 
     return shifted_df
+
 
 def train_predict(
     model,
@@ -2007,7 +2031,7 @@ def save_ensemble_snapshot(
             ]
         )
     )
-    country_holidays = holidays.country_holidays(years=years, country=region)
+    country_holidays = get_holidays(years=years, country=region)
     # country_holidays = get_country_holidays(region)
     hyper_params = json.dumps(
         [
