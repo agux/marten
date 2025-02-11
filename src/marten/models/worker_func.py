@@ -1312,6 +1312,11 @@ def distance(forecast):
     std_diff = (np.sqrt((forecast_nona["yhat_n"] - forecast_nona["y"]) ** 2)).std()
     return mean_diff, std_diff
 
+def calc_cum_returns(df: pd.DataFrame):
+    df["plus_one"] = df["yhat_n"] / 100.0 + 1.0
+    df["cum_returns"] = df["plus_one"].cumprod()
+    df["cum_returns"] = (df["cum_returns"] - 1.0) * 100.0
+    df.drop("plus_one", axis=1, inplace=True)
 
 def save_forecast_snapshot(
     alchemyEngine,
@@ -1338,10 +1343,7 @@ def save_forecast_snapshot(
     forecast = trim_forecasts_by_dates(forecast)
     future_df = forecast[forecast["ds"] > datetime.now()][["ds", "yhat_n"]].copy()
     avg_yhat = future_df["yhat_n"].mean()
-    future_df["plus_one"] = future_df["yhat_n"] / 100.0 + 1.0
-    future_df["accumulated_returns"] = future_df["plus_one"].cumprod()
-    cum_returns = (future_df["accumulated_returns"].iloc[-1] - 1.0) * 100.0
-    #TODO: record cum_returns for every row in the following forecast_params
+    calc_cum_returns(future_df)
 
     with alchemyEngine.begin() as conn:
         result = conn.execute(
@@ -1395,7 +1397,7 @@ def save_forecast_snapshot(
                 "avg_loss": avg_loss,
                 "covar": covar,
                 "avg_yhat": avg_yhat,
-                "cum_returns": cum_returns,
+                "cum_returns": future_df["cum_returns"].iloc[-1],
             },
         )
         snapshot_id = result.fetchone()[0]
@@ -1417,6 +1419,7 @@ def save_forecast_snapshot(
         #     lambda x: check_holiday(x, country_holidays)
         # )
         forecast_params = shift_series_with_holiday(forecast_params, region)
+        calc_cum_returns(forecast_params)
         forecast_params.loc[:, "symbol"] = symbol
         forecast_params.loc[:, "symbol_table"] = symbol_table
         forecast_params.loc[:, "snapshot_id"] = snapshot_id
