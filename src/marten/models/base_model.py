@@ -380,7 +380,7 @@ class BaseModel(ABC):
     def _get_metrics(self, **kwargs: Any) -> dict:
         train_trajectories = self.nf.models[0].train_trajectories
         if kwargs["accelerator"] == "gpu" and not self.is_baseline(**self.model_args):
-            # without exclusive lock, it may fail due to insufficient GPU memory.
+            # without exclusive lock, it may fail due to parallel overuse and insufficient GPU memory.
             while True:
                 if self._lock_accelerator("gpu") == "gpu":
                     break
@@ -764,11 +764,15 @@ class BaseModel(ABC):
                 else:
                     # time.sleep(0.5)
                     threading.Event().wait(0.5)
-        forecast = self._predict(df, **kwargs)
-        # convert np.float32 type columns in forecast dataframe to native float,
-        # to avoid `psycopg2.ProgrammingError: can't adapt type 'numpy.float32'`
-        for col in forecast.select_dtypes(include=[np.float32]).columns:
-            forecast[col] = forecast[col].astype(float)
+        try:
+            forecast = self._predict(df, **kwargs)
+            # convert np.float32 type columns in forecast dataframe to native float,
+            # to avoid `psycopg2.ProgrammingError: can't adapt type 'numpy.float32'`
+            for col in forecast.select_dtypes(include=[np.float32]).columns:
+                forecast[col] = forecast[col].astype(float)
+        finally:
+            self.release_accelerator_lock()
+            
         return forecast
 
     def _neural_impute(self, df):
