@@ -2071,10 +2071,11 @@ def save_ensemble_snapshot(
 
     ens_df.reset_index(inplace=True)
     avg_yhat = ens_df["yhat_n"].mean()
-    ens_df["plus_one"] = ens_df["yhat_n"] / 100.0 + 1.0
-    ens_df["accumulated_returns"] = ens_df["plus_one"].cumprod()
-    cum_returns = (ens_df["accumulated_returns"].iloc[-1] - 1.0) * 100.0
-    ens_df.drop(columns=["plus_one", "accumulated_returns"], inplace=True)
+    calc_cum_returns(ens_df)
+    # ens_df["plus_one"] = ens_df["yhat_n"] / 100.0 + 1.0
+    # ens_df["accumulated_returns"] = ens_df["plus_one"].cumprod()
+    # cum_returns = (ens_df["accumulated_returns"].iloc[-1] - 1.0) * 100.0
+    # ens_df.drop(columns=["plus_one", "accumulated_returns"], inplace=True)
 
     with alchemyEngine.begin() as conn:
         result = conn.execute(
@@ -2106,7 +2107,7 @@ def save_ensemble_snapshot(
                 "group_id": group_id,
                 "cutoff_date": cutoff_date,
                 "avg_yhat": avg_yhat,
-                "cum_returns": cum_returns,
+                "cum_returns": ens_df["cum_returns"].iloc[-1],
             },
         )
         snapshot_id = result.fetchone()[0]
