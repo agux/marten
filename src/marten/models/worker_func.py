@@ -1418,11 +1418,11 @@ def save_forecast_snapshot(
         # forecast_params.loc[:, "holiday"] = forecast_params["date"].apply(
         #     lambda x: check_holiday(x, country_holidays)
         # )
-        min_date, max_date, len = forecast_params["date"].min(), forecast_params["date"].max(), len(forecast_params)
+        min_date, max_date, size = forecast_params["date"].min(), forecast_params["date"].max(), len(forecast_params)
         forecast_params = shift_series_with_holiday(forecast_params, region)
         get_logger().info(
             "Before shift: min=%s,max=%s,len=%s After shift: min=%s,max=%s,len=%s",
-            min_date, max_date, len,
+            min_date, max_date, size,
             forecast_params["date"].min(), forecast_params["date"].max(), len(forecast_params)
         )
         calc_cum_returns(forecast_params)
