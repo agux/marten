@@ -306,6 +306,7 @@ class TSMixerxModel(BaseModel):
         return forecast[["ds", "yhat_n"]].copy()
 
     def _predict(self, df: pd.DataFrame, **kwargs: Any) -> pd.DataFrame:
+        #NOTE: the number of future days (horizon) are set by "D" frequency instead of "B"
         forecast = self.nf.predict(df)
         # check if "id" column is in the forecast dataframe. If so, drop this column.
         if "index" in forecast.columns:

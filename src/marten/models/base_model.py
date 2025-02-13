@@ -130,7 +130,7 @@ class _dummyLock():
 
     def acquire(self, timeout):
         if not self.lock:
-            self.lock = Lock(f"""{socket.gethostname()}::GPU-auto""")
+            self.lock = Lock(self.name)
         return self.lock.acquire(timeout=timeout)
 
     def release(self):

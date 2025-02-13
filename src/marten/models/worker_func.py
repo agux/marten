@@ -2512,10 +2512,9 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
             base_loss,
         )
 
-    # FIXME scale up the cluster to args.max_worker, disabled for troubleshooting purpose
-    # logger.info("Scaling dask cluster to %s", args.max_worker)
-    # client.cluster.scale(args.max_worker)
-    # scale_cluster_and_wait(client, args.max_worker)
+    logger.info("Scaling dask cluster to %s", args.max_worker)
+    client.cluster.scale(args.max_worker)
+    scale_cluster_and_wait(client, args.max_worker)
 
     if args.resume in ("none", "covar"):
         # run covariate loss calculation in batch
@@ -2545,9 +2544,9 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
 
     # scale-in to preserve more memory for hps
     if args.model != "NeuralProphet":
-        # worker_size = int(math.sqrt(args.min_worker * args.max_worker))
+        worker_size = int(math.sqrt(args.min_worker * args.max_worker))
         # worker_size = args.min_worker
-        worker_size = min(math.ceil(args.batch_size / 2.0), args.max_worker)
+        # worker_size = min(math.ceil(args.batch_size / 2.0), args.max_worker)
         logger.info("Scaling down dask cluster to %s", worker_size)
         scale_cluster_and_wait(client, worker_size)
 
