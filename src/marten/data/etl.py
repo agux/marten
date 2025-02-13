@@ -11,6 +11,7 @@ import yappi
 # import pytz
 # import pandas as pd
 # from IPython.display import display, HTML
+from dask.distributed import wait
 
 from marten.utils.logger import get_logger
 from marten.utils.database import get_database_engine
@@ -177,7 +178,9 @@ def main(_args):
         scale_cluster_and_wait(client, max(1, n_workers / 2))
         # client.cluster.scale(max(1, n_workers / 2))
         run(calc_ta)
-        await_futures(futures)
+        wait(futures)
+        #NOTE: the following function might get stuck sometimes, reason unknown
+        # await_futures(futures)
 
     logger.info("Total time taken: %s seconds", time.time() - t_start)
 

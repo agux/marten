@@ -381,12 +381,7 @@ class BaseModel(ABC):
         train_trajectories = self.nf.models[0].train_trajectories
         if kwargs["accelerator"] == "gpu" and not self.is_baseline(**self.model_args):
             # without exclusive lock, it may fail due to parallel overuse and insufficient GPU memory.
-            while True:
-                if self._lock_accelerator("gpu") == "gpu":
-                    break
-                else:
-                    # time.sleep(0.5)
-                    threading.Event().wait(0.5)
+            self._lock_accelerator("gpu")
         try:
             forecast = self.nf.predict_insample()
         except Exception as e:
@@ -757,13 +752,7 @@ class BaseModel(ABC):
         df = df.copy()
         df.insert(0, "unique_id", "0")
         if self.model_args["accelerator"] == "gpu":
-            # without exclusive lock, it may fail due to insufficient GPU memory.
-            while True:
-                if self._lock_accelerator("gpu") == "gpu":
-                    break
-                else:
-                    # time.sleep(0.5)
-                    threading.Event().wait(0.5)
+            self._lock_accelerator("gpu")
         try:
             forecast = self._predict(df, **kwargs)
             # convert np.float32 type columns in forecast dataframe to native float,
@@ -772,7 +761,7 @@ class BaseModel(ABC):
                 forecast[col] = forecast[col].astype(float)
         finally:
             self.release_accelerator_lock()
-            
+
         return forecast
 
     def _neural_impute(self, df):
