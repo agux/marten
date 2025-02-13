@@ -1419,7 +1419,7 @@ def save_forecast_snapshot(
         #     lambda x: check_holiday(x, country_holidays)
         # )
         min_date, max_date, size = forecast_params["date"].min(), forecast_params["date"].max(), len(forecast_params)
-        forecast_params = shift_series_with_holiday(forecast_params, region)
+        forecast_params = shift_series_on_holiday(forecast_params, region)
         get_logger().info(
             "Before shift: min=%s,max=%s,len=%s After shift: min=%s,max=%s,len=%s",
             min_date, max_date, size,
@@ -1448,7 +1448,7 @@ def get_holidays(years, region):
         }
 
 
-def shift_series_with_holiday(df: pd.DataFrame, region) -> pd.DataFrame:
+def shift_series_on_holiday(df: pd.DataFrame, region) -> pd.DataFrame:
     df = df.copy()
     df.set_index("date", inplace=True)
     df.sort_index(inplace=True)
