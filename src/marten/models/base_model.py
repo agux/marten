@@ -320,6 +320,7 @@ class BaseModel(ABC):
 
     def _select_accelerator(self) -> str:
         accelerator = self.model_args["accelerator"].lower()
+        max_leases = self.model_args["gpu_proc"] if "gpu_proc" in self.model_args else 2
         # if accelerator == "cpu":
         #     return accelerator
         is_baseline = self.is_baseline(**self.model_args)
@@ -331,9 +332,9 @@ class BaseModel(ABC):
             accelerator = "gpu"
             name = f"""{socket.gethostname()}::GPU-auto"""
             if "gpu" not in self.locks.keys() or (
-                is_baseline and self.locks["gpu"].max_leases != 2
+                is_baseline and self.locks["gpu"].max_leases != max_leases
             ):
-                self.locks["gpu"] = _dummyLock(max_leases=2, name=name)
+                self.locks["gpu"] = _dummyLock(max_leases=max_leases, name=name)
             elif "gpu" not in self.locks.keys() or (
                 not is_baseline and self.locks["gpu"].max_leases != 1
             ):

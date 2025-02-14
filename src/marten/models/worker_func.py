@@ -280,6 +280,7 @@ def fit_with_covar(
                     if isinstance(accelerator, str)
                     else "auto" if accelerator == True else "cpu"
                 )
+                config["gpu_proc"] = args.gpu_proc
                 config["validate"] = True
                 config["random_seed"] = random_seed
                 config["precision"] = "bf16-mixed"
@@ -578,6 +579,7 @@ def train(
                 if isinstance(kwargs["accelerator"], str)
                 else "auto" if kwargs["accelerator"] == True else "cpu"
             )
+            config["gpu_proc"] = args.gpu_proc
             config["max_steps"] = epochs
             config["h"] = args.future_steps
             metrics = model.train(
@@ -754,6 +756,7 @@ def log_metrics_for_hyper_params(
             params["accelerator"] = (
                 "auto" if accelerator == True or accelerator is None else accelerator
             )
+            params["gpu_proc"] = args.gpu_proc
             last_metric = model.train(df, **params)
 
     fit_time = time.time() - start_time

@@ -87,6 +87,16 @@ def configure_parser(parser):
         ),
     )
     parser.add_argument(
+        "--gpu_proc",
+        action="store",
+        type=int,
+        default=2,
+        help=(
+            "Number of worker processes that can utilize GPU for covar search in parallel. "
+            "Defaults to 2."
+        ),
+    )
+    parser.add_argument(
         "--future_steps",
         action="store",
         type=int,
