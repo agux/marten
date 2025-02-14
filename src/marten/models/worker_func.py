@@ -1418,13 +1418,13 @@ def save_forecast_snapshot(
         # forecast_params.loc[:, "holiday"] = forecast_params["date"].apply(
         #     lambda x: check_holiday(x, country_holidays)
         # )
-        min_date, max_date, size = forecast_params["date"].min(), forecast_params["date"].max(), len(forecast_params)
+        # min_date, max_date, size = forecast_params["date"].min(), forecast_params["date"].max(), len(forecast_params)
         forecast_params = shift_series_on_holiday(forecast_params, region)
-        get_logger().info(
-            "Before shift: min=%s,max=%s,len=%s After shift: min=%s,max=%s,len=%s",
-            min_date, max_date, size,
-            forecast_params["date"].min(), forecast_params["date"].max(), len(forecast_params)
-        )
+        # get_logger().info(
+        #     "Before shift: min=%s,max=%s,len=%s After shift: min=%s,max=%s,len=%s",
+        #     min_date, max_date, size,
+        #     forecast_params["date"].min(), forecast_params["date"].max(), len(forecast_params)
+        # )
         calc_cum_returns(forecast_params)
         forecast_params.loc[:, "symbol"] = symbol
         forecast_params.loc[:, "symbol_table"] = symbol_table
@@ -2070,8 +2070,9 @@ def save_ensemble_snapshot(
             ens_df["yhat_n"] += df["yhat_n"]
 
     ens_df.reset_index(inplace=True)
-    avg_yhat = ens_df["yhat_n"].mean()
+    shift_series_on_holiday(ens_df, region)
     calc_cum_returns(ens_df)
+    avg_yhat = ens_df["yhat_n"].mean()
     # ens_df["plus_one"] = ens_df["yhat_n"] / 100.0 + 1.0
     # ens_df["accumulated_returns"] = ens_df["plus_one"].cumprod()
     # cum_returns = (ens_df["accumulated_returns"].iloc[-1] - 1.0) * 100.0

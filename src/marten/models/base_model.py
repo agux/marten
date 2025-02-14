@@ -381,7 +381,12 @@ class BaseModel(ABC):
         train_trajectories = self.nf.models[0].train_trajectories
         if kwargs["accelerator"] == "gpu" and not self.is_baseline(**self.model_args):
             # without exclusive lock, it may fail due to parallel overuse and insufficient GPU memory.
-            self._lock_accelerator("gpu")
+            self.release_accelerator_lock()
+            while True:
+                if self._lock_accelerator("gpu") == "gpu":
+                    break
+                else:
+                    threading.Event().wait(0.5)
         try:
             forecast = self.nf.predict_insample()
         except Exception as e:
@@ -632,7 +637,7 @@ class BaseModel(ABC):
         Build the model and instantiates self.model, self.nf
         """
         pass
-        
+
     @abstractmethod
     def trainable_on_cpu(self, **kwargs: Any) -> bool:
         """
@@ -752,7 +757,12 @@ class BaseModel(ABC):
         df = df.copy()
         df.insert(0, "unique_id", "0")
         if self.model_args["accelerator"] == "gpu":
-            self._lock_accelerator("gpu")
+            self.release_accelerator_lock()
+            while True:
+                if self._lock_accelerator("gpu") == "gpu":
+                    break
+                else:
+                    threading.Event().wait(0.5)
         try:
             forecast = self._predict(df, **kwargs)
             # convert np.float32 type columns in forecast dataframe to native float,
