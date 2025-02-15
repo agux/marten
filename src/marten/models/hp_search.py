@@ -439,6 +439,7 @@ def _pair_covar_metrics(
                             len(undone),
                             len(covar_futures),
                         )
+                    del done
                 except Exception as e:
                     logger.exception(
                         "failed to wait covar_futures: %s", e, exc_info=True
