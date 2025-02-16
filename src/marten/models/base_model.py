@@ -122,7 +122,8 @@ from marten.utils.worker import (
 #         res = _pl_agg_expr(df, models, id_col, gen_expr)
 #     return res
 
-class _lazyLock():
+
+class _lazyLock:
     def __init__(self, max_leases, name):
         self.max_leases = max_leases
         self.name = name
@@ -135,13 +136,14 @@ class _lazyLock():
 
     def release(self):
         self.lock.release()
-    
+
     @property
     def locked(self):
         return self.lock.locked
-    
+
     def get_value(self):
         return self.lock.get_value()
+
 
 class BaseModel(ABC):
 
@@ -189,9 +191,7 @@ class BaseModel(ABC):
             return
 
         if "profiler" not in self.locks:
-            self.locks["profiler"] = Lock(
-                name=f"""{socket.gethostname()}::profiler"""
-            )
+            self.locks["profiler"] = Lock(name=f"""{socket.gethostname()}::profiler""")
 
         if not self.locks["profiler"].acquire(timeout=2):
             return
@@ -330,17 +330,19 @@ class BaseModel(ABC):
             accelerator = "cpu"
         elif accelerator in ("gpu", "auto"):
             accelerator = "gpu"
-            name = f"""{socket.gethostname()}::GPU-auto"""
             if "gpu" not in self.locks.keys() or (
                 is_baseline and self.locks["gpu"].max_leases != max_leases
             ):
                 self.release_accelerator_lock()
-                self.locks["gpu"] = _lazyLock(max_leases=max_leases, name=name)
+                self.locks["gpu"] = _lazyLock(
+                    max_leases=max_leases,
+                    name=f"""{socket.gethostname()}::GPU-auto-{max_leases}""",
+                )
             elif "gpu" not in self.locks.keys() or (
                 not is_baseline and self.locks["gpu"].max_leases != 1
             ):
                 self.release_accelerator_lock()
-                self.locks["gpu"] = Lock(name=name)
+                self.locks["gpu"] = Lock(name=f"""{socket.gethostname()}::GPU-auto""")
 
         # gpu or auto
         if accelerator == "gpu":
