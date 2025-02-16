@@ -122,7 +122,7 @@ from marten.utils.worker import (
 #         res = _pl_agg_expr(df, models, id_col, gen_expr)
 #     return res
 
-class _dummyLock():
+class _lazyLock():
     def __init__(self, max_leases, name):
         self.max_leases = max_leases
         self.name = name
@@ -334,10 +334,12 @@ class BaseModel(ABC):
             if "gpu" not in self.locks.keys() or (
                 is_baseline and self.locks["gpu"].max_leases != max_leases
             ):
-                self.locks["gpu"] = _dummyLock(max_leases=max_leases, name=name)
+                self.release_accelerator_lock()
+                self.locks["gpu"] = _lazyLock(max_leases=max_leases, name=name)
             elif "gpu" not in self.locks.keys() or (
                 not is_baseline and self.locks["gpu"].max_leases != 1
             ):
+                self.release_accelerator_lock()
                 self.locks["gpu"] = Lock(name=name)
 
         # gpu or auto

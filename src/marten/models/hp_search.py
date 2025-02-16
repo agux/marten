@@ -439,6 +439,8 @@ def _pair_covar_metrics(
                             len(undone),
                             len(covar_futures),
                         )
+                    # may need to get the results to release memory?
+                    # [get_result(f) for f in done]
                     del done
                 except Exception as e:
                     logger.exception(
