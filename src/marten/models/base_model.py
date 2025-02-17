@@ -58,7 +58,7 @@ from utilsforecast.losses import _pl_agg_expr, _base_docstring, mae, rmse
 from utilsforecast.evaluation import evaluate
 from utilsforecast.compat import DataFrame, pl
 
-from dask.distributed import get_worker, Semaphore
+from dask.distributed import get_worker, Lock
 
 from marten.utils.logger import get_logger
 from marten.utils.trainer import is_cuda_error, huber_loss
@@ -123,26 +123,21 @@ from marten.utils.worker import (
 #     return res
 
 
-class _lazyLock:
+class _dummyLock:
     def __init__(self, max_leases, name):
         self.max_leases = max_leases
         self.name = name
-        self.lock = None
+        self.locked = False
+        # self.lock = None
 
     def acquire(self, timeout):
-        if not self.lock:
-            self.lock = Semaphore(self.name, max_leases=self.max_leases)
-        return self.lock.acquire(timeout=timeout)
+        return True
 
     def release(self):
-        self.lock.release()
-
-    @property
-    def locked(self):
-        return self.lock.locked
+        pass
 
     def get_value(self):
-        return self.lock.get_value()
+        return 0
 
 
 class BaseModel(ABC):
@@ -191,7 +186,7 @@ class BaseModel(ABC):
             return
 
         if "profiler" not in self.locks:
-            self.locks["profiler"] = Semaphore(name=f"""{socket.gethostname()}::profiler""")
+            self.locks["profiler"] = Lock(name=f"""{socket.gethostname()}::profiler""")
 
         if not self.locks["profiler"].acquire(timeout=2):
             return
@@ -334,15 +329,15 @@ class BaseModel(ABC):
                 is_baseline and self.locks["gpu"].max_leases != max_leases
             ):
                 self.release_accelerator_lock()
-                self.locks["gpu"] = _lazyLock(
+                self.locks["gpu"] = _dummyLock(
                     max_leases=max_leases,
                     name=f"""{socket.gethostname()}::GPU-auto-{max_leases}""",
                 )
             elif "gpu" not in self.locks.keys() or (
                 not is_baseline and self.locks["gpu"].max_leases != 1
             ):
-                self.release_accelerator_lock()
-                self.locks["gpu"] = Semaphore(name=f"""{socket.gethostname()}::GPU-auto""")
+                # self.release_accelerator_lock()
+                self.locks["gpu"] = Lock(name=f"""{socket.gethostname()}::GPU-auto""")
 
         # gpu or auto
         if accelerator == "gpu":
