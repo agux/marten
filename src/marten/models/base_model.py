@@ -58,7 +58,7 @@ from utilsforecast.losses import _pl_agg_expr, _base_docstring, mae, rmse
 from utilsforecast.evaluation import evaluate
 from utilsforecast.compat import DataFrame, pl
 
-from dask.distributed import get_worker, Lock
+from dask.distributed import get_worker, Semaphore
 
 from marten.utils.logger import get_logger
 from marten.utils.trainer import is_cuda_error, huber_loss
@@ -131,7 +131,7 @@ class _lazyLock:
 
     def acquire(self, timeout):
         if not self.lock:
-            self.lock = Lock(self.name)
+            self.lock = Semaphore(self.name, max_leases=self.max_leases)
         return self.lock.acquire(timeout=timeout)
 
     def release(self):
@@ -191,7 +191,7 @@ class BaseModel(ABC):
             return
 
         if "profiler" not in self.locks:
-            self.locks["profiler"] = Lock(name=f"""{socket.gethostname()}::profiler""")
+            self.locks["profiler"] = Semaphore(name=f"""{socket.gethostname()}::profiler""")
 
         if not self.locks["profiler"].acquire(timeout=2):
             return
@@ -342,7 +342,7 @@ class BaseModel(ABC):
                 not is_baseline and self.locks["gpu"].max_leases != 1
             ):
                 self.release_accelerator_lock()
-                self.locks["gpu"] = Lock(name=f"""{socket.gethostname()}::GPU-auto""")
+                self.locks["gpu"] = Semaphore(name=f"""{socket.gethostname()}::GPU-auto""")
 
         # gpu or auto
         if accelerator == "gpu":
