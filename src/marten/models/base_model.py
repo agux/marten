@@ -150,6 +150,7 @@ class BaseModel(ABC):
         self.locks = {}
         self.profiler = None
         self.trainLogger = None
+        self.max_gpu_leases = None
 
         load_dotenv()
 
@@ -325,18 +326,15 @@ class BaseModel(ABC):
             accelerator = "cpu"
         elif accelerator in ("gpu", "auto"):
             accelerator = "gpu"
-            if "gpu" not in self.locks.keys() or (
-                is_baseline and self.locks["gpu"].max_leases != max_leases
+            if (
+                is_baseline and self.max_gpu_leases != max_leases
             ):
-                self.release_accelerator_lock()
-                self.locks["gpu"] = _dummyLock(
-                    max_leases=max_leases,
-                    name=f"""{socket.gethostname()}::GPU-auto-{max_leases}""",
-                )
+                self.max_gpu_leases = max_leases
             elif "gpu" not in self.locks.keys() or (
                 not is_baseline and self.locks["gpu"].max_leases != 1
             ):
                 # self.release_accelerator_lock()
+                #TODO: confirm if we need to re-create the Lock instance each time to avoid getting stuck
                 self.locks["gpu"] = Lock(name=f"""{socket.gethostname()}::GPU-auto""")
 
         # gpu or auto
@@ -346,7 +344,7 @@ class BaseModel(ABC):
                 task_key = worker.get_current_task()
                 if worker.client.get_metadata([task_key, "CUDA error"], False):
                     accelerator = "cpu"
-                elif is_baseline and int(worker.name) > self.locks["gpu"].max_leases:
+                elif is_baseline and int(worker.name) > self.max_gpu_leases:
                     accelerator = "cpu"
 
         if accelerator != "cpu":
