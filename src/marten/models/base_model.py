@@ -330,9 +330,7 @@ class BaseModel(ABC):
                 is_baseline and self.max_gpu_leases != max_leases
             ):
                 self.max_gpu_leases = max_leases
-            elif "gpu" not in self.locks.keys() or (
-                not is_baseline and self.locks["gpu"].max_leases != 1
-            ):
+            elif not is_baseline:
                 # self.release_accelerator_lock()
                 #TODO: confirm if we need to re-create the Lock instance each time to avoid getting stuck
                 self.locks["gpu"] = Lock(name=f"""{socket.gethostname()}::GPU-auto""")
