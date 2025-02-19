@@ -372,6 +372,7 @@ class BaseModel(ABC):
         return evals
 
     def _get_metrics(self, **kwargs: Any) -> dict:
+        model_name = str(self.nf.models[0])
         train_trajectories = self.nf.models[0].train_trajectories
         if kwargs["accelerator"] == "gpu" and not self.is_baseline(**self.model_args):
             # without exclusive lock, it may fail due to parallel overuse and insufficient GPU memory.
@@ -382,13 +383,14 @@ class BaseModel(ABC):
                 else:
                     threading.Event().wait(0.5)
         try:
-            forecast = self.nf.predict_insample()
+            forecast = self.nf.predict_insample(step_size=kwargs["h"])
         except Exception as e:
             get_logger().error("failed to predict insample: %s", e, exc_info=True)
             raise e
         finally:
             self.release_accelerator_lock()
 
+        forecast = forecast.dropna(subset=[model_name])
         forecast.reset_index(inplace=True)
 
         get_logger().debug(
@@ -400,28 +402,28 @@ class BaseModel(ABC):
             train_set = forecast[: -self.val_size]
             val_set = forecast[-self.val_size :]
 
-            loss = huber_loss(train_set["y"], train_set[str(self.nf.models[0])])
+            loss = huber_loss(train_set["y"], train_set[model_name])
             eval_mae = mean_absolute_error(
-                train_set["y"], train_set[str(self.nf.models[0])]
+                train_set["y"], train_set[model_name]
             )
             eval_rmse = np.sqrt(
-                mean_squared_error(train_set["y"], train_set[str(self.nf.models[0])])
+                mean_squared_error(train_set["y"], train_set[model_name])
             )
 
-            loss_val = huber_loss(val_set["y"], val_set[str(self.nf.models[0])])
+            loss_val = huber_loss(val_set["y"], val_set[model_name])
             eval_mae_val = mean_absolute_error(
-                val_set["y"], val_set[str(self.nf.models[0])]
+                val_set["y"], val_set[model_name]
             )
             eval_rmse_val = np.sqrt(
-                mean_squared_error(val_set["y"], val_set[str(self.nf.models[0])])
+                mean_squared_error(val_set["y"], val_set[model_name])
             )
         else:
-            loss = huber_loss(forecast["y"], forecast[str(self.nf.models[0])])
+            loss = huber_loss(forecast["y"], forecast[model_name])
             eval_mae = mean_absolute_error(
-                forecast["y"], forecast[str(self.nf.models[0])]
+                forecast["y"], forecast[model_name]
             )
             eval_rmse = np.sqrt(
-                mean_squared_error(forecast["y"], forecast[str(self.nf.models[0])])
+                mean_squared_error(forecast["y"], forecast[model_name])
             )
 
         # shutil.rmtree(self.csvLogger.log_dir)
@@ -580,7 +582,7 @@ class BaseModel(ABC):
                 raise e
         finally:
             self.release_accelerator_lock()
-            
+
         fit_time = time.time() - start_time
         metrics = self._get_metrics(**model_config)
         metrics["device"] = "CPU" if kwargs["accelerator"] == "cpu" else "GPU:auto"
