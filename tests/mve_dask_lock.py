@@ -4,6 +4,7 @@ os.environ["PYTHONUNBUFFERED"] = "1"
 
 import time
 import random
+import threading
 from datetime import datetime
 
 from dask.distributed import (
@@ -17,20 +18,19 @@ from dask.distributed import (
 # NOTE: adjust the number of workers as needed.
 n_workers = 16
 
+def release(lock):
+    lock.release()
 
 def dummy_task(i):
     lock = Lock("shared_lock")
     while not lock.acquire("3s"):
         time.sleep(1)
-    try:
-        time.sleep(random.uniform(1, 3))
-        print(
-            f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} acquired lock and completed task #{i}'
-        )
-    except Exception as e:
-        print(e)
-    finally:
-        lock.release()
+    threading.Timer(time.sleep(random.uniform(1, 3)), release, (lock)).start()
+    time.sleep(random.uniform(2, 4))
+    print(
+        f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} acquired lock and completed task #{i}'
+    )
+    release(lock)
     return None
 
 

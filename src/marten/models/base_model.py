@@ -312,11 +312,13 @@ class BaseModel(ABC):
             if accelerator != "mps" and self._check_cpu():
                 return "cpu"
             else:
-                release_lock(self.accelerator_lock, 0)
+                self.release_accelerator_lock()
 
     def _select_accelerator(self) -> str:
         accelerator = self.model_args["accelerator"].lower()
-        max_leases = self.model_args["gpu_proc"] if "gpu_proc" in self.model_args else 2
+        self.max_gpu_leases = (
+            self.model_args["gpu_proc"] if "gpu_proc" in self.model_args else 2
+        )
         # if accelerator == "cpu":
         #     return accelerator
         is_baseline = self.is_baseline(**self.model_args)
@@ -326,13 +328,9 @@ class BaseModel(ABC):
             accelerator = "cpu"
         elif accelerator in ("gpu", "auto"):
             accelerator = "gpu"
-            if (
-                is_baseline and self.max_gpu_leases != max_leases
-            ):
-                self.max_gpu_leases = max_leases
-            elif not is_baseline:
+            if not is_baseline:
                 # self.release_accelerator_lock()
-                #TODO: confirm if we need to re-create the Lock instance each time to avoid getting stuck
+                # TODO: confirm if we need to re-create the Lock instance each time to avoid getting stuck
                 self.locks["gpu"] = Lock(name=f"""{socket.gethostname()}::GPU-auto""")
 
         # gpu or auto
@@ -580,6 +578,9 @@ class BaseModel(ABC):
             else:
                 get_logger().warning("encountered error with train params: %s", kwargs)
                 raise e
+        finally:
+            self.release_accelerator_lock()
+            
         fit_time = time.time() - start_time
         metrics = self._get_metrics(**model_config)
         metrics["device"] = "CPU" if kwargs["accelerator"] == "cpu" else "GPU:auto"
