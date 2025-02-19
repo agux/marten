@@ -22,11 +22,15 @@ def dummy_task(i):
     lock = Lock("shared_lock")
     while not lock.acquire("3s"):
         time.sleep(1)
-    time.sleep(random.uniform(1, 3))
-    print(
-        f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} acquired lock and completed task #{i}'
-    )
-    lock.release()
+    try:
+        time.sleep(random.uniform(1, 3))
+        print(
+            f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} worker#{get_worker().name} acquired lock and completed task #{i}'
+        )
+    except Exception as e:
+        print(e)
+    finally:
+        lock.release()
     return None
 
 
