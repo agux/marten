@@ -753,8 +753,6 @@ class BaseModel(ABC):
                 - y: The historical value. For future time horizons, it can be np.nan
                 - yhat_n: The predicted value
         """
-        df = df.copy()
-        df.insert(0, "unique_id", "0")
         if self.model_args["accelerator"] == "gpu":
             self.release_accelerator_lock()
             while True:
@@ -762,6 +760,8 @@ class BaseModel(ABC):
                     break
                 else:
                     threading.Event().wait(0.5)
+        df = df.copy()
+        df.insert(0, "unique_id", "0")
         try:
             forecast = self._predict(df, **kwargs)
             # convert np.float32 type columns in forecast dataframe to native float,

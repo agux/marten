@@ -117,7 +117,7 @@ class TSMixerxModel(BaseModel):
             b -= 20
         elif input_size + ff_dim < 150:
             b -= 15
-        
+
         if ff_dim < 10:
             b -= 20
         elif ff_dim < 20:
@@ -179,7 +179,7 @@ class TSMixerxModel(BaseModel):
             #     return round(slope * (x - min_x) + min_y)
 
     def _build_model(self, df: pd.DataFrame, **kwargs: Any):
-        #TODO: building the model relies on accelerator, but selecting accelerator depends on lr_find
+        # TODO: building the model relies on accelerator, but selecting accelerator depends on lr_find
         # which must be run on the model.
         pass
 
@@ -198,6 +198,9 @@ class TSMixerxModel(BaseModel):
         orig_log_level = rank_zero_logger.getEffectiveLevel()
         seed_logger.setLevel(logging.FATAL)
         rank_zero_logger.setLevel(logging.FATAL)
+
+        if model_config.get("temporal_features"):
+            df = self._augment_temporal_features(df)
 
         exog = [col for col in df.columns if col not in ["unique_id", "ds", "y"]]
 
@@ -305,8 +308,23 @@ class TSMixerxModel(BaseModel):
     def trim_forecast(self, forecast: pd.DataFrame) -> pd.DataFrame:
         return forecast[["ds", "yhat_n"]].copy()
 
+    def _augment_temporal_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        df["tf_dayofweek"] = df["ds"].dt.dayofweek
+        df["tf_dayofweek_sin"] = np.sin(2 * np.pi * df["tf_dayofweek"] / 7)
+        # df['tf_dayofweek_cos'] = np.cos(2 * np.pi * df['dayofweek'] / 7)
+        df["tf_dayofweek_scaled"] = ((df["tf_dayofweek"] - 0) / (6 - 0)) * 2 - 1
+        df["tf_dayofyear"] = df["ds"].dt.dayofyear
+        df["tf_dayofyear_sin"] = np.sin(2 * np.pi * df["tf_dayofyear"] / 366)
+        df["tf_dayofyear_scaled"] = ((df["tf_dayofyear"] - 1) / (366 - 1)) * 2 - 1
+        df["tf_weekofyear"] = df["ds"].dt.isocalendar().week
+        df["tf_weekofyear_sin"] = np.sin(2 * np.pi * df["tf_weekofyear"] / 53)
+        df["tf_weekofyear_scaled"] = ((df["tf_weekofyear"] - 1) / (53 - 1)) * 2 - 1
+        return df
+
     def _predict(self, df: pd.DataFrame, **kwargs: Any) -> pd.DataFrame:
-        #NOTE: the number of future days (horizon) are set by "D" frequency instead of "B"
+        if kwargs.get("temporal_features"):
+            df = self._augment_temporal_features(df)
         forecast = self.nf.predict(df)
         # check if "id" column is in the forecast dataframe. If so, drop this column.
         if "index" in forecast.columns:
@@ -329,6 +347,7 @@ class TSMixerxModel(BaseModel):
             topk_covar=range(0, {kwargs["topk_covars"]}+1),
             covar_dist=dirichlet([float({kwargs["max_covars"]})]*{kwargs["max_covars"]}),
             optimizer=["Adam", "AdamW", "SGD"],
+            temporal_features=[True, False],
         )"""
 
     def accept_missing_data(self) -> bool:
