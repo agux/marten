@@ -512,27 +512,27 @@ def release_lock(lock: Lock, after=10):
     ):
         return
 
-    def _release():
+    def _release(worker_name):
         nonlocal lock
         get_logger().debug("lock %s will be released in %s seconds", lock.name, after)
         # time.sleep(after)
         try:
-            w = get_worker()
             get_logger().info(
-                "[worker#%s] releasing lock: %s", w.name, lock.name
+                "[worker#%s] releasing lock: %s", worker_name, lock.name
             )
             lock.release()
-            get_logger().info("[worker#%s] lock %s released", w.name, lock.name)
+            get_logger().info("[worker#%s] lock %s released", worker_name, lock.name)
         except Exception as e:
             msg = str(e).lower()
             if "lock is not yet acquired" in msg or "released too often" in msg:
                 return
             get_logger().warning("exception releasing lock %s: %s", lock.name, str(e))
 
+    w = get_worker()
     if after <= 0:
-        _release()
+        _release(w.name)
     else:
-        threading.Timer(after, _release).start()
+        threading.Timer(after, _release, w.name).start()
 
 
 def gpu_util():
