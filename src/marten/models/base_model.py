@@ -337,10 +337,15 @@ class BaseModel(ABC):
         if accelerator == "gpu":
             worker = get_worker()
             if worker is not None:
-                task_key = worker.get_current_task()
-                if worker.client.get_metadata([task_key, "CUDA error"], False):
-                    accelerator = "cpu"
-                elif is_baseline and int(worker.name) > self.max_gpu_leases:
+                #FIXME: raises the following error after hours of running:
+                # distributed.comm.core.CommClosedError: in <TCP (closed) ConnectionPool.get_metadata 
+                # local=tcp://<worker_ip>:<worker_port> remote=tcp://<scheduler_ip>:<port>>: 
+                # TimeoutError: [Errno 110] Connection timed out
+
+                # task_key = worker.get_current_task()
+                # if worker.client.get_metadata([task_key, "CUDA error"], False):
+                #     accelerator = "cpu"
+                if is_baseline and int(worker.name) > self.max_gpu_leases:
                     accelerator = "cpu"
 
         if accelerator != "cpu":

@@ -33,6 +33,7 @@ dependencies:
   - py-cpuinfo
   - pynvml
   - pytables
+  - tsfresh
   - pip:
     - -r conda_requirements.txt
     # - zentorch    #not available in python>3.11
