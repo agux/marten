@@ -517,8 +517,12 @@ def release_lock(lock: Lock, after=10):
         get_logger().debug("lock %s will be released in %s seconds", lock.name, after)
         # time.sleep(after)
         try:
+            w = get_worker()
+            get_logger().info(
+                "[worker#%s] releasing lock: %s", w.name, lock.name
+            )
             lock.release()
-            get_logger().debug("lock %s released", lock.name)
+            get_logger().info("[worker#%s] lock %s released", w.name, lock.name)
         except Exception as e:
             msg = str(e).lower()
             if "lock is not yet acquired" in msg or "released too often" in msg:

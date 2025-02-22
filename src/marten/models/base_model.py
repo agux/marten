@@ -265,10 +265,14 @@ class BaseModel(ABC):
             nonlocal accelerator, self
             if self.accelerator_lock is None and accelerator in (device, "auto"):
                 lock = self.locks[device]
+                w = get_worker()
+                get_logger().info(
+                    "[worker#%s] acquiring lock: %s", w.name, lock.name
+                )
                 acquired = lock.acquire(timeout=f"{self.lock_wait_time}")
                 if acquired:
                     self.accelerator_lock = lock
-                    get_logger().debug("lock acquired: %s", self.accelerator_lock.name)
+                    get_logger().info("[worker#%s] lock acquired: %s", w.name, self.accelerator_lock.name)
 
         gpu_ut, gpu_rt = self.gpu_threshold()
         while True:
@@ -337,9 +341,9 @@ class BaseModel(ABC):
         if accelerator == "gpu":
             worker = get_worker()
             if worker is not None:
-                #FIXME: raises the following error after hours of running:
-                # distributed.comm.core.CommClosedError: in <TCP (closed) ConnectionPool.get_metadata 
-                # local=tcp://<worker_ip>:<worker_port> remote=tcp://<scheduler_ip>:<port>>: 
+                # FIXME: raises the following error after hours of running:
+                # distributed.comm.core.CommClosedError: in <TCP (closed) ConnectionPool.get_metadata
+                # local=tcp://<worker_ip>:<worker_port> remote=tcp://<scheduler_ip>:<port>>:
                 # TimeoutError: [Errno 110] Connection timed out
 
                 # task_key = worker.get_current_task()
