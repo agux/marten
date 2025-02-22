@@ -33,7 +33,7 @@ from marten.models.base_model import BaseModel
 from marten.utils.database import get_database_engine, columns_with_prefix
 from marten.utils.logger import get_logger
 from marten.utils.worker import (
-    get_result,
+    get_results,
     await_futures,
     init_client,
     num_workers,
@@ -377,7 +377,9 @@ def _pair_endogenous_covar_metrics(
         futures.append(future)
         # await_futures(futures, False)
         if len(futures) > cpu_count:
-            _, undone = wait(futures, return_when="FIRST_COMPLETED")
+            done, undone = wait(futures, return_when="FIRST_COMPLETED")
+            for f in done:
+                get_results(done)
             futures = list(undone)
 
 
@@ -439,9 +441,7 @@ def _pair_covar_metrics(
                             len(undone),
                             len(covar_futures),
                         )
-                    # may need to get the results to release memory?
-                    # [get_result(f) for f in done]
-                    del done
+                    get_results(done)
                 except Exception as e:
                     logger.exception(
                         "failed to wait covar_futures: %s", e, exc_info=True
@@ -1444,9 +1444,10 @@ def covar_metric(
 
     # await_futures(covar_futures)
     with worker_client():
-        wait(covar_futures)
-        # for f in done:
-        #     get_result(f)
+        while len(covar_futures) > 0:
+            done, undone = wait(covar_futures)
+            get_results(done)
+            covar_futures = list(undone)
 
     logger.info(
         "finished covar_metric for %s features in %s, total covar symbols: %s",
@@ -1454,7 +1455,7 @@ def covar_metric(
         cov_table,
         num_symbols,
     )
-    return None
+    return num_symbols
 
 
 def prep_covar_baseline_metrics_dummy(
@@ -2148,10 +2149,9 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             )
         )
         if len(futures) > 1:
-            _, undone = wait(futures, return_when="FIRST_COMPLETED")
+            done, undone = wait(futures, return_when="FIRST_COMPLETED")
             futures = list(undone)
-            # for f in done:
-            #     get_result(f)
+            get_results(done)
 
 
 def univariate_baseline(anchor_df, hps_id, args):

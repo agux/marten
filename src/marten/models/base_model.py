@@ -187,7 +187,7 @@ class BaseModel(ABC):
             return
 
         if "profiler" not in self.locks:
-            self.locks["profiler"] = Lock(name=f"""{socket.gethostname()}::profiler""")
+            self.locks["profiler"] = Lock(name=f"""{socket.gethostname()}__profiler""")
 
         if not self.locks["profiler"].acquire(timeout=2):
             return
@@ -331,7 +331,7 @@ class BaseModel(ABC):
             if not is_baseline:
                 # self.release_accelerator_lock()
                 # TODO: confirm if we need to re-create the Lock instance each time to avoid getting stuck
-                self.locks["gpu"] = Lock(name=f"""{socket.gethostname()}::GPU-auto""")
+                self.locks["gpu"] = Lock(name=f"""{socket.gethostname()}__GPU-auto""")
 
         # gpu or auto
         if accelerator == "gpu":

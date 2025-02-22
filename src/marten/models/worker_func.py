@@ -34,12 +34,13 @@ from marten.utils.worker import (
     # await_futures,
     scale_cluster_and_wait,
     restart_all_workers,
-    num_workers,
+    # num_workers,
+    get_results,
 )
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
 from marten.utils.trainer import (
-    select_device,
+    # select_device,
     get_accelerator_locks,
     remove_singular_variables,
 )
@@ -49,7 +50,7 @@ from marten.utils.neuralprophet import (
     select_topk_features,
     NPPredictor,
 )
-from marten.utils.system import release_cpu_cores, bind_cpu_cores
+# from marten.utils.system import release_cpu_cores, bind_cpu_cores
 
 
 LOSS_CAP = 99.99
@@ -341,8 +342,8 @@ def fit_with_covar(
             save_impute_data(
                 impute_df, cov_table, cov_symbol, feature, alchemyEngine, logger
             )
-        # return metrics
-        return None
+        return metrics
+        # return None
 
     try:
         return _func()
@@ -2527,7 +2528,10 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
         t1_start = time.time()
         prep_covar_baseline_metrics(anchor_df, anchor_table, args)
         # logger.info("waiting dask futures: %s", len(hps.futures))
-        wait(hps.futures)
+        while len(hps.futures) > 0:
+            done, undone = wait(hps.futures)
+            get_results(done)
+            hps.futures = list(undone)
         # await_futures(hps.futures, hard_wait=True)
         logger.info(
             "%s covariate baseline metric computation completed. Time taken: %s seconds",
