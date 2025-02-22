@@ -532,7 +532,7 @@ def release_lock(lock: Lock, after=10):
     if after <= 0:
         _release(w.name)
     else:
-        threading.Timer(after, _release, (w.name)).start()
+        threading.Timer(after, _release, (w.name,)).start()
 
 
 def gpu_util():
