@@ -6,6 +6,7 @@ OUTPUT_LOG=predict.log
 
 >$OUTPUT_LOG
 >marten.models.predict.log
+>marten.utils.logger.log
 
 # Clear old lr finder .ckpt files
 rm -f .lr_find_*.ckpt

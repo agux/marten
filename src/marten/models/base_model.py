@@ -266,13 +266,13 @@ class BaseModel(ABC):
             if self.accelerator_lock is None and accelerator in (device, "auto"):
                 lock = self.locks[device]
                 w = get_worker()
-                get_logger().info(
+                get_logger().debug(
                     "[worker#%s] acquiring lock: %s", w.name, lock.name
                 )
                 acquired = lock.acquire(timeout=f"{self.lock_wait_time}")
                 if acquired:
                     self.accelerator_lock = lock
-                    get_logger().info("[worker#%s] lock acquired: %s", w.name, self.accelerator_lock.name)
+                    get_logger().debug("[worker#%s] lock acquired: %s", w.name, self.accelerator_lock.name)
 
         gpu_ut, gpu_rt = self.gpu_threshold()
         while True:
