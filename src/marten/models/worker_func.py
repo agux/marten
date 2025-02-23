@@ -753,7 +753,7 @@ def log_metrics_for_hyper_params(
             params["max_steps"] = epochs
             params["validate"] = True
             params["random_seed"] = random_seed
-            params["precision"] = "bf16-mixed"
+            # params["precision"] = "bf16-mixed"
             params["accelerator"] = (
                 "auto" if accelerator == True or accelerator is None else accelerator
             )
