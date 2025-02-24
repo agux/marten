@@ -1,9 +1,9 @@
+import os
 import time
 import pandas as pd
 import json
 import hashlib
 import math
-import os
 import logging
 
 logging.getLogger("NP.plotly").setLevel(logging.CRITICAL)
@@ -21,12 +21,18 @@ from psycopg2.extras import execute_values
 import holidays
 import chinese_calendar
 import dask
-from dask.distributed import get_worker, worker_client, Semaphore, wait
+from dask.distributed import get_worker, worker_client, Semaphore, wait, Future
 from types import SimpleNamespace
+from typing import List
 from tenacity import (
     stop_after_attempt,
     wait_exponential,
     Retrying,
+)
+from tsfresh import extract_relevant_features
+from tsfresh.utilities.dataframe_functions import (
+    make_forecasting_frame,
+    roll_time_series,
 )
 
 from marten.data.worker_func import impute
@@ -162,26 +168,6 @@ def merge_covar_df(
     merged_df = pd.merge(merged_df, cov_symbol_df, on="ds", how="left")
 
     return merged_df
-
-
-def fit_with_covar_dummy(
-    anchor_symbol,
-    anchor_df,
-    cov_table,
-    cov_symbol,
-    min_date,
-    random_seed,
-    feature,
-    accelerator,
-    early_stopping,
-    infer_holiday,
-    sem=None,
-    locks=None,
-):
-    import random
-
-    time.sleep(random.uniform(3, 10))
-    return None
 
 
 def fit_with_covar(
@@ -2398,42 +2384,33 @@ def min_covar_loss_val(alchemyEngine, model, symbol, symbol_table, ts_date):
                 )
         return result.fetchone()[0]
 
+def extract_features(symbol, anchor_df, anchor_table) -> List[Future]:
+    df = anchor_df.copy()
+    df.insert(0, "symbol", symbol)
+    # TODO: extract features from endogenous variables and all features of top-N assets
+    # 1. extract features from endogenous variables
+    rts = roll_time_series(
+        df[:-1], column_id="symbol", column_sort="ds", max_timeshift=20
+    )
+    targets = df[["ds", "y"]].copy()
+    targets.loc[:, "target"] = targets["y"].shift(-1)
+    targets = targets.dropna(subset=["target"])
+    targets = targets[["ds", "target"]]
+    rts = rts.merge(targets, on="ds", how="left")
+    rts = rts.dropna(subset=["target"])
 
-def covars_and_search_dummy(model, client, symbol, alchemyEngine, logger, args):
-    import marten.models.hp_search as hps
-    from marten.models.hp_search import (
-        prep_covar_baseline_metrics_dummy,
-        _get_cutoff_date,
-        load_anchor_ts,
+    y = rts.groupby("id")["target"].last()
+    x = rts.drop(columns=["unique_id", "target"])
+
+    features = extract_relevant_features(
+        x, y, column_id="id", column_sort="ds"
     )
 
-    sem = None
-    max_leases = (
-        args.resource_intensive_sql_semaphore
-        if args.resource_intensive_sql_semaphore > 0
-        else int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker))
-    )
-    if max_leases > 0:
-        dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
-        sem = Semaphore(
-            max_leases=max_leases,
-            name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
-        )
-    locks = get_accelerator_locks(0, gpu_leases=2, timeout="20s")
-
-    logger.info("sem: %s, locks: %s", sem, locks)
-
-    args = init_hps(hps, model, symbol, args, client, alchemyEngine, logger)
-
-    cutoff_date = _get_cutoff_date(args)
-    anchor_df, anchor_table = load_anchor_ts(
-        args.symbol, args.timestep_limit, alchemyEngine, cutoff_date, args.symbol_table
-    )
-
-    prep_covar_baseline_metrics_dummy(anchor_df, anchor_table, args, sem, locks)
-
-    wait(hps.futures)
-
+    # 2. select top-N symbols from paried_correlation
+    # 3. for each symbol: query all features from basic and TA tables
+    # 4. extract features from these tables / dataframes
+    # 5. re-run paired correlation on these features in parallel
+    # 6. save these extracted features to an Entity-Attribute-Value table.
 
 def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     global LOSS_CAP
@@ -2532,12 +2509,25 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
             done, undone = wait(hps.futures)
             get_results(done)
             hps.futures = list(undone)
-        # await_futures(hps.futures, hard_wait=True)
         logger.info(
             "%s covariate baseline metric computation completed. Time taken: %s seconds",
             args.symbol,
             round(time.time() - t1_start, 3),
         )
+
+        t1_start = time.time()
+        logger.info("Starting feature engineering and extraction")
+        futures = extract_features(symbol, anchor_df, anchor_table, args)
+        while len(futures) > 0:
+            done, undone = wait(futures)
+            get_results(done)
+            futures = list(undone)
+        logger.info(
+            "%s feature extraction completed. Time taken: %s seconds",
+            args.symbol,
+            round(time.time() - t1_start, 3),
+        )
+
 
     min_covar_loss = min_covar_loss_val(
         alchemyEngine, args.model, symbol, args.symbol_table, cutoff_date

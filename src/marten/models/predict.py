@@ -21,7 +21,6 @@ from marten.models.worker_func import (
     predict_best,
     # predict_adhoc,
     covars_and_search,
-    covars_and_search_dummy,
     ensemble_topk_prediction,
 )
 
@@ -85,21 +84,7 @@ def print_sys_info():
     logger.info(torch.__config__.show())
 
 
-def main_dummy(args):
-    global client, alchemyEngine, logger, model
-
-    init(args)
-
-    covars_and_search_dummy(
-        model, client, args.symbols[0], alchemyEngine, logger, args
-    )
-
-
 def main(args):
-    # for debugging purpose
-    # main_dummy(args)
-    # return
-
     global client, alchemyEngine, logger, model
 
     t_start = time.time()
