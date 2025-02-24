@@ -15,7 +15,7 @@ from dask.distributed import wait
 
 from marten.utils.logger import get_logger
 from marten.utils.database import get_database_engine
-from marten.utils.worker import await_futures, init_client, scale_cluster_and_wait
+from marten.utils.worker import await_futures, init_client, scale_cluster_and_wait, get_results
 from marten.data.const import us_index_list, cn_index_types
 from marten.data.ta import calc_ta
 from marten.data.worker_func import (
@@ -178,7 +178,8 @@ def main(_args):
         scale_cluster_and_wait(client, max(1, n_workers / 2))
         # client.cluster.scale(max(1, n_workers / 2))
         run(calc_ta)
-        wait(futures)
+        done, _ = wait(futures)
+        get_results(done)
         #NOTE: the following function might get stuck sometimes, reason unknown
         # await_futures(futures)
 

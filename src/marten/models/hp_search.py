@@ -331,7 +331,7 @@ def _pair_endogenous_covar_metrics(
 ):
     global client, futures, logger, alchemyEngine
 
-    # remove feature elements already exists in the neuralprophet_corel table.
+    # remove feature elements already exists in the covar table.
     features = _remove_measured_features(
         alchemyEngine,
         args.model,

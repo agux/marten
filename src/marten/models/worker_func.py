@@ -31,7 +31,6 @@ from tenacity import (
 )
 from tsfresh import extract_relevant_features
 from tsfresh.utilities.dataframe_functions import (
-    make_forecasting_frame,
     roll_time_series,
 )
 
@@ -2386,7 +2385,7 @@ def min_covar_loss_val(alchemyEngine, model, symbol, symbol_table, ts_date):
 
 def extract_features(symbol, anchor_df, anchor_table) -> List[Future]:
     df = anchor_df.copy()
-    df.insert(0, "symbol", symbol)
+    df.insert(0, "unique_id", symbol)
     # TODO: extract features from endogenous variables and all features of top-N assets
     # 1. extract features from endogenous variables
     rts = roll_time_series(
