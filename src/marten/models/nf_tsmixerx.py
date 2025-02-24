@@ -323,7 +323,7 @@ class TSMixerxModel(BaseModel):
         return df
 
     def _predict(self, df: pd.DataFrame, **kwargs: Any) -> pd.DataFrame:
-        if kwargs.get("temporal_features"):
+        if self.model_args.get("temporal_features"):
             df = self._augment_temporal_features(df)
         forecast = self.nf.predict(df)
         # check if "id" column is in the forecast dataframe. If so, drop this column.
