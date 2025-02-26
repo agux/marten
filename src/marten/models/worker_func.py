@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from collections import deque
 from sqlalchemy import text
 from psycopg2.extras import execute_values
+
 # from neuralprophet.event_utils import get_all_holidays
 import holidays
 import chinese_calendar
@@ -55,6 +56,7 @@ from marten.utils.neuralprophet import (
     select_topk_features,
     NPPredictor,
 )
+
 # from marten.utils.system import release_cpu_cores, bind_cpu_cores
 
 
@@ -1301,11 +1303,13 @@ def distance(forecast):
     std_diff = (np.sqrt((forecast_nona["yhat_n"] - forecast_nona["y"]) ** 2)).std()
     return mean_diff, std_diff
 
+
 def calc_cum_returns(df: pd.DataFrame):
     df["plus_one"] = df["yhat_n"] / 100.0 + 1.0
     df["cum_returns"] = df["plus_one"].cumprod()
     df["cum_returns"] = (df["cum_returns"] - 1.0) * 100.0
     df.drop("plus_one", axis=1, inplace=True)
+
 
 def save_forecast_snapshot(
     alchemyEngine,
@@ -2238,7 +2242,7 @@ def fast_bayesopt(
         domain_size = base_ds * 10
     elif domain_size < base_ds:
         domain_size = base_ds
-    
+
     domain_size_base = domain_size
 
     if args.model == "SOFTS":
@@ -2272,9 +2276,9 @@ def fast_bayesopt(
             domain_size,
             args.resume.lower() != "none" or i > 0,
         )
-        
+
         if domain_size:
-                domain_size += domain_size_base
+            domain_size += domain_size_base
 
         if min_loss is None or min_loss > base_loss:
             continue
@@ -2383,13 +2387,14 @@ def min_covar_loss_val(alchemyEngine, model, symbol, symbol_table, ts_date):
                 )
         return result.fetchone()[0]
 
+
 def extract_features(symbol, anchor_df, anchor_table) -> List[Future]:
     df = anchor_df.copy()
     df.insert(0, "unique_id", symbol)
     # TODO: extract features from endogenous variables and all features of top-N assets
     # 1. extract features from endogenous variables
     rts = roll_time_series(
-        df[:-1], column_id="symbol", column_sort="ds", max_timeshift=20
+        df[:-1], column_id="unique_id", column_sort="ds", max_timeshift=20
     )
     targets = df[["ds", "y"]].copy()
     targets.loc[:, "target"] = targets["y"].shift(-1)
@@ -2401,8 +2406,9 @@ def extract_features(symbol, anchor_df, anchor_table) -> List[Future]:
     y = rts.groupby("id")["target"].last()
     x = rts.drop(columns=["unique_id", "target"])
 
-    features = extract_relevant_features(
-        x, y, column_id="id", column_sort="ds"
+    features = extract_relevant_features(x, y, column_id="id", column_sort="ds")
+    features = (
+        features.reset_index().drop("level_0", axis=1).rename(columns={"level_1": "ds"})
     )
 
     # 2. select top-N symbols from paried_correlation
@@ -2410,6 +2416,7 @@ def extract_features(symbol, anchor_df, anchor_table) -> List[Future]:
     # 4. extract features from these tables / dataframes
     # 5. re-run paired correlation on these features in parallel
     # 6. save these extracted features to an Entity-Attribute-Value table.
+
 
 def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     global LOSS_CAP
@@ -2513,20 +2520,19 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
             args.symbol,
             round(time.time() - t1_start, 3),
         )
-
-        t1_start = time.time()
-        logger.info("Starting feature engineering and extraction")
-        futures = extract_features(symbol, anchor_df, anchor_table, args)
-        while len(futures) > 0:
-            done, undone = wait(futures)
-            get_results(done)
-            futures = list(undone)
-        logger.info(
-            "%s feature extraction completed. Time taken: %s seconds",
-            args.symbol,
-            round(time.time() - t1_start, 3),
-        )
-
+        #TODO uncomment to enable feature extraction
+        # t1_start = time.time()
+        # logger.info("Starting feature engineering and extraction")
+        # futures = extract_features(symbol, anchor_df, anchor_table, args)
+        # while len(futures) > 0:
+        #     done, undone = wait(futures)
+        #     get_results(done)
+        #     futures = list(undone)
+        # logger.info(
+        #     "%s feature extraction completed. Time taken: %s seconds",
+        #     args.symbol,
+        #     round(time.time() - t1_start, 3),
+        # )
 
     min_covar_loss = min_covar_loss_val(
         alchemyEngine, args.model, symbol, args.symbol_table, cutoff_date
