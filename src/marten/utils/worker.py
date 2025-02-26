@@ -280,7 +280,6 @@ def get_result(future: Future):
         return r
     except Exception as e:
         get_logger().exception(e)
-        pass
 
 
 def get_results(futures):

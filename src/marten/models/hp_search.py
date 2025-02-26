@@ -1793,8 +1793,8 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         )
         if len(futures) > 1:
             done, undone = wait(futures, return_when="FIRST_COMPLETED")
-            futures = list(undone)
             get_results(done)
+            futures = list(undone)
 
 
 def univariate_baseline(anchor_df, hps_id, args):

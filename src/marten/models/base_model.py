@@ -150,7 +150,6 @@ class BaseModel(ABC):
         self.locks = {}
         self.profiler = None
         self.trainLogger = None
-        self.max_gpu_leases = None
 
         load_dotenv()
 
@@ -320,9 +319,7 @@ class BaseModel(ABC):
 
     def _select_accelerator(self) -> str:
         accelerator = self.model_args["accelerator"].lower()
-        self.max_gpu_leases = (
-            self.model_args["gpu_proc"] if "gpu_proc" in self.model_args else 2
-        )
+        gpu_proc = self.model_args.get("gpu_proc", 2)
         # if accelerator == "cpu":
         #     return accelerator
         is_baseline = self.is_baseline(**self.model_args)
@@ -349,7 +346,7 @@ class BaseModel(ABC):
                 # task_key = worker.get_current_task()
                 # if worker.client.get_metadata([task_key, "CUDA error"], False):
                 #     accelerator = "cpu"
-                if is_baseline and int(worker.name) > self.max_gpu_leases:
+                if is_baseline and int(worker.name) > gpu_proc:
                     accelerator = "cpu"
 
         if accelerator != "cpu":
