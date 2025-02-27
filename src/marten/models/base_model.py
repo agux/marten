@@ -395,6 +395,7 @@ class BaseModel(ABC):
             raise e
         finally:
             self.release_accelerator_lock()
+            # torch.cuda.empty_cache()
 
         forecast = forecast.dropna(subset=[model_name])
         forecast.reset_index(inplace=True)
@@ -776,6 +777,7 @@ class BaseModel(ABC):
                 forecast[col] = forecast[col].astype(float)
         finally:
             self.release_accelerator_lock()
+            # torch.cuda.empty_cache()
 
         return forecast
 

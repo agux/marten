@@ -22,7 +22,7 @@ from psycopg2.extras import execute_values
 import holidays
 import chinese_calendar
 import dask
-from dask.distributed import get_worker, worker_client, Semaphore, wait, Future
+from dask.distributed import get_worker, worker_client, Semaphore, wait, Future, Client
 from types import SimpleNamespace
 from typing import List
 from tenacity import (
@@ -189,16 +189,17 @@ def fit_with_covar(
     model = worker.model
 
     def _func():
-        merged_df = merge_covar_df(
-            anchor_symbol,
-            args.symbol_table,
-            anchor_df,
-            cov_table,
-            cov_symbol,
-            feature,
-            min_date,
-            alchemyEngine,
-        )
+        if feature not in anchor_df.columns:
+            merged_df = merge_covar_df(
+                anchor_symbol,
+                args.symbol_table,
+                anchor_df,
+                cov_table,
+                cov_symbol,
+                feature,
+                min_date,
+                alchemyEngine,
+            )
 
         if merged_df is None:
             # FIXME: sometimes merged_df is None even if there's data in table
@@ -2388,18 +2389,19 @@ def min_covar_loss_val(alchemyEngine, model, symbol, symbol_table, ts_date):
         return result.fetchone()[0]
 
 
-def extract_features(symbol, anchor_df, anchor_table) -> List[Future]:
-    df = anchor_df.copy()
-    df.insert(0, "unique_id", symbol)
+def extract_features(client: Client, symbol: str, anchor_df: pd.DataFrame, anchor_table: str) -> List[Future]:
     # TODO: extract features from endogenous variables and all features of top-N assets
     # 1. extract features from endogenous variables
-    rts = roll_time_series(
-        df[:-1], column_id="unique_id", column_sort="ds", max_timeshift=20
-    )
-    targets = df[["ds", "y"]].copy()
+    targets = anchor_df[["ds", "y"]].copy()
     targets.loc[:, "target"] = targets["y"].shift(-1)
     targets = targets.dropna(subset=["target"])
     targets = targets[["ds", "target"]]
+
+    df = anchor_df.copy()
+    df.insert(0, "unique_id", symbol)
+    rts = roll_time_series(
+        df[:-1], column_id="unique_id", column_sort="ds", max_timeshift=20
+    )
     rts = rts.merge(targets, on="ds", how="left")
     rts = rts.dropna(subset=["target"])
 
@@ -2411,6 +2413,33 @@ def extract_features(symbol, anchor_df, anchor_table) -> List[Future]:
         features.reset_index().drop("level_0", axis=1).rename(columns={"level_1": "ds"})
     )
 
+    futures = []
+    cov_table = ""
+    feat_cols = [c for c in features.columns if c != "ds"]
+    for fcol in feat_cols:
+        df = anchor_df[["ds", "y"]].merge(features[["ds", fcol]], on="ds", how="left")
+        futures.append(
+            client.submit(
+                    fit_with_covar,
+                    symbol,
+                    df,
+                    cov_table,
+                    symbol,
+                    min_date,
+                    args.random_seed,
+                    feature,
+                    # select_device(
+                    #     args.accelerator,
+                    #     getattr(args, "gpu_util_threshold", None),
+                    #     getattr(args, "gpu_ram_threshold", None),
+                    # ),
+                    "auto",
+                    args.early_stopping,
+                    args.infer_holiday,
+                    key=f"{fit_with_covar.__name__}({cov_table})-{uuid.uuid4().hex}",
+                    # priority=p_order,
+                )
+        )
     # 2. select top-N symbols from paried_correlation
     # 3. for each symbol: query all features from basic and TA tables
     # 4. extract features from these tables / dataframes
@@ -2523,7 +2552,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
         #TODO uncomment to enable feature extraction
         # t1_start = time.time()
         # logger.info("Starting feature engineering and extraction")
-        # futures = extract_features(symbol, anchor_df, anchor_table, args)
+        # futures = extract_features(client, symbol, anchor_df, anchor_table, args)
         # while len(futures) > 0:
         #     done, undone = wait(futures)
         #     get_results(done)

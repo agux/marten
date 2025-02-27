@@ -441,6 +441,7 @@ def _pair_covar_metrics(
                             len(covar_futures),
                         )
                     get_results(done)
+                    del done
                 except Exception as e:
                     logger.exception(
                         "failed to wait covar_futures: %s", e, exc_info=True
@@ -1416,6 +1417,7 @@ def covar_metric(
         while len(covar_futures) > 0:
             done, undone = wait(covar_futures)
             get_results(done)
+            del done
             covar_futures = list(undone)
 
     logger.info(
@@ -1794,6 +1796,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
         if len(futures) > 1:
             done, undone = wait(futures, return_when="FIRST_COMPLETED")
             get_results(done)
+            del done
             futures = list(undone)
 
 
