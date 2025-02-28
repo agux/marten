@@ -207,7 +207,7 @@ def init_client(name, max_worker=-1, threads=1, dashboard_port=None, args=None):
             # "distributed.scheduler.work-stealing-interval": "5 seconds",
             # "distributed.scheduler.worker-ttl": "8 hours",
             # "distributed.scheduler.worker-saturation": 0.0001,
-            "distributed.scheduler.locks.lease-timeout": "15 minutes",
+            # "distributed.scheduler.locks.lease-timeout": "15 minutes",
             # "distributed.scheduler.validate": True,
             "distributed.comm.retry.count": 10,
             # "distributed.comm.timeouts.connect": "120s",
