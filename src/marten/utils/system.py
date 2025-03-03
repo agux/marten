@@ -186,3 +186,7 @@ class FileLock:
             fcntl.flock(self.fd, fcntl.LOCK_UN)
             self.fd.close()
             self.fd = None
+
+    @property
+    def locked(self):
+        return self.fd is not None
