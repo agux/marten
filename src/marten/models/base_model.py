@@ -165,7 +165,7 @@ class BaseModel(ABC):
         self.resource_wait_time = float(
             os.getenv("RESOURCE_WAIT_TIME", 5)
         )  # seconds, waiting for compute resource.
-        self.lock_wait_time = os.getenv("LOCK_WAIT_TIME", "2s")
+        self.lock_wait_time = float(os.getenv("LOCK_WAIT_TIME", "2"))
 
         self.profile_folder = "profiles"
         self.profile_enabled = bool_envar("model_profile_enabled", False)
@@ -271,7 +271,7 @@ class BaseModel(ABC):
                 get_logger().debug(
                     "[worker#%s] acquiring lock: %s", w.name, lock.name
                 )
-                acquired = lock.acquire(timeout=f"{self.lock_wait_time}")
+                acquired = lock.acquire(timeout=self.lock_wait_time)
                 if acquired:
                     self.accelerator_lock = lock
                     get_logger().debug("[worker#%s] lock acquired: %s", w.name, self.accelerator_lock.name)
