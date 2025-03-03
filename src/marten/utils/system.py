@@ -161,11 +161,11 @@ def bool_envar(name: str, default: bool = False) -> bool:
 
 class FileLock:
     def __init__(self, name):
-        self.lockfile = name
+        self.name = name
         self.fd = None
 
     def acquire(self, timeout=10):
-        self.fd = open(self.lockfile, "w")
+        self.fd = open(self.name, "w")
         start = time.time()
         while True:
             try:
