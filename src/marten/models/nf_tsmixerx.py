@@ -70,7 +70,7 @@ class TSMixerxModel(BaseModel):
         self.nf = None
         self.val_size = None
 
-        self._max_complexity_cpu = 60
+        # self._max_complexity_cpu = 60
         # torch.set_num_interop_threads(1)
 
     def restore_params(self, params: dict, **kwargs: Any) -> dict:
@@ -134,10 +134,7 @@ class TSMixerxModel(BaseModel):
             b -= 15
 
         return (
-            0.45 * ff_dim
-            + 2.31 * n_block
-            + 0.28 * input_size
-            + 0.27 * n_covars
+            0.45 * ff_dim + 2.31 * n_block + 0.28 * input_size + 0.27 * n_covars
         ) / 8.2 + b
         # if "num_covars" in kwargs and kwargs["num_covars"] > 0:
         #     num_covars = kwargs["num_covars"]
@@ -153,7 +150,7 @@ class TSMixerxModel(BaseModel):
     def trainable_on_cpu(self, **kwargs: Any) -> bool:
         if "num_covars" not in kwargs:
             return True
-        return self._model_complexity(**kwargs) < self._max_complexity_cpu
+        return self._model_complexity(**kwargs) < kwargs.get("max_covars", 20) * 2.5
 
     def torch_num_threads(self) -> float:
         is_baseline = self.is_baseline(**self.model_args)
@@ -163,7 +160,9 @@ class TSMixerxModel(BaseModel):
             # FIXME: temporarily enforce same thread count to identify best complexity algo
             n_workers = num_workers()
             cpu_count = psutil.cpu_count(logical=False)
-            return math.ceil(cpu_count / n_workers)
+            # return math.ceil(cpu_count / n_workers)
+            # return math.ceil(cpu_count / n_workers)
+            return round(cpu_count / n_workers, 0)
             # n_workers = num_workers()
             # cpu_count = psutil.cpu_count(logical=True)
             # quotient = math.ceil(cpu_count / n_workers)

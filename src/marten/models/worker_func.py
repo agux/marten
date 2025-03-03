@@ -575,6 +575,7 @@ def train(
             config["gpu_proc"] = args.gpu_proc
             config["max_steps"] = epochs
             config["h"] = args.future_steps
+            config["max_covar"] = args.max_cover
             metrics = model.train(
                 df, random_seed=random_seed, validate=validate, **config
             )
@@ -750,6 +751,7 @@ def log_metrics_for_hyper_params(
                 "auto" if accelerator == True or accelerator is None else accelerator
             )
             params["gpu_proc"] = args.gpu_proc
+            params["max_covar"] = args.max_covar
             last_metric = model.train(df, **params)
 
     fit_time = time.time() - start_time
@@ -2421,8 +2423,16 @@ def extract_features(
 
     features = extract_relevant_features(x, y, column_id="id", column_sort="ds")
     features = (
-        features.reset_index().drop("level_0", axis=1).rename(columns={"level_1": "ds"})
+        features.reset_index().rename(columns={"level_0": "symbol", "level_1": "date"})
     )
+    eav_df = features.melt(id_vars=["symbol", "date"], var_name="feature", value_name="value")
+    eav_df.insert(0, "symbol_table", anchor_table)
+    eav_df.insert(2, "cov_table", anchor_table)
+    eav_df.insert(3, "cov_symbol", symbol)
+    with alchemyEngine.begin() as conn:
+        eav_df.to_sql("ts_features", con=conn, if_exists="replace", index=False)
+
+    features = features.rename(columns = {"date": "ds"})
 
     futures = []
     cov_table = "ts_features_view"
@@ -2453,18 +2463,40 @@ def extract_features(
             futures = list(undone)
 
     # 2. select top-N symbols from paired_correlation
+    query = """
+        SELECT
+            cov_table, cov_symbol
+        FROM
+            paired_correlation pc
+        WHERE
+            pc.model = %(model)s
+            AND pc.symbol = %(anchor_symbol)s
+            AND pc.symbol_table = %(symbol_table)s
+            AND pc.ts_date = %(ts_date)s
+        order by loss_val
+        limit %(limit)s
+    """
+    params = {
+        "model": args.model,
+        "anchor_symbol": symbol,
+        "symbol_table": anchor_table,
+        "ts_date": df["ds"].max.strftime("%Y-%m-%d"),
+        "limit": args.max_covars,
+    }
     with alchemyEngine.connect() as conn:
-        df = pd.read_sql(
+        topk_covars = pd.read_sql(
             query,
             conn,
             params=params,
         )
+    for cov_table, cov_symbol in topk_covars.itertuples(index=False):
+        
 
-    return futures
     # 3. for each symbol: query all features from basic and TA tables
     # 4. extract features from these tables / dataframes
     # 5. re-run paired correlation on these features in parallel
     # 6. save these extracted features to an Entity-Attribute-Value table.
+    return futures
 
 
 def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
