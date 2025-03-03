@@ -5,6 +5,7 @@ import json
 import hashlib
 import math
 import logging
+import uuid
 
 logging.getLogger("NP.plotly").setLevel(logging.CRITICAL)
 logging.getLogger("prophet.plot").disabled = True
@@ -17,6 +18,7 @@ from datetime import datetime, timedelta
 from collections import deque
 from sqlalchemy import text
 from psycopg2.extras import execute_values
+from sqlalchemy import Engine
 
 # from neuralprophet.event_utils import get_all_holidays
 import holidays
@@ -24,7 +26,7 @@ import chinese_calendar
 import dask
 from dask.distributed import get_worker, worker_client, Semaphore, wait, Future, Client
 from types import SimpleNamespace
-from typing import List
+from typing import List, Any
 from tenacity import (
     stop_after_attempt,
     wait_exponential,
@@ -81,16 +83,16 @@ def merge_covar_df(
     ):
         if feature == "y":
             # no covariate is needed. this is a baseline metric
-            merged_df = anchor_df[["ds", "y"]]
+            merged_df = anchor_df[["ds", "y"]].copy()
             return merged_df
         else:
             # using endogenous features as covariate
             col_name = f"{feature}::{cov_table}::{cov_symbol}"
             if col_name in anchor_df.columns:
-                merged_df = anchor_df[["ds", "y", col_name]]
+                merged_df = anchor_df[["ds", "y", col_name]].copy()
                 return merged_df
             elif feature in anchor_df.columns:
-                merged_df = anchor_df[["ds", "y", feature]]
+                merged_df = anchor_df[["ds", "y", feature]].copy()
                 return merged_df
 
     cov_symbol_sanitized = f"{feature}_{cov_symbol}"
@@ -189,7 +191,9 @@ def fit_with_covar(
     model = worker.model
 
     def _func():
-        if feature not in anchor_df.columns:
+        if feature in anchor_df.columns:
+            merged_df = anchor_df.copy()
+        else:
             merged_df = merge_covar_df(
                 anchor_symbol,
                 args.symbol_table,
@@ -2389,7 +2393,14 @@ def min_covar_loss_val(alchemyEngine, model, symbol, symbol_table, ts_date):
         return result.fetchone()[0]
 
 
-def extract_features(client: Client, symbol: str, anchor_df: pd.DataFrame, anchor_table: str) -> List[Future]:
+def extract_features(
+    client: Client,
+    alchemyEngine: Engine,
+    symbol: str,
+    anchor_df: pd.DataFrame,
+    anchor_table: str,
+    args: Any,
+) -> List[Future]:
     # TODO: extract features from endogenous variables and all features of top-N assets
     # 1. extract features from endogenous variables
     targets = anchor_df[["ds", "y"]].copy()
@@ -2414,33 +2425,42 @@ def extract_features(client: Client, symbol: str, anchor_df: pd.DataFrame, ancho
     )
 
     futures = []
-    cov_table = ""
+    cov_table = "ts_features_view"
+    min_date = df["ds"].min.strftime("%Y-%m-%d")
     feat_cols = [c for c in features.columns if c != "ds"]
     for fcol in feat_cols:
         df = anchor_df[["ds", "y"]].merge(features[["ds", fcol]], on="ds", how="left")
         futures.append(
             client.submit(
-                    fit_with_covar,
-                    symbol,
-                    df,
-                    cov_table,
-                    symbol,
-                    min_date,
-                    args.random_seed,
-                    feature,
-                    # select_device(
-                    #     args.accelerator,
-                    #     getattr(args, "gpu_util_threshold", None),
-                    #     getattr(args, "gpu_ram_threshold", None),
-                    # ),
-                    "auto",
-                    args.early_stopping,
-                    args.infer_holiday,
-                    key=f"{fit_with_covar.__name__}({cov_table})-{uuid.uuid4().hex}",
-                    # priority=p_order,
-                )
+                fit_with_covar,
+                symbol,
+                df,
+                cov_table,
+                symbol,
+                min_date,
+                args.random_seed,
+                fcol,
+                "auto",
+                args.early_stopping,
+                args.infer_holiday,
+                key=f"{fit_with_covar.__name__}({cov_table})-{uuid.uuid4().hex}",
+            )
         )
-    # 2. select top-N symbols from paried_correlation
+        if len(futures) > args.max_worker * 3:
+            done, undone = wait(futures, return_when="FIRST_COMPLETED")
+            get_results(done)
+            del done
+            futures = list(undone)
+
+    # 2. select top-N symbols from paired_correlation
+    with alchemyEngine.connect() as conn:
+        df = pd.read_sql(
+            query,
+            conn,
+            params=params,
+        )
+
+    return futures
     # 3. for each symbol: query all features from basic and TA tables
     # 4. extract features from these tables / dataframes
     # 5. re-run paired correlation on these features in parallel
@@ -2549,7 +2569,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
             args.symbol,
             round(time.time() - t1_start, 3),
         )
-        #TODO uncomment to enable feature extraction
+        # TODO uncomment to enable feature extraction
         # t1_start = time.time()
         # logger.info("Starting feature engineering and extraction")
         # futures = extract_features(client, symbol, anchor_df, anchor_table, args)
