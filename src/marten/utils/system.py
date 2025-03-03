@@ -160,8 +160,8 @@ def bool_envar(name: str, default: bool = False) -> bool:
 
 
 class FileLock:
-    def __init__(self, lockfile):
-        self.lockfile = lockfile
+    def __init__(self, name):
+        self.lockfile = name
         self.fd = None
 
     def acquire(self, timeout=10):
