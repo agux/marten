@@ -62,7 +62,7 @@ from dask.distributed import get_worker, Lock
 
 from marten.utils.logger import get_logger
 from marten.utils.trainer import is_cuda_error, huber_loss
-from marten.utils.system import bool_envar
+from marten.utils.system import bool_envar, FileLock
 from marten.utils.worker import (
     release_lock,
     wait_gpu,
@@ -147,7 +147,10 @@ class BaseModel(ABC):
         self.device = None
         self.model_args = None
         self.accelerator_lock = None
-        self.locks = {}
+        self.locks = {
+            "gpu": FileLock(name=f"""{socket.gethostname()}_marten_GPU-auto.lock"""),
+            "profiler": FileLock(name=f"""{socket.gethostname()}_marten_profiler.lock""")
+        }
         self.profiler = None
         self.trainLogger = None
 
@@ -185,8 +188,8 @@ class BaseModel(ABC):
         if self.model_args["accelerator"] != "cpu" or not self.profile_enabled:
             return
 
-        if "profiler" not in self.locks:
-            self.locks["profiler"] = Lock(name=f"""{socket.gethostname()}__profiler""")
+        # if "profiler" not in self.locks:
+            # self.locks["profiler"] = Lock(name=f"""{socket.gethostname()}__profiler""")
 
         if not self.locks["profiler"].acquire(timeout=2):
             return
@@ -329,10 +332,10 @@ class BaseModel(ABC):
             accelerator = "cpu"
         elif accelerator in ("gpu", "auto"):
             accelerator = "gpu"
-            if not is_baseline:
+            # if not is_baseline:
                 # self.release_accelerator_lock()
                 # TODO: confirm if we need to re-create the Lock instance each time to avoid getting stuck
-                self.locks["gpu"] = Lock(name=f"""{socket.gethostname()}__GPU-auto""")
+                # self.locks["gpu"] = Lock(name=f"""{socket.gethostname()}__GPU-auto""")
 
         # gpu or auto
         if accelerator == "gpu":

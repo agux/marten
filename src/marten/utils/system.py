@@ -1,6 +1,6 @@
 import os
 import time
-import psutil
+import fcntl
 import threading
 
 from sqlalchemy import Engine, text
@@ -158,3 +158,31 @@ def bool_envar(name: str, default: bool = False) -> bool:
         "on",
     )
 
+
+class FileLock:
+    def __init__(self, lockfile):
+        self.lockfile = lockfile
+        self.fd = None
+
+    def acquire(self, timeout=10):
+        self.fd = open(self.lockfile, "w")
+        start = time.time()
+        while True:
+            try:
+                fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return True
+            except BlockingIOError:
+                # self.fd.close()
+                if time.time() - start > timeout:
+                    return False
+                time.sleep(0.1)
+            except OSError as e:
+                # Handle file system errors
+                self.fd.close()
+                raise e
+
+    def release(self):
+        if self.fd:
+            fcntl.flock(self.fd, fcntl.LOCK_UN)
+            self.fd.close()
+            self.fd = None
