@@ -575,7 +575,7 @@ def train(
             config["gpu_proc"] = args.gpu_proc
             config["max_steps"] = epochs
             config["h"] = args.future_steps
-            config["max_covar"] = args.max_cover
+            config["max_covars"] = args.max_covars
             metrics = model.train(
                 df, random_seed=random_seed, validate=validate, **config
             )
@@ -751,7 +751,7 @@ def log_metrics_for_hyper_params(
                 "auto" if accelerator == True or accelerator is None else accelerator
             )
             params["gpu_proc"] = args.gpu_proc
-            params["max_covar"] = args.max_covar
+            params["max_covars"] = args.max_covars
             last_metric = model.train(df, **params)
 
     fit_time = time.time() - start_time
