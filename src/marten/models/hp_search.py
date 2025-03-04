@@ -689,7 +689,7 @@ def _load_covars(
     return df, covar_set_id
 
 
-def _load_covar_feature(cov_table, feature, symbols, start_date, end_date):
+def _load_covar_feature(anchor_table, anchor_symbol, cov_table, feature, symbols, start_date, end_date):
     worker = get_worker()
     alchemyEngine = worker.alchemyEngine
     params = {"start_date": start_date, "end_date": end_date}
@@ -707,6 +707,35 @@ def _load_covar_feature(cov_table, feature, symbols, start_date, end_date):
             query = f"""
                 SELECT 'currency_exchange' ID, date DS, {feature} y
                 FROM {cov_table}
+                and date between %(start_date)s and %(end_date)s
+            """
+            table_feature_df = pd.read_sql(
+                query, alchemyEngine, params=params, parse_dates=["ds"]
+            )
+        case "ts_features_view":
+            table_symbols = [tuple(s.split("::", 1)) for s in symbols]
+            # Ensure 'table' and 'symbol' are correctly quoted to prevent SQL injection
+            values_list = ", ".join(
+                [
+                    "(%(cov_table_{0})s, %(cov_symbol_{0})s)".format(idx)
+                    for idx in range(len(table_symbols))
+                ]
+            )
+            for idx, (table_name, symbol) in enumerate(table_symbols):
+                params[f"cov_table_{idx}"] = table_name
+                params[f"cov_symbol_{idx}"] = symbol
+            params["symbol_table"] = anchor_table
+            params["symbol"] = anchor_symbol
+            params["feature"] = feature
+            # Construct the query using named parameters
+            query = f"""
+                SELECT symbol_table || '::' || symbol AS ID, date AS DS, value as {feature}
+                FROM ts_features_view
+                WHERE 
+                symbol_table = %(symbol_table)s
+                and symbol = %(symbol)s
+                and feature = %(feature)s
+                and (cov_table, cov_symbol) IN ({values_list})
                 and date between %(start_date)s and %(end_date)s
             """
             table_feature_df = pd.read_sql(
@@ -814,6 +843,8 @@ def augment_anchor_df_with_covars(df, args, alchemyEngine, logger, cutoff_date):
         futures.append(
             client.submit(
                 _load_covar_feature,
+                args.symbol_table,
+                args.symbol,
                 cov_table,
                 feature,
                 sdf1["cov_symbol"],
@@ -1427,7 +1458,6 @@ def covar_metric(
         num_symbols,
     )
     return num_symbols
-
 
 
 def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
