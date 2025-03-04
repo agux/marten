@@ -53,7 +53,7 @@ from marten.utils.trainer import (
     remove_singular_variables,
 )
 from marten.utils.softs import SOFTSPredictor, baseline_config
-from marten.utils.database import columns_with_prefix
+from marten.utils.database import columns_with_prefix, tables_with_prefix
 from marten.utils.neuralprophet import (
     select_topk_features,
     NPPredictor,
@@ -2395,22 +2395,20 @@ def min_covar_loss_val(alchemyEngine, model, symbol, symbol_table, ts_date):
         return result.fetchone()[0]
 
 
-def extract_features(
+def extract_features_on(
     client: Client,
     alchemyEngine: Engine,
     symbol: str,
+    symbol_table: str,
+    cov_table: str,
+    cov_symbol: str,
     anchor_df: pd.DataFrame,
-    anchor_table: str,
+    feature_df: pd.DataFrame,
+    targets: pd.DataFrame,
+    futures: List[Future],
     args: Any,
-) -> List[Future]:
-    # TODO: extract features from endogenous variables and all features of top-N assets
-    # 1. extract features from endogenous variables
-    targets = anchor_df[["ds", "y"]].copy()
-    targets.loc[:, "target"] = targets["y"].shift(-1)
-    targets = targets.dropna(subset=["target"])
-    targets = targets[["ds", "target"]]
-
-    df = anchor_df.copy()
+):
+    df = feature_df.copy()
     df.insert(0, "unique_id", symbol)
     rts = roll_time_series(
         df[:-1], column_id="unique_id", column_sort="ds", max_timeshift=20
@@ -2422,22 +2420,25 @@ def extract_features(
     x = rts.drop(columns=["unique_id", "target"])
 
     features = extract_relevant_features(x, y, column_id="id", column_sort="ds")
-    features = (
-        features.reset_index().rename(columns={"level_0": "symbol", "level_1": "date"})
+    features = features.reset_index().rename(
+        columns={"level_0": "symbol", "level_1": "date"}
     )
-    eav_df = features.melt(id_vars=["symbol", "date"], var_name="feature", value_name="value")
-    eav_df.insert(0, "symbol_table", anchor_table)
-    eav_df.insert(2, "cov_table", anchor_table)
-    eav_df.insert(3, "cov_symbol", symbol)
+    eav_df = features.melt(
+        id_vars=["symbol", "date"], var_name="feature", value_name="value"
+    )
+    eav_df.insert(0, "symbol_table", symbol_table)
+    eav_df.insert(2, "cov_table", cov_table)
+    eav_df.insert(3, "cov_symbol", cov_symbol)
+    # save these extracted features to an Entity-Attribute-Value table.
     with alchemyEngine.begin() as conn:
         eav_df.to_sql("ts_features", con=conn, if_exists="replace", index=False)
 
-    features = features.rename(columns = {"date": "ds"})
+    features = features.rename(columns={"date": "ds"})
 
     futures = []
-    cov_table = "ts_features_view"
-    min_date = df["ds"].min.strftime("%Y-%m-%d")
+    min_date = anchor_df["ds"].min.strftime("%Y-%m-%d")
     feat_cols = [c for c in features.columns if c != "ds"]
+    # re-run paired correlation on these features in parallel
     for fcol in feat_cols:
         df = anchor_df[["ds", "y"]].merge(features[["ds", fcol]], on="ds", how="left")
         futures.append(
@@ -2445,15 +2446,15 @@ def extract_features(
                 fit_with_covar,
                 symbol,
                 df,
-                cov_table,
-                symbol,
+                "ts_features_view",
+                f"{cov_table}::{cov_symbol}",
                 min_date,
                 args.random_seed,
                 fcol,
                 "auto",
                 args.early_stopping,
                 args.infer_holiday,
-                key=f"{fit_with_covar.__name__}({cov_table})-{uuid.uuid4().hex}",
+                key=f"{fit_with_covar.__name__}({cov_symbol})-{uuid.uuid4().hex}",
             )
         )
         if len(futures) > args.max_worker * 3:
@@ -2461,6 +2462,37 @@ def extract_features(
             get_results(done)
             del done
             futures = list(undone)
+
+
+def extract_features(
+    client: Client,
+    alchemyEngine: Engine,
+    symbol: str,
+    anchor_df: pd.DataFrame,
+    anchor_table: str,
+    args: Any,
+) -> List[Future]:
+    # TODO: extract features from endogenous variables and all features of top-N assets
+    targets = anchor_df[["ds", "y"]].copy()
+    targets.loc[:, "target"] = targets["y"].shift(-1)
+    targets = targets.dropna(subset=["target"])
+    targets = targets[["ds", "target"]]
+
+    futures = []
+    # 1. extract features from endogenous variables
+    extract_features_on(
+        client,
+        alchemyEngine,
+        symbol,
+        anchor_table,
+        anchor_table,
+        symbol,
+        anchor_df,
+        anchor_df,
+        targets,
+        futures,
+        args,
+    )
 
     # 2. select top-N symbols from paired_correlation
     query = """
@@ -2480,7 +2512,7 @@ def extract_features(
         "model": args.model,
         "anchor_symbol": symbol,
         "symbol_table": anchor_table,
-        "ts_date": df["ds"].max.strftime("%Y-%m-%d"),
+        "ts_date": anchor_df["ds"].max.strftime("%Y-%m-%d"),
         "limit": args.max_covars,
     }
     with alchemyEngine.connect() as conn:
@@ -2489,13 +2521,63 @@ def extract_features(
             conn,
             params=params,
         )
-    for cov_table, cov_symbol in topk_covars.itertuples(index=False):
-        
+        # query a list of ta_ table names from meta table
+        ta_tables = tables_with_prefix(conn, "ta")
 
-    # 3. for each symbol: query all features from basic and TA tables
-    # 4. extract features from these tables / dataframes
-    # 5. re-run paired correlation on these features in parallel
-    # 6. save these extracted features to an Entity-Attribute-Value table.
+    from marten.models.hp_search import load_anchor_ts
+
+    for cov_table, cov_symbol in topk_covars.itertuples(index=False):
+        # for each symbol, extract features from basic table
+        feature_df = load_anchor_ts(
+            cov_symbol, alchemyEngine=alchemyEngine, anchor_table=anchor_table
+        )
+        extract_features_on(
+            client,
+            alchemyEngine,
+            symbol,
+            anchor_table,
+            cov_table,
+            cov_symbol,
+            anchor_df,
+            feature_df,
+            targets,
+            futures,
+            args,
+        )
+
+        # extract features from TA table
+        for ta_table in ta_tables:
+            with alchemyEngine.connect() as conn:
+                ta_df = pd.read_sql(
+                    f"""
+                        select * from {ta_table} 
+                        where "table"=%(table)s
+                        and symbol = %(symbol)s
+                    """,
+                    con=conn,
+                    params={"table": cov_table, "symbol": cov_symbol},
+                    parse_dates=["date"],
+                )
+
+                ta_df = ta_df.drop(
+                    columns=["table_symbol", "table", "symbol", "last_modified"]
+                ).rename(columns={"date": "ds"})
+                
+            extract_features_on(
+                client,
+                alchemyEngine,
+                symbol,
+                anchor_table,
+                ta_table,
+                f"{cov_table}::{cov_symbol}",
+                anchor_df,
+                ta_df,
+                targets,
+                futures,
+                args,
+            )
+            
+
     return futures
 
 
@@ -2601,19 +2683,18 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
             args.symbol,
             round(time.time() - t1_start, 3),
         )
-        # TODO uncomment to enable feature extraction
-        # t1_start = time.time()
-        # logger.info("Starting feature engineering and extraction")
-        # futures = extract_features(client, symbol, anchor_df, anchor_table, args)
-        # while len(futures) > 0:
-        #     done, undone = wait(futures)
-        #     get_results(done)
-        #     futures = list(undone)
-        # logger.info(
-        #     "%s feature extraction completed. Time taken: %s seconds",
-        #     args.symbol,
-        #     round(time.time() - t1_start, 3),
-        # )
+        t1_start = time.time()
+        logger.info("Starting feature engineering and extraction")
+        futures = extract_features(client, symbol, anchor_df, anchor_table, args)
+        while len(futures) > 0:
+            done, undone = wait(futures)
+            get_results(done)
+            futures = list(undone)
+        logger.info(
+            "%s feature extraction completed. Time taken: %s seconds",
+            args.symbol,
+            round(time.time() - t1_start, 3),
+        )
 
     min_covar_loss = min_covar_loss_val(
         alchemyEngine, args.model, symbol, args.symbol_table, cutoff_date

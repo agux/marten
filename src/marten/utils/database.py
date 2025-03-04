@@ -61,6 +61,38 @@ def has_column(conn, table_name, *args):
         return False
 
 
+def tables_with_prefix(conn, prefix):
+    # Define the escape character (e.g., '!')
+    escape_char = "!"
+
+    # Escape the underscore in the pattern using the escape character
+    pattern = f"{prefix}{escape_char}_%"
+
+    # Craft the SQL query with parameter placeholders
+    query = text(
+        f"""
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_name LIKE :pattern escape '{escape_char}'
+            and table_name not like '%{escape_char}_impute' escape '{escape_char}'
+            and table_name not like '%{escape_char}_part{escape_char}_%' escape '{escape_char}'
+            AND table_type = 'BASE TABLE'
+            AND table_schema NOT IN ('pg_catalog', 'information_schema')
+        """
+    )
+
+    # Execute the query with bound parameters
+    with conn.connect() as c:
+        result = c.execute(
+            query,
+            {
+                "pattern": pattern,
+            },
+        )
+        # Fetch and return the table names
+        return [row[0] for row in result.fetchall()]
+
+
 def columns_with_prefix(conn, table, prefix):
     """
     Retrieve column names from a table where the column names start with a given prefix followed by an underscore.
