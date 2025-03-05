@@ -2409,6 +2409,13 @@ def extract_features_on(
     args: Any,
 ):
     logger = get_logger()
+    logger.info(
+        "extracting features for %s@%s with covar %s@%s",
+        symbol,
+        symbol_table,
+        cov_symbol,
+        cov_table,
+    )
     df = feature_df.copy()
     df.insert(0, "unique_id", symbol)
     rts = roll_time_series(
@@ -2534,7 +2541,7 @@ def extract_features(
     for cov_table, cov_symbol in topk_covars.itertuples(index=False):
         # for each symbol, extract features from basic table
         feature_df, _ = load_anchor_ts(
-            cov_symbol, args.timestep_limit, alchemyEngine, ts_date, anchor_table
+            cov_symbol, args.timestep_limit, alchemyEngine, ts_date, cov_table
         )
         extract_features_on(
             client,
@@ -2567,7 +2574,7 @@ def extract_features(
                 ta_df = ta_df.drop(
                     columns=["table_symbol", "table", "symbol", "last_modified"]
                 ).rename(columns={"date": "ds"})
-                
+
             extract_features_on(
                 client,
                 alchemyEngine,
@@ -2581,7 +2588,6 @@ def extract_features(
                 futures,
                 args,
             )
-            
 
     return futures
 
@@ -2690,7 +2696,9 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
         )
         t1_start = time.time()
         logger.info("Starting feature engineering and extraction")
-        futures = extract_features(client, alchemyEngine, symbol, anchor_df, anchor_table, args)
+        futures = extract_features(
+            client, alchemyEngine, symbol, anchor_df, anchor_table, args
+        )
         while len(futures) > 0:
             done, undone = wait(futures)
             get_results(done)
