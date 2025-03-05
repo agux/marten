@@ -2408,6 +2408,7 @@ def extract_features_on(
     futures: List[Future],
     args: Any,
 ):
+    logger = get_logger()
     df = feature_df.copy()
     df.insert(0, "unique_id", symbol)
     rts = roll_time_series(
@@ -2438,6 +2439,7 @@ def extract_features_on(
     futures = []
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
     feat_cols = [c for c in features.columns if c != "ds"]
+    logger.info("extracted features: %s", feat_cols)
     # re-run paired correlation on these features in parallel
     for fcol in feat_cols:
         df = anchor_df[["ds", "y"]].merge(features[["ds", fcol]], on="ds", how="left")
@@ -2521,8 +2523,8 @@ def extract_features(
             conn,
             params=params,
         )
-        # query a list of ta_ table names from meta table
-        ta_tables = tables_with_prefix(conn, "ta")
+    # query a list of ta_ table names from meta table
+    ta_tables = tables_with_prefix(alchemyEngine, "ta")
 
     from marten.models.hp_search import load_anchor_ts
 
