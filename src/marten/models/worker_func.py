@@ -2685,7 +2685,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
         )
         t1_start = time.time()
         logger.info("Starting feature engineering and extraction")
-        futures = extract_features(client, symbol, anchor_df, anchor_table, args)
+        futures = extract_features(client, alchemyEngine, symbol, anchor_df, anchor_table, args)
         while len(futures) > 0:
             done, undone = wait(futures)
             get_results(done)
