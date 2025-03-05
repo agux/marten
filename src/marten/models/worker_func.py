@@ -2400,8 +2400,8 @@ def extract_features_on(
     alchemyEngine: Engine,
     symbol: str,
     symbol_table: str,
-    cov_table: str,
     cov_symbol: str,
+    cov_table: str,
     anchor_df: pd.DataFrame,
     feature_df: pd.DataFrame,
     targets: pd.DataFrame,
@@ -2419,6 +2419,9 @@ def extract_features_on(
 
     y = rts.groupby("id")["target"].last()
     x = rts.drop(columns=["unique_id", "target"])
+
+    logger.info("x:\n %s", x)
+    logger.info("y:\n %s", y)
 
     features = extract_relevant_features(x, y, column_id="id", column_sort="ds")
     features = features.reset_index().rename(
@@ -2438,8 +2441,8 @@ def extract_features_on(
 
     futures = []
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
-    feat_cols = [c for c in features.columns if c != "ds"]
-    logger.info("extracted features: %s", feat_cols)
+    feat_cols = [c for c in features.columns if c not in ("symbol", "ds")]
+    logger.info("extracted features for %s@%s: %s", cov_symbol, cov_table, feat_cols)
     # re-run paired correlation on these features in parallel
     for fcol in feat_cols:
         df = anchor_df[["ds", "y"]].merge(features[["ds", fcol]], on="ds", how="left")
@@ -2487,8 +2490,8 @@ def extract_features(
         alchemyEngine,
         symbol,
         anchor_table,
-        anchor_table,
         symbol,
+        anchor_table,
         anchor_df,
         anchor_df,
         targets,
@@ -2531,15 +2534,15 @@ def extract_features(
     for cov_table, cov_symbol in topk_covars.itertuples(index=False):
         # for each symbol, extract features from basic table
         feature_df = load_anchor_ts(
-            cov_symbol, alchemyEngine=alchemyEngine, anchor_table=anchor_table
+            cov_symbol, args.timestep_limit, alchemyEngine, anchor_table
         )
         extract_features_on(
             client,
             alchemyEngine,
             symbol,
             anchor_table,
-            cov_table,
             cov_symbol,
+            cov_table,
             anchor_df,
             feature_df,
             targets,
@@ -2570,8 +2573,8 @@ def extract_features(
                 alchemyEngine,
                 symbol,
                 anchor_table,
-                ta_table,
                 f"{cov_table}::{cov_symbol}",
+                ta_table,
                 anchor_df,
                 ta_df,
                 targets,
