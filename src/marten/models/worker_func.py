@@ -2475,6 +2475,16 @@ def extract_features_on(
             del done
             futures = list(undone)
 
+# def _load_feature_ts(alchemyEngine: Engine, table: str, symbol: str, symbol_table: str, ts_date: str):
+#     if symbol_table.startswith("ta_"):
+#         symbol, orig_table = symbol.split("::")
+#     pd.read_sql(
+#         "select * from {table}"
+#     )
+    # drop na
+    # drop irrelevant columns such as symbol, symbol_table, last_modified, etc., if any.
+    # rename date to ds, 
+
 
 def extract_features(
     client: Client,
@@ -2540,9 +2550,15 @@ def extract_features(
 
     for cov_table, cov_symbol in topk_covars.itertuples(index=False):
         # for each symbol, extract features from basic table
-        feature_df, _ = load_anchor_ts(
-            cov_symbol, args.timestep_limit, alchemyEngine, ts_date, cov_table
-        )
+        if cov_table.startswith("ta_"):
+            o_table, o_symbol = cov_symbol.split("::")
+            feature_df, _ = load_anchor_ts(
+                o_symbol, args.timestep_limit, alchemyEngine, ts_date, o_table
+            )
+        else:
+            feature_df, _ = load_anchor_ts(
+                cov_symbol, args.timestep_limit, alchemyEngine, ts_date, cov_table
+            )
         extract_features_on(
             client,
             alchemyEngine,

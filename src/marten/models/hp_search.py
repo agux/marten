@@ -762,7 +762,7 @@ def _load_covar_feature(anchor_table, anchor_symbol, cov_table, feature, symbols
                 params[f"symbol_{idx}"] = symbol
             # Construct the query using named parameters
             query = f"""
-                SELECT "table" || '::' || symbol AS ID, date AS DS, {select_cols}
+                SELECT table_symbol AS ID, date AS DS, {select_cols}
                 FROM {cov_table}
                 WHERE ("table", symbol) IN ({values_list})
                 and date between %(start_date)s and %(end_date)s
