@@ -2482,7 +2482,7 @@ def extract_features(
     targets.loc[:, "target"] = targets["y"].shift(-1)
     targets = targets.dropna(subset=["target"])
     targets = targets[["ds", "target"]]
-
+    ts_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
     futures = []
     # 1. extract features from endogenous variables
     extract_features_on(
@@ -2517,7 +2517,7 @@ def extract_features(
         "model": args.model,
         "anchor_symbol": symbol,
         "symbol_table": anchor_table,
-        "ts_date": anchor_df["ds"].max().strftime("%Y-%m-%d"),
+        "ts_date": ts_date,
         "limit": args.max_covars,
     }
     with alchemyEngine.connect() as conn:
@@ -2534,7 +2534,7 @@ def extract_features(
     for cov_table, cov_symbol in topk_covars.itertuples(index=False):
         # for each symbol, extract features from basic table
         feature_df = load_anchor_ts(
-            cov_symbol, args.timestep_limit, alchemyEngine, anchor_table
+            cov_symbol, args.timestep_limit, alchemyEngine, ts_date, anchor_table
         )
         extract_features_on(
             client,
