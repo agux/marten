@@ -2436,7 +2436,7 @@ def extract_features_on(
     features = features.rename(columns={"date": "ds"})
 
     futures = []
-    min_date = anchor_df["ds"].min.strftime("%Y-%m-%d")
+    min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
     feat_cols = [c for c in features.columns if c != "ds"]
     # re-run paired correlation on these features in parallel
     for fcol in feat_cols:
@@ -2472,7 +2472,7 @@ def extract_features(
     anchor_table: str,
     args: Any,
 ) -> List[Future]:
-    # TODO: extract features from endogenous variables and all features of top-N assets
+    # extract features from endogenous variables and all features of top-N assets
     targets = anchor_df[["ds", "y"]].copy()
     targets.loc[:, "target"] = targets["y"].shift(-1)
     targets = targets.dropna(subset=["target"])
@@ -2512,7 +2512,7 @@ def extract_features(
         "model": args.model,
         "anchor_symbol": symbol,
         "symbol_table": anchor_table,
-        "ts_date": anchor_df["ds"].max.strftime("%Y-%m-%d"),
+        "ts_date": anchor_df["ds"].max().strftime("%Y-%m-%d"),
         "limit": args.max_covars,
     }
     with alchemyEngine.connect() as conn:
