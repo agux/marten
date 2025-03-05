@@ -41,6 +41,8 @@ from marten.data.worker_func import (
     get_fund_dividend_events,
     interbank_rate,
     option_qvix,
+    patch_requests_get,
+    restore_requests_get,
 )
 
 # module_path = os.getenv("LOCAL_AKSHARE_DEV_MODULE")
@@ -124,6 +126,7 @@ def run(task, *args, **kwargs):
     else:
         return None
 
+def
 
 def main(_args):
     global client, logger, cn_index_types, us_index_list, prog_args, futures
@@ -131,6 +134,8 @@ def main(_args):
     t_start = time.time()
 
     init()
+
+    client.run(patch_requests_get)
 
     ## collect and await all task futures
 
@@ -173,6 +178,8 @@ def main(_args):
     await_futures(futures)
     logger.info("ETL Time taken: %s seconds", time.time() - t_start)
 
+    client.run(restore_requests_get)
+    
     if runnable(calc_ta):
         n_workers = len(client.scheduler_info()["workers"])
         scale_cluster_and_wait(client, max(1, n_workers / 2))

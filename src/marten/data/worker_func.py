@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import warnings
 import logging
+import requests
 
 logging.getLogger("NP.plotly").setLevel(logging.CRITICAL)
 logging.getLogger("prophet.plot").disabled = True
@@ -75,6 +76,7 @@ from dask.distributed import worker_client, get_worker, Variable
 
 from functools import lru_cache
 
+original_http_get = requests.get
 
 @lru_cache()
 def last_trade_date():
@@ -86,6 +88,32 @@ def last_trade_date():
         last_session -= timedelta(days=1)
     return last_session
 
+class TimeoutHTTPAdapter(requests.adapters.HTTPAdapter):
+    def __init__(self, *args, **kwargs):
+        self.timeout = kwargs.pop("timeout", None)
+        super().__init__(*args, **kwargs)
+
+    def send(self, request, **kwargs):
+        timeout = kwargs.get("timeout")
+        if timeout is None:
+            kwargs["timeout"] = self.timeout
+        return super().send(request, **kwargs)
+
+def patch_requests_get():
+    session = requests.Session()
+    adapter = TimeoutHTTPAdapter(timeout=(15, 60))
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+
+    def timeout_get(*args, **kwargs):
+        return session.get(*args, **kwargs)
+
+    # Monkey-patch requests.get in akshare
+    requests.get = timeout_get
+
+def restore_requests_get():
+    global original_get
+    requests.get = original_get
 
 def saveAsCsv(file_name_main: str, df):
     """
