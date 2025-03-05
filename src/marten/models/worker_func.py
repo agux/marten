@@ -2533,7 +2533,7 @@ def extract_features(
 
     for cov_table, cov_symbol in topk_covars.itertuples(index=False):
         # for each symbol, extract features from basic table
-        feature_df = load_anchor_ts(
+        feature_df, _ = load_anchor_ts(
             cov_symbol, args.timestep_limit, alchemyEngine, ts_date, anchor_table
         )
         extract_features_on(
