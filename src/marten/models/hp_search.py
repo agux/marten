@@ -391,11 +391,11 @@ def _pair_covar_metrics(
     feature,
     min_date,
     args,
-    covar_futures=None,
 ):
     worker = get_worker()
     logger = worker.logger
     cpu_count = psutil.cpu_count()
+    covar_futures=[]
 
     for symbol in cov_symbols:
         logger.debug(
@@ -455,7 +455,12 @@ def _pair_covar_metrics(
 
             # for f in done:
             #     get_result(f)
-    # wait(covar_fut)
+    # wait(covar_futures)
+    while len(covar_futures) > 0:
+        done, undone = wait(covar_futures)
+        get_results(done)
+        del done
+        covar_futures = list(undone)
     # await_futures(covar_futures)
 
 
@@ -1387,7 +1392,6 @@ def covar_metric(
         "looking for covariate symbols for %s features in %s", len(features), cov_table
     )
 
-    covar_futures = []
     num_symbols = 0
     # with worker_client() as client:
     for feature in features:
@@ -1403,7 +1407,6 @@ def covar_metric(
                     feature,
                     min_date,
                     args,
-                    covar_futures,
                 )
                 num_symbols += 1
             case "currency_boc_safe_view":
@@ -1416,7 +1419,6 @@ def covar_metric(
                     feature,
                     min_date,
                     args,
-                    covar_futures,
                 )
                 num_symbols += 1
             case _:
@@ -1439,17 +1441,16 @@ def covar_metric(
                     feature,
                     min_date,
                     args,
-                    covar_futures,
                 )
                 num_symbols += len(cov_symbols)
 
     # await_futures(covar_futures)
-    with worker_client():
-        while len(covar_futures) > 0:
-            done, undone = wait(covar_futures)
-            get_results(done)
-            del done
-            covar_futures = list(undone)
+    # with worker_client():
+    #     while len(covar_futures) > 0:
+    #         done, undone = wait(covar_futures)
+    #         get_results(done)
+    #         del done
+    #         covar_futures = list(undone)
 
     logger.info(
         "finished covar_metric for %s features in %s, total covar symbols: %s",

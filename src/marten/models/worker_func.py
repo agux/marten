@@ -2431,7 +2431,7 @@ def extract_features_on(
     eav_df.insert(3, "cov_symbol", cov_symbol)
     # save these extracted features to an Entity-Attribute-Value table.
     with alchemyEngine.begin() as conn:
-        eav_df.to_sql("ts_features", con=conn, if_exists="replace", index=False)
+        eav_df.to_sql("ts_features", con=conn, if_exists="append", index=False)
 
     features = features.rename(columns={"date": "ds"})
 
