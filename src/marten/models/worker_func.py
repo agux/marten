@@ -2538,7 +2538,7 @@ def extract_features(
 
     # 2. select top-N symbols from paired_correlation
     query = """
-        with cte0 as (
+        WITH cte0 AS (
             SELECT
                 cov_table, cov_symbol
             FROM
@@ -2548,16 +2548,17 @@ def extract_features(
                 AND pc.symbol = %(anchor_symbol)s
                 AND pc.symbol_table = %(symbol_table)s
                 AND pc.ts_date = %(ts_date)s
-            order by loss_val
-            limit %(limit)s
-        ), cte as (
-            select * from cte0 where cov_table not like 'ta!_%' escape '!'
-            union all 
-            select (string_to_array(cov_symbol, '::'))[1] AS cov_table,
-            (string_to_array(cov_symbol, '::'))[2] AS cov_symbol
-            from cte0 where cov_table like 'ta!_%' escape '!'
+            ORDER BY loss_val
+            LIMIT %(limit)s
+        ), cte AS (
+            SELECT * FROM cte0 WHERE cov_table NOT LIKE 'ta|_%' ESCAPE '|'
+            UNION ALL
+            SELECT 
+                (string_to_array(cov_symbol, '::'))[1] AS cov_table,
+                (string_to_array(cov_symbol, '::'))[2] AS cov_symbol
+            FROM cte0 WHERE cov_table LIKE 'ta|_%' ESCAPE '|'
         )
-        select distinct on (cov_table, cov_symbol) * from cte
+        SELECT DISTINCT ON (cov_table, cov_symbol) * FROM cte
     """
     params = {
         "model": args.model,
