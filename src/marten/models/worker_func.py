@@ -2551,15 +2551,16 @@ def extract_features(
             ORDER BY loss_val
             LIMIT %(limit)s
         ), cte AS (
-            SELECT * FROM cte0 WHERE cov_table NOT LIKE 'ta|_%' ESCAPE '|'
+            SELECT * FROM cte0 WHERE cov_table NOT LIKE 'ta|_%%' ESCAPE '|'
             UNION ALL
             SELECT 
                 (string_to_array(cov_symbol, '::'))[1] AS cov_table,
                 (string_to_array(cov_symbol, '::'))[2] AS cov_symbol
-            FROM cte0 WHERE cov_table LIKE 'ta|_%' ESCAPE '|'
+            FROM cte0 WHERE cov_table LIKE 'ta|_%%' ESCAPE '|'
         )
         SELECT DISTINCT ON (cov_table, cov_symbol) * FROM cte
     """
+
     params = {
         "model": args.model,
         "anchor_symbol": symbol,
