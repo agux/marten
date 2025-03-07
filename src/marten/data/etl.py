@@ -126,8 +126,6 @@ def run(task, *args, **kwargs):
     else:
         return None
 
-def
-
 def main(_args):
     global client, logger, cn_index_types, us_index_list, prog_args, futures
     prog_args = _args
