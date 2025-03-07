@@ -2428,13 +2428,23 @@ def extract_features_on(
 
     logger.info("x:\n %s", x)
     logger.info("y:\n %s", y)
-    
+
     try:
         features = extract_relevant_features(x, y, column_id="id", column_sort="ds")
     except Exception as e:
         logger.error(e, exc_info=True)
         raise e
-    
+
+    if features.empty:
+        logger.info(
+            "empty features extracted for %s@%s with covar %s@%s",
+            symbol,
+            symbol_table,
+            cov_symbol,
+            cov_table,
+        )
+        return []
+
     logger.info("extracted features:\n%s", features)
 
     features = features.reset_index().rename(
@@ -2528,17 +2538,26 @@ def extract_features(
 
     # 2. select top-N symbols from paired_correlation
     query = """
-        SELECT
-            cov_table, cov_symbol
-        FROM
-            paired_correlation pc
-        WHERE
-            pc.model = %(model)s
-            AND pc.symbol = %(anchor_symbol)s
-            AND pc.symbol_table = %(symbol_table)s
-            AND pc.ts_date = %(ts_date)s
-        order by loss_val
-        limit %(limit)s
+        with cte0 as (
+            SELECT
+                cov_table, cov_symbol
+            FROM
+                paired_correlation pc
+            WHERE
+                pc.model = %(model)s
+                AND pc.symbol = %(anchor_symbol)s
+                AND pc.symbol_table = %(symbol_table)s
+                AND pc.ts_date = %(ts_date)s
+            order by loss_val
+            limit %(limit)s
+        ), cte as (
+            select * from cte0 where cov_table not like 'ta!_%' escape '!'
+            union all 
+            select (string_to_array(cov_symbol, '::'))[1] AS cov_table,
+            (string_to_array(cov_symbol, '::'))[2] AS cov_symbol
+            from cte0 where cov_table like 'ta!_%' escape '!'
+        )
+        select distinct on (cov_table, cov_symbol) * from cte
     """
     params = {
         "model": args.model,
@@ -2560,15 +2579,9 @@ def extract_features(
 
     for cov_table, cov_symbol in topk_covars.itertuples(index=False):
         # for each symbol, extract features from basic table
-        if cov_table.startswith("ta_"):
-            o_table, o_symbol = cov_symbol.split("::")
-            feature_df, _ = load_anchor_ts(
-                o_symbol, args.timestep_limit, alchemyEngine, ts_date, o_table
-            )
-        else:
-            feature_df, _ = load_anchor_ts(
-                cov_symbol, args.timestep_limit, alchemyEngine, ts_date, cov_table
-            )
+        feature_df, _ = load_anchor_ts(
+            cov_symbol, args.timestep_limit, alchemyEngine, ts_date, cov_table
+        )
 
         futures.extend(
             extract_features_on(
@@ -2587,10 +2600,11 @@ def extract_features(
 
         # extract features from TA table
         for ta_table in ta_tables:
+            ta_view = ta_table + "_view"
             with alchemyEngine.connect() as conn:
                 ta_df = pd.read_sql(
                     f"""
-                        select * from {ta_table} 
+                        select * from {ta_view} 
                         where "table"=%(table)s
                         and symbol = %(symbol)s
                     """,
@@ -2610,7 +2624,7 @@ def extract_features(
                     symbol,
                     anchor_table,
                     f"{cov_table}::{cov_symbol}",
-                    ta_table,
+                    ta_view,
                     anchor_df,
                     ta_df,
                     targets,
