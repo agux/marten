@@ -2405,7 +2405,6 @@ def extract_features_on(
     anchor_df: pd.DataFrame,
     feature_df: pd.DataFrame,
     targets: pd.DataFrame,
-    futures: List[Future],
     args: Any,
 ):
     logger = get_logger()
@@ -2429,8 +2428,15 @@ def extract_features_on(
 
     logger.info("x:\n %s", x)
     logger.info("y:\n %s", y)
+    
+    try:
+        features = extract_relevant_features(x, y, column_id="id", column_sort="ds")
+    except Exception as e:
+        logger.error(e, exc_info=True)
+        raise e
+    
+    logger.info("extracted features:\n%s", features)
 
-    features = extract_relevant_features(x, y, column_id="id", column_sort="ds")
     features = features.reset_index().rename(
         columns={"level_0": "symbol", "level_1": "date"}
     )
@@ -2475,15 +2481,18 @@ def extract_features_on(
             del done
             futures = list(undone)
 
+    return futures
+
+
 # def _load_feature_ts(alchemyEngine: Engine, table: str, symbol: str, symbol_table: str, ts_date: str):
 #     if symbol_table.startswith("ta_"):
 #         symbol, orig_table = symbol.split("::")
 #     pd.read_sql(
 #         "select * from {table}"
 #     )
-    # drop na
-    # drop irrelevant columns such as symbol, symbol_table, last_modified, etc., if any.
-    # rename date to ds, 
+# drop na
+# drop irrelevant columns such as symbol, symbol_table, last_modified, etc., if any.
+# rename date to ds,
 
 
 def extract_features(
@@ -2500,20 +2509,21 @@ def extract_features(
     targets = targets.dropna(subset=["target"])
     targets = targets[["ds", "target"]]
     ts_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
-    futures = []
     # 1. extract features from endogenous variables
-    extract_features_on(
-        client,
-        alchemyEngine,
-        symbol,
-        anchor_table,
-        symbol,
-        anchor_table,
-        anchor_df,
-        anchor_df,
-        targets,
-        futures,
-        args,
+    futures = []
+    futures.extend(
+        extract_features_on(
+            client,
+            alchemyEngine,
+            symbol,
+            anchor_table,
+            symbol,
+            anchor_table,
+            anchor_df,
+            anchor_df,
+            targets,
+            args,
+        )
     )
 
     # 2. select top-N symbols from paired_correlation
@@ -2559,18 +2569,20 @@ def extract_features(
             feature_df, _ = load_anchor_ts(
                 cov_symbol, args.timestep_limit, alchemyEngine, ts_date, cov_table
             )
-        extract_features_on(
-            client,
-            alchemyEngine,
-            symbol,
-            anchor_table,
-            cov_symbol,
-            cov_table,
-            anchor_df,
-            feature_df,
-            targets,
-            futures,
-            args,
+
+        futures.extend(
+            extract_features_on(
+                client,
+                alchemyEngine,
+                symbol,
+                anchor_table,
+                cov_symbol,
+                cov_table,
+                anchor_df,
+                feature_df,
+                targets,
+                args,
+            )
         )
 
         # extract features from TA table
@@ -2591,18 +2603,19 @@ def extract_features(
                     columns=["table_symbol", "table", "symbol", "last_modified"]
                 ).rename(columns={"date": "ds"})
 
-            extract_features_on(
-                client,
-                alchemyEngine,
-                symbol,
-                anchor_table,
-                f"{cov_table}::{cov_symbol}",
-                ta_table,
-                anchor_df,
-                ta_df,
-                targets,
-                futures,
-                args,
+            futures.extend(
+                extract_features_on(
+                    client,
+                    alchemyEngine,
+                    symbol,
+                    anchor_table,
+                    f"{cov_table}::{cov_symbol}",
+                    ta_table,
+                    anchor_df,
+                    ta_df,
+                    targets,
+                    args,
+                )
             )
 
     return futures
