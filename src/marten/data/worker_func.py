@@ -112,8 +112,8 @@ def patch_requests_get():
     requests.get = timeout_get
 
 def restore_requests_get():
-    global original_get
-    requests.get = original_get
+    global original_http_get
+    requests.get = original_http_get
 
 def saveAsCsv(file_name_main: str, df):
     """
