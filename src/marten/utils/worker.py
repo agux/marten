@@ -391,7 +391,7 @@ def await_futures(
                 num = handle_task_timeout(futures, task_timeout, shared_vars)
         else:
             get_logger().debug("waiting until all futures complete: %s", num)
-            for batch in as_completed(futures[:], timeout=task_timeout).batches():
+            for batch in as_completed(futures, timeout=task_timeout).batches():
                 try:
                     for future in batch:
                         get_result(future)

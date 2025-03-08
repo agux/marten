@@ -18,12 +18,9 @@ import torch
 
 from dotenv import load_dotenv
 
-import dask
 from dask.distributed import (
     get_worker,
     worker_client,
-    as_completed,
-    Semaphore,
     wait,
 )
 
