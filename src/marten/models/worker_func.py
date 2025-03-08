@@ -2616,7 +2616,7 @@ def extract_features(
                 )
 
                 ta_df = ta_df.drop(
-                    columns=["table_symbol", "table", "symbol", "last_modified"]
+                    columns=["table", "symbol", "last_modified"]
                 ).rename(columns={"date": "ds"})
 
             futures.extend(
