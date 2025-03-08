@@ -2415,7 +2415,7 @@ def extract_features_on(
         cov_symbol,
         cov_table,
     )
-    df = feature_df.copy()
+    df = feature_df.dropna(axis=1, how="any")
     df.insert(0, "unique_id", symbol)
     rts = roll_time_series(
         df[:-1], column_id="unique_id", column_sort="ds", max_timeshift=20
