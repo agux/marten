@@ -2426,7 +2426,7 @@ def extract_features_on(
     df = feature_df.dropna(how="any")
     df.insert(0, "unique_id", symbol)
     rts = roll_time_series(
-        df[:-1], column_id="unique_id", column_sort="ds", max_timeshift=20
+        df[:-1], column_id="unique_id", column_sort="ds", max_timeshift=5
     )
     rts = rts.merge(targets, on="ds", how="left")
     rts = rts.dropna(subset=["target"])
