@@ -32,7 +32,6 @@ from sqlalchemy import Engine
 # from neuralprophet.event_utils import get_all_holidays
 import holidays
 import chinese_calendar
-import dask
 from dask.distributed import get_worker, worker_client, Semaphore, wait, Future, Client
 from types import SimpleNamespace
 from typing import List, Any
@@ -2437,6 +2436,9 @@ def extract_features_on(
 
     logger.info("x:\n %s", x)
     logger.info("y:\n %s", y)
+    now = datetime.now().strftime("%Y%m%d%H%M%S")
+    x.to_pickle(f'x_{now}.pkl')
+    y.to_pickle(f'y_{now}.pkl')
 
     try:
         features = extract_relevant_features(x, y, column_id="id", column_sort="ds")
