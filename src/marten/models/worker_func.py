@@ -42,9 +42,8 @@ from tenacity import (
     Retrying,
 )
 from tsfresh import extract_relevant_features
-from tsfresh.utilities.dataframe_functions import (
-    roll_time_series,
-)
+from tsfresh.utilities.distribution import ClusterDaskDistributor
+from tsfresh.utilities.dataframe_functions import roll_time_series
 
 from marten.data.worker_func import impute
 from marten.utils.worker import (
@@ -2441,8 +2440,12 @@ def extract_features_on(
     x.to_pickle(f"x_{now}.pkl")
     y.to_pickle(f"y_{now}.pkl")
 
+    distributor = ClusterDaskDistributor(address=client.cluster.scheduler_address)
+
     try:
-        features = extract_relevant_features(x, y, column_id="id", column_sort="ds")
+        features = extract_relevant_features(
+            x, y, column_id="id", column_sort="ds", distributor=distributor
+        )
     except Exception as e:
         logger.error(e, exc_info=True)
         raise e
