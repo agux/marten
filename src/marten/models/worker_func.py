@@ -7,6 +7,7 @@ def handle_exception(exc_type, exc_value, exc_traceback):
     logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
     sys.exit(1)
 
+
 sys.excepthook = handle_exception
 
 import time
@@ -2437,8 +2438,8 @@ def extract_features_on(
     logger.info("x:\n %s", x)
     logger.info("y:\n %s", y)
     now = datetime.now().strftime("%Y%m%d%H%M%S")
-    x.to_pickle(f'x_{now}.pkl')
-    y.to_pickle(f'y_{now}.pkl')
+    x.to_pickle(f"x_{now}.pkl")
+    y.to_pickle(f"y_{now}.pkl")
 
     try:
         features = extract_relevant_features(x, y, column_id="id", column_sort="ds")
@@ -2592,10 +2593,8 @@ def extract_features(
 
     for cov_table, cov_symbol in topk_covars.itertuples(index=False):
         # for each symbol, extract features from basic table
-        feature_df, _ = load_anchor_ts(
-            cov_symbol, 0, alchemyEngine, ts_date, cov_table
-        )
-
+        feature_df, _ = load_anchor_ts(cov_symbol, 0, alchemyEngine, ts_date, cov_table)
+        cov_table = cov_table[:-5] if cov_table.endswith("_view") else cov_table
         futures.extend(
             extract_features_on(
                 client,
@@ -2618,7 +2617,7 @@ def extract_features(
                 ta_df = pd.read_sql(
                     f"""
                         select * from {ta_view} 
-                        where "table"=%(table)s
+                        where "table" = %(table)s
                         and symbol = %(symbol)s
                     """,
                     con=conn,
@@ -2626,9 +2625,9 @@ def extract_features(
                     parse_dates=["date"],
                 )
 
-                ta_df = ta_df.drop(
-                    columns=["table", "symbol", "last_modified"]
-                ).rename(columns={"date": "ds"})
+                ta_df = ta_df.drop(columns=["table", "symbol", "last_modified"]).rename(
+                    columns={"date": "ds"}
+                )
 
             futures.extend(
                 extract_features_on(
