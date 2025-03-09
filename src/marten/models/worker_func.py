@@ -2423,7 +2423,7 @@ def extract_features_on(
         cov_symbol,
         cov_table,
     )
-    df = feature_df.dropna(axis=1, how="any")
+    df = feature_df.dropna(how="any")
     df.insert(0, "unique_id", symbol)
     rts = roll_time_series(
         df[:-1], column_id="unique_id", column_sort="ds", max_timeshift=20
@@ -2593,7 +2593,7 @@ def extract_features(
     for cov_table, cov_symbol in topk_covars.itertuples(index=False):
         # for each symbol, extract features from basic table
         feature_df, _ = load_anchor_ts(
-            cov_symbol, args.timestep_limit, alchemyEngine, ts_date, cov_table
+            cov_symbol, 0, alchemyEngine, ts_date, cov_table
         )
 
         futures.extend(
