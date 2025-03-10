@@ -2449,12 +2449,13 @@ def extract_features_on(
 
     try:
         features = extract_relevant_features(
-            x=x, y=y, column_id="id", column_sort="ds", 
+            x, y, column_id="id", column_sort="ds", n_jobs=0
         )
     except Exception as e:
         logger.error(e, exc_info=True)
         raise e
 
+    futures = []
     if features.empty:
         logger.info(
             "empty features extracted for %s@%s with covar %s@%s",
@@ -2463,7 +2464,7 @@ def extract_features_on(
             cov_symbol,
             cov_table,
         )
-        return []
+        return futures
 
     logger.info("extracted features:\n%s", features)
 
@@ -2482,7 +2483,6 @@ def extract_features_on(
 
     features = features.rename(columns={"date": "ds"})
 
-    futures = []
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
     feat_cols = [c for c in features.columns if c not in ("symbol", "ds")]
     logger.info("extracted features for %s@%s: %s", cov_symbol, cov_table, feat_cols)
@@ -2559,7 +2559,7 @@ def extract_features(
             args,
         )
     )
-
+    get_logger().info("getting top %s covariates...", args.max_covars)
     # 2. select top-N symbols from paired_correlation
     query = """
         WITH cte0 AS (
