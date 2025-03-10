@@ -2547,7 +2547,7 @@ def extract_features(
     targets = targets[["ds", "target"]]
     # 1. extract features from endogenous variables
     futures = []
-    futures.add(
+    futures.append(
         client.submit(
             extract_features_on,
             client,
@@ -2610,7 +2610,7 @@ def extract_features(
         # for each symbol, extract features from basic table
         feature_df, _ = load_anchor_ts(cov_symbol, 0, alchemyEngine, ts_date, cov_table)
         cov_table = cov_table[:-5] if cov_table.endswith("_view") else cov_table
-        futures.add(
+        futures.append(
             client.submit(
                 extract_features_on,
                 client,
@@ -2645,7 +2645,7 @@ def extract_features(
                     columns={"date": "ds"}
                 )
 
-            futures.add(
+            futures.append(
                 client.submit(
                     extract_features_on,
                     client,
