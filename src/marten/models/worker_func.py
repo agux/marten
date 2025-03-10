@@ -2408,8 +2408,6 @@ def min_covar_loss_val(alchemyEngine, model, symbol, symbol_table, ts_date):
 
 
 def extract_features_on(
-    client: Client,
-    alchemyEngine: Engine,
     symbol: str,
     symbol_table: str,
     cov_symbol: str,
@@ -2417,9 +2415,12 @@ def extract_features_on(
     anchor_df: pd.DataFrame,
     feature_df: pd.DataFrame,
     targets: pd.DataFrame,
-    args: Any,
 ):
-    logger = get_logger()
+    worker = get_worker()
+    args = worker.args
+    alchemyEngine = worker.alchemyEngine
+    logger = worker.logger
+    
     logger.info(
         "extracting features for %s@%s with covar %s@%s",
         symbol,
@@ -2487,29 +2488,30 @@ def extract_features_on(
     feat_cols = [c for c in features.columns if c not in ("symbol", "ds")]
     logger.info("extracted features for %s@%s: %s", cov_symbol, cov_table, feat_cols)
     # re-run paired correlation on these features in parallel
-    for fcol in feat_cols:
-        df = anchor_df[["ds", "y"]].merge(features[["ds", fcol]], on="ds", how="left")
-        futures.append(
-            client.submit(
-                fit_with_covar,
-                symbol,
-                df,
-                "ts_features_view",
-                f"{cov_table}::{cov_symbol}",
-                min_date,
-                args.random_seed,
-                fcol,
-                "auto",
-                args.early_stopping,
-                args.infer_holiday,
-                key=f"{fit_with_covar.__name__}({cov_symbol})-{uuid.uuid4().hex}",
+    with worker_client() as client:
+        for fcol in feat_cols:
+            df = anchor_df[["ds", "y"]].merge(features[["ds", fcol]], on="ds", how="left")
+            futures.append(
+                client.submit(
+                    fit_with_covar,
+                    symbol,
+                    df,
+                    "ts_features_view",
+                    f"{cov_table}::{cov_symbol}",
+                    min_date,
+                    args.random_seed,
+                    fcol,
+                    "auto",
+                    args.early_stopping,
+                    args.infer_holiday,
+                    key=f"{fit_with_covar.__name__}({cov_symbol})-{uuid.uuid4().hex}",
+                )
             )
-        )
-        if len(futures) > args.max_worker * 3:
-            done, undone = wait(futures, return_when="FIRST_COMPLETED")
-            get_results(done)
-            del done
-            futures = list(undone)
+            if len(futures) > args.max_worker:
+                done, undone = wait(futures, return_when="FIRST_COMPLETED")
+                get_results(done)
+                del done
+                futures = list(undone)
 
     return futures
 
@@ -2534,6 +2536,7 @@ def extract_features(
     args: Any,
 ) -> List[Future]:
     val_size = validation_size(anchor_df)
+    ts_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
     anchor_df = anchor_df.iloc[:-val_size, :].copy()
     # extract features from endogenous variables and all features of top-N assets
     targets = anchor_df[["ds", "y"]]
@@ -2542,11 +2545,11 @@ def extract_features(
     )
     targets = targets.dropna(subset=["target"])
     targets = targets[["ds", "target"]]
-    ts_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
     # 1. extract features from endogenous variables
     futures = []
-    futures.extend(
-        extract_features_on(
+    futures.add(
+        client.submit(
+            extract_features_on,
             client,
             alchemyEngine,
             symbol,
@@ -2607,8 +2610,9 @@ def extract_features(
         # for each symbol, extract features from basic table
         feature_df, _ = load_anchor_ts(cov_symbol, 0, alchemyEngine, ts_date, cov_table)
         cov_table = cov_table[:-5] if cov_table.endswith("_view") else cov_table
-        futures.extend(
-            extract_features_on(
+        futures.add(
+            client.submit(
+                extract_features_on,
                 client,
                 alchemyEngine,
                 symbol,
@@ -2641,8 +2645,9 @@ def extract_features(
                     columns={"date": "ds"}
                 )
 
-            futures.extend(
-                extract_features_on(
+            futures.add(
+                client.submit(
+                    extract_features_on,
                     client,
                     alchemyEngine,
                     symbol,
@@ -2655,6 +2660,12 @@ def extract_features(
                     args,
                 )
             )
+
+            if len(futures) > args.min_worker:
+                done, undone = wait(futures, return_when="FIRST_COMPLETED")
+                get_results(done)
+                del done
+                futures = list(undone)
 
     return futures
 
