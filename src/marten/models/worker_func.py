@@ -2550,8 +2550,6 @@ def extract_features(
     futures.append(
         client.submit(
             extract_features_on,
-            client,
-            alchemyEngine,
             symbol,
             anchor_table,
             symbol,
@@ -2559,7 +2557,6 @@ def extract_features(
             anchor_df,
             anchor_df,
             targets,
-            args,
         )
     )
     get_logger().info("getting top %s covariates...", args.max_covars)
@@ -2613,8 +2610,6 @@ def extract_features(
         futures.append(
             client.submit(
                 extract_features_on,
-                client,
-                alchemyEngine,
                 symbol,
                 anchor_table,
                 cov_symbol,
@@ -2622,7 +2617,6 @@ def extract_features(
                 anchor_df,
                 feature_df,
                 targets,
-                args,
             )
         )
 
@@ -2648,8 +2642,6 @@ def extract_features(
             futures.append(
                 client.submit(
                     extract_features_on,
-                    client,
-                    alchemyEngine,
                     symbol,
                     anchor_table,
                     f"{cov_table}::{cov_symbol}",
@@ -2657,7 +2649,6 @@ def extract_features(
                     anchor_df,
                     ta_df,
                     targets,
-                    args,
                 )
             )
 
