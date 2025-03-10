@@ -2431,7 +2431,7 @@ def extract_features_on(
     df = feature_df.dropna(how="any")
     df.insert(0, "unique_id", symbol)
     rts = roll_time_series(
-        df[:-1],
+        df,
         column_id="unique_id",
         column_sort="ds",
         min_timeshift=5,
