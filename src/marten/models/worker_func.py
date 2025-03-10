@@ -59,8 +59,8 @@ from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
 from marten.utils.trainer import (
     # select_device,
-    get_accelerator_locks,
     remove_singular_variables,
+    validation_size,
 )
 from marten.utils.softs import SOFTSPredictor, baseline_config
 from marten.utils.database import columns_with_prefix, tables_with_prefix
@@ -310,7 +310,7 @@ def fit_with_covar(
                         merged_df.dropna(axis=1, how="any", inplace=True)
                         if impute_df is not None:
                             impute_df.dropna(axis=1, how="all", inplace=True)
-
+                config["val_size"] = validation_size(merged_df)
                 metrics = model.train(merged_df, **config)
 
         fit_time = time.time() - start_time
@@ -586,6 +586,7 @@ def train(
             config["max_steps"] = epochs
             config["h"] = args.future_steps
             config["max_covars"] = args.max_covars
+            config["val_size"] = validation_size(df)
             metrics = model.train(
                 df, random_seed=random_seed, validate=validate, **config
             )
@@ -762,6 +763,7 @@ def log_metrics_for_hyper_params(
             )
             params["gpu_proc"] = args.gpu_proc
             params["max_covars"] = args.max_covars
+            params["val_size"] = validation_size(df)
             last_metric = model.train(df, **params)
 
     fit_time = time.time() - start_time
@@ -2442,6 +2444,7 @@ def extract_features_on(
     x.to_pickle(f"x_{now}.pkl")
     y.to_pickle(f"y_{now}.pkl")
 
+    logger.info("client address: %s", client.cluster.scheduler_address)
     distributor = ClusterDaskDistributor(address=client.cluster.scheduler_address)
 
     try:
@@ -2530,9 +2533,13 @@ def extract_features(
     anchor_table: str,
     args: Any,
 ) -> List[Future]:
+    val_size = validation_size(anchor_df)
+    anchor_df = anchor_df.iloc[:-val_size, :].copy()
     # extract features from endogenous variables and all features of top-N assets
-    targets = anchor_df[["ds", "y"]].copy()
-    targets.loc[:, "target"] = targets["y"].shift(-1)
+    targets = anchor_df[["ds", "y"]]
+    targets.loc[:, "target"] = (
+        targets["y"].shift(-1).apply(lambda x: 1 if x > 0 else -1 if x < 0 else x)
+    )
     targets = targets.dropna(subset=["target"])
     targets = targets[["ds", "target"]]
     ts_date = anchor_df["ds"].max().strftime("%Y-%m-%d")

@@ -286,7 +286,7 @@ class TSMixerxModel(BaseModel):
             # Can be 'standard', 'robust', 'robust-iqr', 'minmax' or 'boxcox'
             local_scaler_type=model_config["local_scaler_type"],
         )
-        self.val_size = min(300, int(len(df) * 0.9)) if model_config["validate"] else 0
+        self.val_size = model_config["val_size"] if model_config["validate"] else 0
         self.nf.fit(
             df,
             val_size=self.val_size,

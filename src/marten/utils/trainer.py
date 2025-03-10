@@ -1,6 +1,7 @@
 import torch
 import psutil
 import socket
+import pandas as pd
 import numpy as np
 
 import dask
@@ -195,3 +196,6 @@ def huber_loss(y_true, y_pred, delta=1.0):
 
     # Sum over all the elements to get the total loss
     return np.mean(loss)
+
+def validation_size(df: pd.DataFrame) -> int:
+    return min(300, int(len(df) * 0.9))
