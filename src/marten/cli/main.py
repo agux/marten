@@ -6,6 +6,7 @@ import logging
 logging.getLogger("NP.plotly").setLevel(logging.CRITICAL)
 logging.getLogger("prophet.plot").disabled = True
 
+import multiprocessing
 import argparse
 from marten.cli.commands import etl, hps, predict, test
 
@@ -70,4 +71,5 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method("spawn")
     main()

@@ -2530,7 +2530,6 @@ def extract_features(
     anchor_table: str,
     args: Any,
 ) -> List[Future]:
-    multiprocessing.set_start_method("spawn")
     # extract features from endogenous variables and all features of top-N assets
     targets = anchor_df[["ds", "y"]].copy()
     targets.loc[:, "target"] = targets["y"].shift(-1)
