@@ -2420,7 +2420,7 @@ def extract_features_on(
     args = worker.args
     alchemyEngine = worker.alchemyEngine
     logger = worker.logger
-    
+
     logger.info(
         "extracting features for %s@%s with covar %s@%s",
         symbol,
@@ -2431,7 +2431,12 @@ def extract_features_on(
     df = feature_df.dropna(how="any")
     df.insert(0, "unique_id", symbol)
     rts = roll_time_series(
-        df[:-1], column_id="unique_id", column_sort="ds", min_timeshift=5, max_timeshift=20,
+        df[:-1],
+        column_id="unique_id",
+        column_sort="ds",
+        min_timeshift=5,
+        max_timeshift=20,
+        n_jobs=0,
     )
     rts = rts.merge(targets, on="ds", how="left")
     rts = rts.dropna(subset=["target"])
@@ -2490,7 +2495,9 @@ def extract_features_on(
     # re-run paired correlation on these features in parallel
     with worker_client() as client:
         for fcol in feat_cols:
-            df = anchor_df[["ds", "y"]].merge(features[["ds", fcol]], on="ds", how="left")
+            df = anchor_df[["ds", "y"]].merge(
+                features[["ds", fcol]], on="ds", how="left"
+            )
             futures.append(
                 client.submit(
                     fit_with_covar,
@@ -2540,9 +2547,7 @@ def extract_features(
     anchor_df = anchor_df.iloc[:-val_size, :].copy()
     # extract features from endogenous variables and all features of top-N assets
     targets = anchor_df[["ds", "y"]]
-    targets.loc[:, "target"] = (
-        targets["y"].shift(-1).apply(lambda x: 1 if x > 0 else 0)
-    )
+    targets.loc[:, "target"] = targets["y"].shift(-1).apply(lambda x: 1 if x > 0 else 0)
     targets = targets.dropna(subset=["target"])
     targets = targets[["ds", "target"]]
     # 1. extract features from endogenous variables
