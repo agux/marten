@@ -2444,12 +2444,12 @@ def extract_features_on(
     x.to_pickle(f"x_{now}.pkl")
     y.to_pickle(f"y_{now}.pkl")
 
-    logger.info("client address: %s", client.cluster.scheduler_address)
-    distributor = ClusterDaskDistributor(address=client.cluster.scheduler_address)
+    # logger.info("client address: %s", client.cluster.scheduler_address)
+    # distributor = ClusterDaskDistributor(address=client.cluster.scheduler_address)
 
     try:
         features = extract_relevant_features(
-            x, y, column_id="id", column_sort="ds", distributor=distributor
+            x=x, y=y, column_id="id", column_sort="ds", 
         )
     except Exception as e:
         logger.error(e, exc_info=True)
