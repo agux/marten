@@ -2437,6 +2437,7 @@ def extract_features_on(
         min_timeshift=5,
         max_timeshift=20,
         n_jobs=0,
+        disable_progressbar=True,
     )
     rts = rts.merge(targets, on="ds", how="left")
     rts = rts.dropna(subset=["target"])
@@ -2455,7 +2456,7 @@ def extract_features_on(
 
     try:
         features = extract_relevant_features(
-            x, y, column_id="id", column_sort="ds", n_jobs=0
+            x, y, column_id="id", column_sort="ds", n_jobs=0, disable_progressbar=True,
         )
     except Exception as e:
         logger.error(e, exc_info=True)
