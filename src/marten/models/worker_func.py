@@ -17,12 +17,14 @@ import hashlib
 import math
 import uuid
 
+
 logging.getLogger("NP.plotly").setLevel(logging.CRITICAL)
 logging.getLogger("prophet.plot").disabled = True
 
 # OPENBLAS_NUM_THREADS = 1
 # os.environ["OPENBLAS_NUM_THREADS"] = f"{OPENBLAS_NUM_THREADS}"
 
+import multiprocessing
 import numpy as np
 from datetime import datetime, timedelta
 from collections import deque
@@ -2528,6 +2530,7 @@ def extract_features(
     anchor_table: str,
     args: Any,
 ) -> List[Future]:
+    multiprocessing.set_start_method("spawn")
     # extract features from endogenous variables and all features of top-N assets
     targets = anchor_df[["ds", "y"]].copy()
     targets.loc[:, "target"] = targets["y"].shift(-1)
