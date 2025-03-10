@@ -2430,7 +2430,7 @@ def extract_features_on(
     df = feature_df.dropna(how="any")
     df.insert(0, "unique_id", symbol)
     rts = roll_time_series(
-        df[:-1], column_id="unique_id", column_sort="ds", max_timeshift=5
+        df[:-1], column_id="unique_id", column_sort="ds", min_timeshift=5, max_timeshift=20,
     )
     rts = rts.merge(targets, on="ds", how="left")
     rts = rts.dropna(subset=["target"])
@@ -2538,7 +2538,7 @@ def extract_features(
     # extract features from endogenous variables and all features of top-N assets
     targets = anchor_df[["ds", "y"]]
     targets.loc[:, "target"] = (
-        targets["y"].shift(-1).apply(lambda x: 1 if x > 0 else -1 if x < 0 else x)
+        targets["y"].shift(-1).apply(lambda x: 1 if x > 0 else 0)
     )
     targets = targets.dropna(subset=["target"])
     targets = targets[["ds", "target"]]
@@ -2755,6 +2755,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
         while len(hps.futures) > 0:
             done, undone = wait(hps.futures)
             get_results(done)
+            del done
             hps.futures = list(undone)
         logger.info(
             "%s covariate baseline metric computation completed. Time taken: %s seconds",
@@ -2769,6 +2770,7 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
         while len(futures) > 0:
             done, undone = wait(futures)
             get_results(done)
+            del done
             futures = list(undone)
         logger.info(
             "%s feature extraction completed. Time taken: %s seconds",

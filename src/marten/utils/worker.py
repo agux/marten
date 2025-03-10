@@ -279,7 +279,7 @@ def get_result(future: Future):
         r = future.result()
         return r
     except Exception as e:
-        get_logger().exception(e)
+        get_logger().exception(e, exc_info=True)
 
 
 def get_results(futures):
