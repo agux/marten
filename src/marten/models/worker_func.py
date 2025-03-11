@@ -2428,7 +2428,14 @@ def extract_features_on(
         cov_symbol,
         cov_table,
     )
-    df = feature_df.dropna(how="any")
+    na_counts = feature_df.isna().sum()
+    thres = len(feature_df) * 0.2
+    cols_to_drop = []
+    for c in feature_df.columns:
+        if na_counts[c] > thres:
+            cols_to_drop.append(c)
+    df = feature_df.drop(columns=cols_to_drop).dropna(how="any")
+    # df = feature_df.dropna(how="any")
     df.insert(0, "unique_id", symbol)
     rts = roll_time_series(
         df,
