@@ -2480,7 +2480,15 @@ def extract_features_on(
         )
         return futures
 
-    logger.info("extracted features:\n%s", features)
+    logger.info(
+        "extracted %s relevant features for %s@%s with covar %s@%s:\n%s",
+        len(features.columns),
+        symbol,
+        symbol_table,
+        cov_symbol,
+        cov_table,
+        features,
+    )
 
     features = features.reset_index().rename(
         columns={"level_0": "symbol", "level_1": "date"}
