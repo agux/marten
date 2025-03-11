@@ -501,6 +501,25 @@ def table_def_index_daily_em():
     )
 
 
+def table_def_ts_features():
+    return Table(
+        "ts_features",
+        MetaData(),
+        Column("symbol_table", Text, primary_key=True),
+        Column("symbol", Text, primary_key=True),
+        Column("cov_table", Text, primary_key=True),
+        Column("cov_symbol", Text, primary_key=True),
+        Column("feature", Text, primary_key=True),
+        Column("date", Date, primary_key=True),
+        Column("value", Numeric),
+        Column(
+            "last_modified",
+            DateTime(timezone=True),
+            default=func.current_timestamp(),
+        ),
+    )
+
+
 def table_def_hk_index_daily_em():
     return Table(
         "hk_index_daily_em",

@@ -48,6 +48,7 @@ from tsfresh.utilities.distribution import ClusterDaskDistributor
 from tsfresh.utilities.dataframe_functions import roll_time_series
 
 from marten.data.worker_func import impute
+from marten.data.db import update_on_conflict
 from marten.utils.worker import (
     # await_futures,
     scale_cluster_and_wait,
@@ -68,6 +69,7 @@ from marten.utils.neuralprophet import (
     select_topk_features,
     NPPredictor,
 )
+from marten.data.tabledef import table_def_ts_features
 
 # from marten.utils.system import release_cpu_cores, bind_cpu_cores
 
@@ -2421,6 +2423,9 @@ def extract_features_on(
     alchemyEngine = worker.alchemyEngine
     logger = worker.logger
 
+    max_date = targets["ds"].max().strftime("%Y-%m-%d")
+    #TODO check if the record already exists in ts_features, and skip processing
+
     logger.info(
         "extracting features for %s@%s with covar %s@%s",
         symbol,
@@ -2454,16 +2459,21 @@ def extract_features_on(
 
     logger.info("x:\n %s", x)
     logger.info("y:\n %s", y)
-    now = datetime.now().strftime("%Y%m%d%H%M%S")
-    x.to_pickle(f"x_{now}.pkl")
-    y.to_pickle(f"y_{now}.pkl")
+    # now = datetime.now().strftime("%Y%m%d%H%M%S")
+    # x.to_pickle(f"x_{now}.pkl")
+    # y.to_pickle(f"y_{now}.pkl")
 
     # logger.info("client address: %s", client.cluster.scheduler_address)
     # distributor = ClusterDaskDistributor(address=client.cluster.scheduler_address)
 
     try:
         features = extract_relevant_features(
-            x, y, column_id="id", column_sort="ds", n_jobs=0, disable_progressbar=True,
+            x,
+            y,
+            column_id="id",
+            column_sort="ds",
+            n_jobs=0,
+            disable_progressbar=True,
         )
     except Exception as e:
         logger.error(e, exc_info=True)
@@ -2501,13 +2511,19 @@ def extract_features_on(
     eav_df.insert(3, "cov_symbol", cov_symbol)
     # save these extracted features to an Entity-Attribute-Value table.
     with alchemyEngine.begin() as conn:
-        eav_df.to_sql("ts_features", con=conn, if_exists="append", index=False)
+        update_on_conflict(
+            table_def_ts_features,
+            conn,
+            eav_df,
+            ["symbol_table", "symbol", "cov_table", "cov_symbol", "feature", "date"],
+        )
+        # eav_df.to_sql("ts_features", con=conn, if_exists="append", index=False)
 
     features = features.rename(columns={"date": "ds"})
 
     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
     feat_cols = [c for c in features.columns if c not in ("symbol", "ds")]
-    logger.info("extracted features for %s@%s: %s", cov_symbol, cov_table, feat_cols)
+
     # re-run paired correlation on these features in parallel
     with worker_client() as client:
         for fcol in feat_cols:
@@ -2526,7 +2542,7 @@ def extract_features_on(
                     fcol,
                     "auto",
                     args.early_stopping,
-                    args.infer_holiday,
+                    True,
                     key=f"{fit_with_covar.__name__}({cov_symbol})-{uuid.uuid4().hex}",
                 )
             )
