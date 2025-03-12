@@ -384,7 +384,7 @@ def save_impute_data(
     cov_table = cov_table[:-5] if cov_table.endswith("_view") else cov_table
     if cov_table.startswith("ts_features"):
         sql = f"""
-            INSERT INTO {cov_table}_impute (symbol_table, symbol, cov_table, cov_symbol, feature, "date", value)
+            INSERT INTO {cov_table}_impute (symbol_table, symbol, cov_table, cov_symbol, "date", feature, value)
             VALUES %s
             ON CONFLICT (symbol_table, symbol, cov_table, cov_symbol, feature, "date")
             DO UPDATE SET value = EXCLUDED.value
@@ -2670,7 +2670,7 @@ def extract_features(
     ta_tables = tables_with_prefix(alchemyEngine, "ta")
 
     from marten.models.hp_search import load_anchor_ts
-
+    n_jobs = min(args.min_worker*2, args.max_worker)
     for cov_table, cov_symbol in topk_covars.itertuples(index=False):
         # for each symbol, extract features from basic table
         feature_df, _ = load_anchor_ts(cov_symbol, 0, alchemyEngine, ts_date, cov_table)
@@ -2720,7 +2720,7 @@ def extract_features(
                 )
             )
 
-            if len(futures) > args.min_worker:
+            if len(futures) > n_jobs:
                 done, undone = wait(futures, return_when="FIRST_COMPLETED")
                 get_results(done)
                 del done
