@@ -1,4 +1,3 @@
-import os
 import sys
 import logging
 
@@ -9,6 +8,14 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 
 
 sys.excepthook = handle_exception
+
+import warnings
+
+warnings.filterwarnings(
+    "ignore",
+    message=r".*Your time stamps are not uniformly sampled.*",
+    category=UserWarning,
+)
 
 import time
 import pandas as pd
@@ -389,13 +396,14 @@ def save_impute_data(
             ON CONFLICT (symbol_table, symbol, cov_table, cov_symbol, feature, "date")
             DO UPDATE SET value = EXCLUDED.value
         """
+        t_cov_table, t_cov_symbol = cov_symbol.split("::", 1)
         impute_df = impute_df.rename(columns={"ds": "date"}).melt(
             id_vars=["date"], var_name="feature", value_name="value"
         )
         impute_df.insert(0, "symbol_table", symbol_table)
         impute_df.insert(1, "symbol", anchor_symbol)
-        impute_df.insert(2, "cov_table", cov_table)
-        impute_df.insert(3, "cov_symbol", cov_symbol)
+        impute_df.insert(2, "cov_table", t_cov_table)
+        impute_df.insert(3, "cov_symbol", t_cov_symbol)
         # impute_df.insert(4, "feature", feature)
     elif cov_table.startswith("ta_"):
         # saving imputation for technical indicators, where multiple columns could be infolved
@@ -2488,8 +2496,8 @@ def extract_features_on(
     y = rts.groupby("id")["target"].last()
     x = rts.drop(columns=["unique_id", "target"])
 
-    logger.info("x:\n %s", x)
-    logger.info("y:\n %s", y)
+    logger.debug("x:\n %s", x)
+    logger.debug("y:\n %s", y)
     # now = datetime.now().strftime("%Y%m%d%H%M%S")
     # x.to_pickle(f"x_{now}.pkl")
     # y.to_pickle(f"y_{now}.pkl")
@@ -2522,13 +2530,12 @@ def extract_features_on(
         return futures
 
     logger.info(
-        "extracted %s relevant features for %s@%s with covar %s@%s:\n%s",
+        "extracted %s relevant features for %s@%s with covar %s@%s",
         len(features.columns),
         symbol,
         symbol_table,
         cov_symbol,
         cov_table,
-        features,
     )
 
     features = features.reset_index().rename(
@@ -2605,9 +2612,9 @@ def extract_features(
     anchor_table: str,
     args: Any,
 ) -> List[Future]:
-    val_size = validation_size(anchor_df)
     ts_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
-    anchor_df = anchor_df.iloc[:-val_size, :].copy()
+    # val_size = validation_size(anchor_df)
+    # anchor_df = anchor_df.iloc[:-val_size, :].copy()
     # extract features from endogenous variables and all features of top-N assets
     targets = anchor_df[["ds", "y"]]
     targets.loc[:, "target"] = targets["y"].shift(-1).apply(lambda x: 1 if x > 0 else 0)
@@ -2670,7 +2677,8 @@ def extract_features(
     ta_tables = tables_with_prefix(alchemyEngine, "ta")
 
     from marten.models.hp_search import load_anchor_ts
-    n_jobs = min(args.min_worker*2, args.max_worker)
+
+    n_jobs = int(math.sqrt(args.min_worker * args.max_worker))
     for cov_table, cov_symbol in topk_covars.itertuples(index=False):
         # for each symbol, extract features from basic table
         feature_df, _ = load_anchor_ts(cov_symbol, 0, alchemyEngine, ts_date, cov_table)
