@@ -344,7 +344,14 @@ def fit_with_covar(
                 impute_df.shape,
             )
             save_impute_data(
-                impute_df, cov_table, cov_symbol, feature, alchemyEngine, logger
+                impute_df,
+                args.symbol_table,
+                anchor_symbol,
+                cov_table,
+                cov_symbol,
+                feature,
+                alchemyEngine,
+                logger,
             )
         return metrics
         # return None
@@ -362,11 +369,35 @@ def fit_with_covar(
         raise e
 
 
-def save_impute_data(impute_df, cov_table, cov_symbol, feature, alchemyEngine, logger):
+def save_impute_data(
+    impute_df,
+    symbol_table,
+    anchor_symbol,
+    cov_table,
+    cov_symbol,
+    feature,
+    alchemyEngine,
+    logger,
+):
     if len(impute_df.columns) <= 1:  # no valid imputation data
         return
     cov_table = cov_table[:-5] if cov_table.endswith("_view") else cov_table
-    if cov_table.startswith("ta_"):
+    if cov_table.startswith("ts_features"):
+        sql = f"""
+            INSERT INTO {cov_table}_impute (symbol_table, symbol, cov_table, cov_symbol, feature, "date", value)
+            VALUES %s
+            ON CONFLICT (symbol_table, symbol, cov_table, cov_symbol, feature, "date")
+            DO UPDATE SET value = EXCLUDED.value
+        """
+        impute_df = impute_df.rename(columns={"ds": "date"}).melt(
+            id_vars=["date"], var_name="feature", value_name="value"
+        )
+        impute_df.insert(0, "symbol_table", symbol_table)
+        impute_df.insert(1, "symbol", anchor_symbol)
+        impute_df.insert(2, "cov_table", cov_table)
+        impute_df.insert(3, "cov_symbol", cov_symbol)
+        # impute_df.insert(4, "feature", feature)
+    elif cov_table.startswith("ta_"):
         # saving imputation for technical indicators, where multiple columns could be infolved
         df_cols = [col for col in impute_df.columns if col.startswith(f"{feature}_")]
         column_names = columns_with_prefix(alchemyEngine, cov_table, feature)
@@ -2424,7 +2455,7 @@ def extract_features_on(
     logger = worker.logger
 
     max_date = targets["ds"].max().strftime("%Y-%m-%d")
-    #TODO check if the record already exists in ts_features, and skip processing
+    # TODO check if the record already exists in ts_features, and skip processing
 
     logger.info(
         "extracting features for %s@%s with covar %s@%s",
