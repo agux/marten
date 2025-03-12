@@ -2512,7 +2512,7 @@ def extract_features_on(
     # save these extracted features to an Entity-Attribute-Value table.
     with alchemyEngine.begin() as conn:
         update_on_conflict(
-            table_def_ts_features,
+            table_def_ts_features(),
             conn,
             eav_df,
             ["symbol_table", "symbol", "cov_table", "cov_symbol", "feature", "date"],
