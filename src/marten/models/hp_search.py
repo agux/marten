@@ -399,14 +399,14 @@ def _pair_covar_metrics(
     cpu_count = psutil.cpu_count()
     covar_futures=[]
 
-    for symbol in cov_symbols:
-        logger.debug(
-            "submitting fit_with_covar: %s @ %s.%s",
-            symbol,
-            cov_table,
-            feature,
-        )
-        with worker_client() as client:
+    with worker_client() as client:
+        for symbol in cov_symbols:
+            logger.debug(
+                "submitting fit_with_covar: %s @ %s.%s",
+                symbol,
+                cov_table,
+                feature,
+            )
             covar_futures.append(
                 client.submit(
                     fit_with_covar,
