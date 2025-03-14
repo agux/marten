@@ -2,6 +2,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from marten.utils.url import make_request
+import requests
 from akshare.utils import demjson
 from bs4 import BeautifulSoup
 from io import StringIO
@@ -12,7 +13,97 @@ user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 class EastMoneyAPI:
 
     @staticmethod
-    def fund_portfolio_hold_em(
+    def fund_portfolio_hold_em(symbol: str = "000001", date: str = "2024") -> pd.DataFrame:
+        """
+        天天基金网-基金档案-投资组合-基金持仓
+        https://fundf10.eastmoney.com/ccmx_000001.html
+        :param symbol: 基金代码
+        :type symbol: str
+        :param date: 查询年份
+        :type date: str
+        :return: 基金持仓
+        :rtype: pandas.DataFrame
+        """
+        url = "https://fundf10.eastmoney.com/FundArchivesDatas.aspx"
+        params = {
+            "type": "jjcc",
+            "code": symbol,
+            "topline": "10000",
+            "year": date,
+            "month": "",
+            "rt": "0.913877030254846",
+        }
+        headers = {
+            "User-Agent": user_agent,
+        }
+        r = make_request(
+            url,
+            params=params,
+            headers=headers,
+            max_timeout=200,
+        )
+        # r = requests.get(url, params=params)
+        data_text = r.text
+        data_json = demjson.decode(data_text[data_text.find("{") : -1])
+        soup = BeautifulSoup(data_json["content"], features="lxml")
+        item_label = [
+            item.text.split("\xa0\xa0")[1]
+            for item in soup.find_all(name="h4", attrs={"class": "t"})
+        ]
+        big_df = pd.DataFrame()
+        for item in range(len(item_label)):
+            temp_df = pd.read_html(
+                StringIO(data_json["content"]), converters={"股票代码": str}
+            )[item]
+            del temp_df["相关资讯"]
+            temp_df.rename(columns={"占净值 比例": "占净值比例"}, inplace=True)
+            temp_df["占净值比例"] = (
+                temp_df["占净值比例"].str.split("%", expand=True).iloc[:, 0]
+            )
+            temp_df.rename(
+                columns={"持股数（万股）": "持股数", "持仓市值（万元）": "持仓市值"},
+                inplace=True,
+            )
+            temp_df.rename(
+                columns={"持股数 （万股）": "持股数", "持仓市值 （万元）": "持仓市值"},
+                inplace=True,
+            )
+            temp_df.rename(
+                columns={"持股数（万股）": "持股数", "持仓市值（万元人民币）": "持仓市值"},
+                inplace=True,
+            )
+            temp_df.rename(
+                columns={
+                    "持股数 （万股）": "持股数",
+                    "持仓市值 （万元人民币）": "持仓市值",
+                },
+                inplace=True,
+            )
+
+            temp_df["季度"] = item_label[item]
+            temp_df = temp_df[
+                [
+                    "序号",
+                    "股票代码",
+                    "股票名称",
+                    "占净值比例",
+                    "持股数",
+                    "持仓市值",
+                    "季度",
+                ]
+            ]
+            big_df = pd.concat(objs=[temp_df, big_df], ignore_index=True)
+        big_df["占净值比例"] = pd.to_numeric(big_df["占净值比例"], errors="coerce")
+        big_df["持股数"] = pd.to_numeric(big_df["持股数"], errors="coerce")
+        big_df["持仓市值"] = pd.to_numeric(big_df["持仓市值"], errors="coerce")
+        del big_df["序号"]
+        big_df.reset_index(inplace=True, drop=False)
+        big_df["index"] = big_df["index"] + 1
+        big_df.rename(columns={"index": "序号"}, inplace=True)
+        return big_df
+
+    @staticmethod
+    def fund_portfolio_hold_em_old(
         symbol: str = "000001", date: str = "2023"
     ) -> pd.DataFrame:
         """
