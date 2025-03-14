@@ -257,9 +257,10 @@ def extract_features_on(
         return num_features
 
     logger.info(
-        "extracting features for covar %s@%s",
+        "extracting features for covar %s@%s with %s basic features",
         cov_symbol,
         cov_table,
+        len(feature_df.columns)-1,
     )
     na_counts = feature_df.isna().sum()
     thres = len(feature_df) * 0.2
@@ -367,7 +368,7 @@ def extract_features_on(
                     "auto",
                     args.early_stopping,
                     True,
-                    key=f"{fit_with_covar.__name__}({cov_symbol})-{uuid.uuid4().hex}",
+                    key=f"{fit_with_covar.__name__}-{uuid.uuid4().hex}",
                 )
             )
             if len(futures) > args.max_worker:
