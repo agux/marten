@@ -457,12 +457,12 @@ def _pair_covar_metrics(
 
             # for f in done:
             #     get_result(f)
-    # wait(covar_futures)
-    while len(covar_futures) > 0:
-        done, undone = wait(covar_futures)
-        get_results(done)
-        del done
-        covar_futures = list(undone)
+        # wait(covar_futures)
+        while len(covar_futures) > 0:
+            done, undone = wait(covar_futures)
+            get_results(done)
+            del done
+            covar_futures = list(undone)
     # await_futures(covar_futures)
 
 
