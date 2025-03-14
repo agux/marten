@@ -22,7 +22,7 @@ import pandas as pd
 import json
 import hashlib
 import math
-import uuid
+# import uuid
 
 
 logging.getLogger("NP.plotly").setLevel(logging.CRITICAL)
@@ -31,7 +31,6 @@ logging.getLogger("prophet.plot").disabled = True
 # OPENBLAS_NUM_THREADS = 1
 # os.environ["OPENBLAS_NUM_THREADS"] = f"{OPENBLAS_NUM_THREADS}"
 
-import multiprocessing
 import numpy as np
 from datetime import datetime, timedelta
 from collections import deque
@@ -42,17 +41,18 @@ from sqlalchemy import Engine
 # from neuralprophet.event_utils import get_all_holidays
 import holidays
 import chinese_calendar
-from dask.distributed import get_worker, worker_client, Semaphore, wait, Future, Client
+from dask.distributed import get_worker, worker_client, wait, Future, Client
 from types import SimpleNamespace
-from typing import List, Any
+# from typing import List, Any
 from tenacity import (
     stop_after_attempt,
     wait_exponential,
     Retrying,
 )
-from tsfresh import extract_relevant_features
-from tsfresh.utilities.distribution import ClusterDaskDistributor
-from tsfresh.utilities.dataframe_functions import roll_time_series
+# from tsfresh import extract_relevant_features
+# from tsfresh.utilities.distribution import ClusterDaskDistributor
+# from tsfresh.utilities.dataframe_functions import roll_time_series
+
 
 from marten.data.worker_func import impute
 from marten.data.db import update_on_conflict
@@ -61,7 +61,7 @@ from marten.utils.worker import (
     scale_cluster_and_wait,
     restart_all_workers,
     # num_workers,
-    get_results,
+    # get_results,
 )
 from marten.utils.holidays import get_holiday_region
 from marten.utils.logger import get_logger
@@ -71,12 +71,11 @@ from marten.utils.trainer import (
     validation_size,
 )
 from marten.utils.softs import SOFTSPredictor, baseline_config
-from marten.utils.database import columns_with_prefix, tables_with_prefix
+from marten.utils.database import columns_with_prefix
 from marten.utils.neuralprophet import (
     select_topk_features,
     NPPredictor,
 )
-from marten.data.tabledef import table_def_ts_features
 
 # from marten.utils.system import release_cpu_cores, bind_cpu_cores
 
@@ -2169,24 +2168,24 @@ def save_ensemble_snapshot(
         ens_df.to_sql("forecast_params", conn, if_exists="append", index=False)
 
 
-def init_hps(hps, model, symbol, args, client, alchemyEngine, logger):
-    # worker = get_worker()
-    # alchemyEngine, logger = worker.alchemyEngine, worker.logger
+# def init_hps(hps, model, symbol, args, client, alchemyEngine, logger):
+#     # worker = get_worker()
+#     # alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
-    args.symbol = symbol
-    args.hps_only = False
-    args.covar_only = False
-    args.infer_holiday = True
-    args.method = "fast_bayesopt"
+#     args.symbol = symbol
+#     args.hps_only = False
+#     args.covar_only = False
+#     args.infer_holiday = True
+#     args.method = "fast_bayesopt"
 
-    hps.logger = logger
-    hps.alchemyEngine = alchemyEngine
-    hps.args = args
+#     hps.logger = logger
+#     hps.alchemyEngine = alchemyEngine
+#     hps.args = args
 
-    hps.client = client
-    hps.model = model
+#     hps.client = client
+#     hps.model = model
 
-    return args
+#     return args
 
 
 def count_topk_hp(alchemyEngine, model, hps_id, base_loss):
@@ -2259,338 +2258,149 @@ def _search_space(model_name, model, max_covars, topk_covars):
     return ss
 
 
-def fast_bayesopt(
-    model,
-    client,
-    alchemyEngine,
-    logger,
-    df,
-    covar_set_id,
-    hps_id,
-    ranked_features,
-    base_loss,
-    args,
-):
-    # worker = get_worker()
-    # logger = worker.logger
+# def extract_features_on(
+#     symbol: str,
+#     symbol_table: str,
+#     cov_symbol: str,
+#     cov_table: str,
+#     anchor_df: pd.DataFrame,
+#     feature_df: pd.DataFrame,
+#     targets: pd.DataFrame,
+# ):
+#     worker = get_worker()
+#     args = worker.args
+#     alchemyEngine = worker.alchemyEngine
+#     logger = worker.logger
 
-    from scipy.stats import uniform, loguniform, dirichlet
-    from marten.models.hp_search import (
-        _cleanup_stale_keys,
-        _bayesopt_run,
-        update_hps_sessions,
-    )
+#     max_date = targets["ds"].max().strftime("%Y-%m-%d")
+#     # TODO check if the record already exists in ts_features, and skip processing
 
-    _cleanup_stale_keys()
+#     logger.info(
+#         "extracting features for %s@%s with covar %s@%s",
+#         symbol,
+#         symbol_table,
+#         cov_symbol,
+#         cov_table,
+#     )
+#     na_counts = feature_df.isna().sum()
+#     thres = len(feature_df) * 0.2
+#     cols_to_drop = []
+#     for c in feature_df.columns:
+#         if na_counts[c] > thres:
+#             cols_to_drop.append(c)
+#     df = feature_df.drop(columns=cols_to_drop).dropna(how="any")
+#     # df = feature_df.dropna(how="any")
+#     df.insert(0, "unique_id", symbol)
+#     rts = roll_time_series(
+#         df,
+#         column_id="unique_id",
+#         column_sort="ds",
+#         min_timeshift=5,
+#         max_timeshift=20,
+#         n_jobs=0,
+#         disable_progressbar=True,
+#     )
+#     rts = rts.merge(targets, on="ds", how="left")
+#     rts = rts.dropna(subset=["target"])
 
-    space_str = _search_space(
-        args.model, model, min(args.max_covars, len(ranked_features)), args.topk_covars
-    )
+#     y = rts.groupby("id")["target"].last()
+#     x = rts.drop(columns=["unique_id", "target"])
 
-    # Convert args to a dictionary, excluding non-serializable items
-    args_dict = {k: v for k, v in vars(args).items() if not callable(v)}
-    args_json = json.dumps(args_dict, sort_keys=True)
-    update_hps_sessions(hps_id, "fast_bayesopt", args_json, space_str, covar_set_id)
+#     logger.debug("x:\n %s", x)
+#     logger.debug("y:\n %s", y)
+#     # now = datetime.now().strftime("%Y%m%d%H%M%S")
+#     # x.to_pickle(f"x_{now}.pkl")
+#     # y.to_pickle(f"y_{now}.pkl")
 
-    n_jobs = args.batch_size
+#     # logger.info("client address: %s", client.cluster.scheduler_address)
+#     # distributor = ClusterDaskDistributor(address=client.cluster.scheduler_address)
 
-    domain_size = args.domain_size
-    base_ds = n_jobs * args.mini_itr * args.max_itr
-    if domain_size < 0:
-        domain_size = None
-    elif domain_size == 0:
-        domain_size = base_ds * 10
-    elif domain_size < base_ds:
-        domain_size = base_ds
+#     try:
+#         features = extract_relevant_features(
+#             x,
+#             y,
+#             column_id="id",
+#             column_sort="ds",
+#             n_jobs=0,
+#             disable_progressbar=True,
+#         )
+#     except Exception as e:
+#         logger.error(e, exc_info=True)
+#         raise e
 
-    domain_size_base = domain_size
+#     futures = []
+#     if features.empty:
+#         logger.info(
+#             "empty features extracted for %s@%s with covar %s@%s",
+#             symbol,
+#             symbol_table,
+#             cov_symbol,
+#             cov_table,
+#         )
+#         return futures
 
-    if args.model == "SOFTS":
-        df, _ = impute(df, args.random_seed, client)
-    if model is not None and not model.accept_missing_data():
-        df, _ = model.impute(df, random_seed=args.random_seed)
+#     logger.info(
+#         "extracted %s relevant features for %s@%s with covar %s@%s",
+#         len(features.columns),
+#         symbol,
+#         symbol_table,
+#         cov_symbol,
+#         cov_table,
+#     )
 
-    # locks = get_accelerator_locks(cpu_leases=0, timeout="60s")
-    # split large iterations into smaller runs to avoid OOM / memory leak
-    for i in range(args.max_itr):
-        logger.info(
-            "running bayesopt mini-iteration %s/%s batch size: %s  domain size: %s runs: %s",
-            i + 1,
-            args.max_itr,
-            n_jobs,
-            domain_size,
-            args.mini_itr,
-        )
-        min_loss = _bayesopt_run(
-            df,
-            n_jobs,
-            covar_set_id,
-            hps_id,
-            ranked_features,
-            eval(
-                space_str,
-                {"uniform": uniform, "loguniform": loguniform, "dirichlet": dirichlet},
-            ),
-            args,
-            args.mini_itr,
-            domain_size,
-            args.resume.lower() != "none" or i > 0,
-        )
+#     features = features.reset_index().rename(
+#         columns={"level_0": "symbol", "level_1": "date"}
+#     )
+#     eav_df = features.melt(
+#         id_vars=["symbol", "date"], var_name="feature", value_name="value"
+#     )
+#     eav_df.insert(0, "symbol_table", symbol_table)
+#     eav_df.insert(2, "cov_table", cov_table)
+#     eav_df.insert(3, "cov_symbol", cov_symbol)
+#     # save these extracted features to an Entity-Attribute-Value table.
+#     with alchemyEngine.begin() as conn:
+#         update_on_conflict(
+#             table_def_ts_features(),
+#             conn,
+#             eav_df,
+#             ["symbol_table", "symbol", "cov_table", "cov_symbol", "feature", "date"],
+#         )
+#         # eav_df.to_sql("ts_features", con=conn, if_exists="append", index=False)
 
-        if domain_size:
-            domain_size += domain_size_base
+#     features = features.rename(columns={"date": "ds"})
 
-        if min_loss is None or min_loss > base_loss:
-            continue
+#     min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
+#     feat_cols = [c for c in features.columns if c not in ("symbol", "ds")]
 
-        topk_count = count_topk_hp(alchemyEngine, args.model, hps_id, base_loss)
+#     # re-run paired correlation on these features in parallel
+#     with worker_client() as client:
+#         for fcol in feat_cols:
+#             df = anchor_df[["ds", "y"]].merge(
+#                 features[["ds", fcol]], on="ds", how="left"
+#             )
+#             futures.append(
+#                 client.submit(
+#                     fit_with_covar,
+#                     symbol,
+#                     df,
+#                     "ts_features_view",
+#                     f"{cov_table}::{cov_symbol}",
+#                     min_date,
+#                     args.random_seed,
+#                     fcol,
+#                     "auto",
+#                     args.early_stopping,
+#                     True,
+#                     key=f"{fit_with_covar.__name__}({cov_symbol})-{uuid.uuid4().hex}",
+#                 )
+#             )
+#             if len(futures) > args.max_worker:
+#                 done, undone = wait(futures, return_when="FIRST_COMPLETED")
+#                 get_results(done)
+#                 del done
+#                 futures = list(undone)
 
-        if topk_count >= args.topk:
-            logger.info(
-                "Found %s HP with Loss_val less than %s. Best score: %s, stopping bayesopt.",
-                topk_count,
-                base_loss,
-                min_loss,
-            )
-            return topk_count
-        else:
-            logger.info(
-                "Found %s HP with Loss_val less than %s. Best score: %s",
-                topk_count,
-                base_loss,
-                min_loss,
-            )
-            # client.restart()
-            restart_all_workers(client)
-
-
-def update_covar_set_id(alchemyEngine, hps_id, covar_set_id):
-    sql = """
-        update hps_sessions
-        set covar_set_id = :covar_set_id
-        where id = :hps_id
-    """
-    with alchemyEngine.begin() as conn:
-        conn.execute(text(sql), {"hps_id": hps_id, "covar_set_id": covar_set_id})
-
-
-def _univariate_default_hp(model, client, anchor_df, args, hps_id):
-    df = anchor_df[["ds", "y"]].copy()
-    params = None
-    match args.model:
-        case "NeuralProphet":
-            from marten.models.hp_search import default_params
-
-            params = default_params
-            # default_params = default_params
-        case "SOFTS":
-            params = baseline_config
-        case _:
-            params = model.baseline_params()
-    return client.submit(
-        log_metrics_for_hyper_params,
-        args.symbol,
-        df,
-        params,
-        args.epochs,
-        args.random_seed,
-        # select_device(
-        #     args.accelerator,
-        #     getattr(args, "gpu_util_threshold", None),
-        #     getattr(args, "gpu_ram_threshold", None),
-        # ),
-        "auto",
-        0,
-        hps_id,
-        args.early_stopping,
-        args.infer_holiday,
-    ).result()
-
-
-def min_covar_loss_val(alchemyEngine, model, symbol, symbol_table, ts_date):
-    with alchemyEngine.connect() as conn:
-        match model:
-            case "NeuralProphet":
-                result = conn.execute(
-                    text(
-                        """
-                            select min(loss_val)
-                            from neuralprophet_corel
-                            where symbol = :symbol 
-                                and ts_date = :ts_date
-                        """
-                    ),
-                    {
-                        "symbol": symbol,
-                        "ts_date": ts_date,
-                    },
-                )
-            case _:
-                result = conn.execute(
-                    text(
-                        """
-                            select min(loss_val)
-                            from paired_correlation
-                            where 
-                                model = :model
-                                and symbol = :symbol 
-                                and symbol_table = :symbol_table
-                                and ts_date = :ts_date
-                        """
-                    ),
-                    {
-                        "model": model,
-                        "symbol": symbol,
-                        "symbol_table": symbol_table,
-                        "ts_date": ts_date,
-                    },
-                )
-        return result.fetchone()[0]
-
-
-def extract_features_on(
-    symbol: str,
-    symbol_table: str,
-    cov_symbol: str,
-    cov_table: str,
-    anchor_df: pd.DataFrame,
-    feature_df: pd.DataFrame,
-    targets: pd.DataFrame,
-):
-    worker = get_worker()
-    args = worker.args
-    alchemyEngine = worker.alchemyEngine
-    logger = worker.logger
-
-    max_date = targets["ds"].max().strftime("%Y-%m-%d")
-    # TODO check if the record already exists in ts_features, and skip processing
-
-    logger.info(
-        "extracting features for %s@%s with covar %s@%s",
-        symbol,
-        symbol_table,
-        cov_symbol,
-        cov_table,
-    )
-    na_counts = feature_df.isna().sum()
-    thres = len(feature_df) * 0.2
-    cols_to_drop = []
-    for c in feature_df.columns:
-        if na_counts[c] > thres:
-            cols_to_drop.append(c)
-    df = feature_df.drop(columns=cols_to_drop).dropna(how="any")
-    # df = feature_df.dropna(how="any")
-    df.insert(0, "unique_id", symbol)
-    rts = roll_time_series(
-        df,
-        column_id="unique_id",
-        column_sort="ds",
-        min_timeshift=5,
-        max_timeshift=20,
-        n_jobs=0,
-        disable_progressbar=True,
-    )
-    rts = rts.merge(targets, on="ds", how="left")
-    rts = rts.dropna(subset=["target"])
-
-    y = rts.groupby("id")["target"].last()
-    x = rts.drop(columns=["unique_id", "target"])
-
-    logger.debug("x:\n %s", x)
-    logger.debug("y:\n %s", y)
-    # now = datetime.now().strftime("%Y%m%d%H%M%S")
-    # x.to_pickle(f"x_{now}.pkl")
-    # y.to_pickle(f"y_{now}.pkl")
-
-    # logger.info("client address: %s", client.cluster.scheduler_address)
-    # distributor = ClusterDaskDistributor(address=client.cluster.scheduler_address)
-
-    try:
-        features = extract_relevant_features(
-            x,
-            y,
-            column_id="id",
-            column_sort="ds",
-            n_jobs=0,
-            disable_progressbar=True,
-        )
-    except Exception as e:
-        logger.error(e, exc_info=True)
-        raise e
-
-    futures = []
-    if features.empty:
-        logger.info(
-            "empty features extracted for %s@%s with covar %s@%s",
-            symbol,
-            symbol_table,
-            cov_symbol,
-            cov_table,
-        )
-        return futures
-
-    logger.info(
-        "extracted %s relevant features for %s@%s with covar %s@%s",
-        len(features.columns),
-        symbol,
-        symbol_table,
-        cov_symbol,
-        cov_table,
-    )
-
-    features = features.reset_index().rename(
-        columns={"level_0": "symbol", "level_1": "date"}
-    )
-    eav_df = features.melt(
-        id_vars=["symbol", "date"], var_name="feature", value_name="value"
-    )
-    eav_df.insert(0, "symbol_table", symbol_table)
-    eav_df.insert(2, "cov_table", cov_table)
-    eav_df.insert(3, "cov_symbol", cov_symbol)
-    # save these extracted features to an Entity-Attribute-Value table.
-    with alchemyEngine.begin() as conn:
-        update_on_conflict(
-            table_def_ts_features(),
-            conn,
-            eav_df,
-            ["symbol_table", "symbol", "cov_table", "cov_symbol", "feature", "date"],
-        )
-        # eav_df.to_sql("ts_features", con=conn, if_exists="append", index=False)
-
-    features = features.rename(columns={"date": "ds"})
-
-    min_date = anchor_df["ds"].min().strftime("%Y-%m-%d")
-    feat_cols = [c for c in features.columns if c not in ("symbol", "ds")]
-
-    # re-run paired correlation on these features in parallel
-    with worker_client() as client:
-        for fcol in feat_cols:
-            df = anchor_df[["ds", "y"]].merge(
-                features[["ds", fcol]], on="ds", how="left"
-            )
-            futures.append(
-                client.submit(
-                    fit_with_covar,
-                    symbol,
-                    df,
-                    "ts_features_view",
-                    f"{cov_table}::{cov_symbol}",
-                    min_date,
-                    args.random_seed,
-                    fcol,
-                    "auto",
-                    args.early_stopping,
-                    True,
-                    key=f"{fit_with_covar.__name__}({cov_symbol})-{uuid.uuid4().hex}",
-                )
-            )
-            if len(futures) > args.max_worker:
-                done, undone = wait(futures, return_when="FIRST_COMPLETED")
-                get_results(done)
-                del done
-                futures = list(undone)
-
-    return futures
+#     return futures
 
 
 # def _load_feature_ts(alchemyEngine: Engine, table: str, symbol: str, symbol_table: str, ts_date: str):
@@ -2604,307 +2414,307 @@ def extract_features_on(
 # rename date to ds,
 
 
-def extract_features(
-    client: Client,
-    alchemyEngine: Engine,
-    symbol: str,
-    anchor_df: pd.DataFrame,
-    anchor_table: str,
-    args: Any,
-) -> List[Future]:
-    ts_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
-    # val_size = validation_size(anchor_df)
-    # anchor_df = anchor_df.iloc[:-val_size, :].copy()
-    # extract features from endogenous variables and all features of top-N assets
-    targets = anchor_df[["ds", "y"]]
-    targets.loc[:, "target"] = targets["y"].shift(-1).apply(lambda x: 1 if x > 0 else 0)
-    targets = targets.dropna(subset=["target"])
-    targets = targets[["ds", "target"]]
-    # 1. extract features from endogenous variables
-    futures = []
-    futures.append(
-        client.submit(
-            extract_features_on,
-            symbol,
-            anchor_table,
-            symbol,
-            anchor_table,
-            anchor_df,
-            anchor_df,
-            targets,
-        )
-    )
-    get_logger().info("getting top %s covariates...", args.max_covars)
-    # 2. select top-N symbols from paired_correlation
-    query = """
-        WITH cte0 AS (
-            SELECT
-                cov_table, cov_symbol
-            FROM
-                paired_correlation pc
-            WHERE
-                pc.model = %(model)s
-                AND pc.symbol = %(anchor_symbol)s
-                AND pc.symbol_table = %(symbol_table)s
-                AND pc.ts_date = %(ts_date)s
-            ORDER BY loss_val
-            LIMIT %(limit)s
-        ), cte AS (
-            SELECT * FROM cte0 WHERE cov_table NOT LIKE 'ta|_%%' ESCAPE '|'
-            UNION ALL
-            SELECT 
-                (string_to_array(cov_symbol, '::'))[1] AS cov_table,
-                (string_to_array(cov_symbol, '::'))[2] AS cov_symbol
-            FROM cte0 WHERE cov_table LIKE 'ta|_%%' ESCAPE '|'
-        )
-        SELECT DISTINCT ON (cov_table, cov_symbol) * FROM cte
-    """
+# def extract_features(
+#     client: Client,
+#     alchemyEngine: Engine,
+#     symbol: str,
+#     anchor_df: pd.DataFrame,
+#     anchor_table: str,
+#     args: Any,
+# ) -> List[Future]:
+#     ts_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
+#     # val_size = validation_size(anchor_df)
+#     # anchor_df = anchor_df.iloc[:-val_size, :].copy()
+#     # extract features from endogenous variables and all features of top-N assets
+#     targets = anchor_df[["ds", "y"]]
+#     targets.loc[:, "target"] = targets["y"].shift(-1).apply(lambda x: 1 if x > 0 else 0)
+#     targets = targets.dropna(subset=["target"])
+#     targets = targets[["ds", "target"]]
+#     # 1. extract features from endogenous variables
+#     futures = []
+#     futures.append(
+#         client.submit(
+#             extract_features_on,
+#             symbol,
+#             anchor_table,
+#             symbol,
+#             anchor_table,
+#             anchor_df,
+#             anchor_df,
+#             targets,
+#         )
+#     )
+#     get_logger().info("getting top %s covariates...", args.max_covars)
+#     # 2. select top-N symbols from paired_correlation
+#     query = """
+#         WITH cte0 AS (
+#             SELECT
+#                 cov_table, cov_symbol
+#             FROM
+#                 paired_correlation pc
+#             WHERE
+#                 pc.model = %(model)s
+#                 AND pc.symbol = %(anchor_symbol)s
+#                 AND pc.symbol_table = %(symbol_table)s
+#                 AND pc.ts_date = %(ts_date)s
+#             ORDER BY loss_val
+#             LIMIT %(limit)s
+#         ), cte AS (
+#             SELECT * FROM cte0 WHERE cov_table NOT LIKE 'ta|_%%' ESCAPE '|'
+#             UNION ALL
+#             SELECT 
+#                 (string_to_array(cov_symbol, '::'))[1] AS cov_table,
+#                 (string_to_array(cov_symbol, '::'))[2] AS cov_symbol
+#             FROM cte0 WHERE cov_table LIKE 'ta|_%%' ESCAPE '|'
+#         )
+#         SELECT DISTINCT ON (cov_table, cov_symbol) * FROM cte
+#     """
 
-    params = {
-        "model": args.model,
-        "anchor_symbol": symbol,
-        "symbol_table": anchor_table,
-        "ts_date": ts_date,
-        "limit": args.max_covars,
-    }
-    with alchemyEngine.connect() as conn:
-        topk_covars = pd.read_sql(
-            query,
-            conn,
-            params=params,
-        )
-    # query a list of ta_ table names from meta table
-    ta_tables = tables_with_prefix(alchemyEngine, "ta")
+#     params = {
+#         "model": args.model,
+#         "anchor_symbol": symbol,
+#         "symbol_table": anchor_table,
+#         "ts_date": ts_date,
+#         "limit": args.max_covars,
+#     }
+#     with alchemyEngine.connect() as conn:
+#         topk_covars = pd.read_sql(
+#             query,
+#             conn,
+#             params=params,
+#         )
+#     # query a list of ta_ table names from meta table
+#     ta_tables = tables_with_prefix(alchemyEngine, "ta")
 
-    from marten.models.hp_search import load_anchor_ts
+#     from marten.models.hp_search import load_anchor_ts
 
-    n_jobs = int(math.sqrt(args.min_worker * args.max_worker))
-    for cov_table, cov_symbol in topk_covars.itertuples(index=False):
-        # for each symbol, extract features from basic table
-        feature_df, _ = load_anchor_ts(cov_symbol, 0, alchemyEngine, ts_date, cov_table)
-        cov_table = cov_table[:-5] if cov_table.endswith("_view") else cov_table
-        futures.append(
-            client.submit(
-                extract_features_on,
-                symbol,
-                anchor_table,
-                cov_symbol,
-                cov_table,
-                anchor_df,
-                feature_df,
-                targets,
-            )
-        )
+#     n_jobs = int(math.sqrt(args.min_worker * args.max_worker))
+#     for cov_table, cov_symbol in topk_covars.itertuples(index=False):
+#         # for each symbol, extract features from basic table
+#         feature_df, _ = load_anchor_ts(cov_symbol, 0, alchemyEngine, ts_date, cov_table)
+#         cov_table = cov_table[:-5] if cov_table.endswith("_view") else cov_table
+#         futures.append(
+#             client.submit(
+#                 extract_features_on,
+#                 symbol,
+#                 anchor_table,
+#                 cov_symbol,
+#                 cov_table,
+#                 anchor_df,
+#                 feature_df,
+#                 targets,
+#             )
+#         )
 
-        # extract features from TA table
-        for ta_table in ta_tables:
-            ta_view = ta_table + "_view"
-            with alchemyEngine.connect() as conn:
-                ta_df = pd.read_sql(
-                    f"""
-                        select * from {ta_view} 
-                        where "table" = %(table)s
-                        and symbol = %(symbol)s
-                    """,
-                    con=conn,
-                    params={"table": cov_table, "symbol": cov_symbol},
-                    parse_dates=["date"],
-                )
+#         # extract features from TA table
+#         for ta_table in ta_tables:
+#             ta_view = ta_table + "_view"
+#             with alchemyEngine.connect() as conn:
+#                 ta_df = pd.read_sql(
+#                     f"""
+#                         select * from {ta_view} 
+#                         where "table" = %(table)s
+#                         and symbol = %(symbol)s
+#                     """,
+#                     con=conn,
+#                     params={"table": cov_table, "symbol": cov_symbol},
+#                     parse_dates=["date"],
+#                 )
 
-                ta_df = ta_df.drop(columns=["table", "symbol", "last_modified"]).rename(
-                    columns={"date": "ds"}
-                )
+#                 ta_df = ta_df.drop(columns=["table", "symbol", "last_modified"]).rename(
+#                     columns={"date": "ds"}
+#                 )
 
-            futures.append(
-                client.submit(
-                    extract_features_on,
-                    symbol,
-                    anchor_table,
-                    f"{cov_table}::{cov_symbol}",
-                    ta_view,
-                    anchor_df,
-                    ta_df,
-                    targets,
-                )
-            )
+#             futures.append(
+#                 client.submit(
+#                     extract_features_on,
+#                     symbol,
+#                     anchor_table,
+#                     f"{cov_table}::{cov_symbol}",
+#                     ta_view,
+#                     anchor_df,
+#                     ta_df,
+#                     targets,
+#                 )
+#             )
 
-            if len(futures) > n_jobs:
-                done, undone = wait(futures, return_when="FIRST_COMPLETED")
-                get_results(done)
-                del done
-                futures = list(undone)
+#             if len(futures) > n_jobs:
+#                 done, undone = wait(futures, return_when="FIRST_COMPLETED")
+#                 get_results(done)
+#                 del done
+#                 futures = list(undone)
 
-    return futures
+#     return futures
 
 
-def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
-    global LOSS_CAP
+# def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
+#     global LOSS_CAP
 
-    import marten.models.hp_search as hps
-    from marten.models.hp_search import (
-        _get_cutoff_date,
-        load_anchor_ts,
-        get_hps_session,
-        prep_covar_baseline_metrics,
-        augment_anchor_df_with_covars,
-    )
+#     import marten.models.hp_search as hps
+#     from marten.models.hp_search import (
+#         _get_cutoff_date,
+#         load_anchor_ts,
+#         get_hps_session,
+#         prep_covar_baseline_metrics,
+#         augment_anchor_df_with_covars,
+#     )
 
-    # worker = get_worker()
-    # alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
-    # sem = None
-    # max_leases = (
-    #     args.resource_intensive_sql_semaphore
-    #     if args.resource_intensive_sql_semaphore > 0
-    #     else int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker))
-    # )
-    # if max_leases > 0:
-    #     dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
-    #     sem = Semaphore(
-    #         max_leases=max_leases,
-    #         name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
-    #     )
-    # locks = get_accelerator_locks(0, gpu_leases=2, mps_leases=0, timeout="20s")
+#     # worker = get_worker()
+#     # alchemyEngine, logger, args = worker.alchemyEngine, worker.logger, worker.args
+#     # sem = None
+#     # max_leases = (
+#     #     args.resource_intensive_sql_semaphore
+#     #     if args.resource_intensive_sql_semaphore > 0
+#     #     else int(os.getenv("RESOURCE_INTENSIVE_SQL_SEMAPHORE", args.min_worker))
+#     # )
+#     # if max_leases > 0:
+#     #     dask.config.set({"distributed.scheduler.locks.lease-timeout": "500s"})
+#     #     sem = Semaphore(
+#     #         max_leases=max_leases,
+#     #         name="RESOURCE_INTENSIVE_SQL_SEMAPHORE",
+#     #     )
+#     # locks = get_accelerator_locks(0, gpu_leases=2, mps_leases=0, timeout="20s")
 
-    args = init_hps(hps, model, symbol, args, client, alchemyEngine, logger)
-    cutoff_date = _get_cutoff_date(args)
-    anchor_df, anchor_table = load_anchor_ts(
-        args.symbol, args.timestep_limit, alchemyEngine, cutoff_date, args.symbol_table
-    )
-    cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
+#     args = init_hps(hps, model, symbol, args, client, alchemyEngine, logger)
+#     cutoff_date = _get_cutoff_date(args)
+#     anchor_df, anchor_table = load_anchor_ts(
+#         args.symbol, args.timestep_limit, alchemyEngine, cutoff_date, args.symbol_table
+#     )
+#     cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
 
-    hps_id, covar_set_id = get_hps_session(
-        args.symbol,
-        args.symbol_table,
-        args.model,
-        cutoff_date,
-        args.resume.lower() != "none",
-        len(anchor_df),
-    )
-    args.covar_set_id = covar_set_id
-    logger.info(
-        "HPS session ID: %s, Model: %s, Cutoff date: %s, CovarSet ID: %s, Anchor Table: %s",
-        hps_id,
-        args.model,
-        cutoff_date,
-        covar_set_id,
-        anchor_table,
-    )
+#     hps_id, covar_set_id = get_hps_session(
+#         args.symbol,
+#         args.symbol_table,
+#         args.model,
+#         cutoff_date,
+#         args.resume.lower() != "none",
+#         len(anchor_df),
+#     )
+#     args.covar_set_id = covar_set_id
+#     logger.info(
+#         "HPS session ID: %s, Model: %s, Cutoff date: %s, CovarSet ID: %s, Anchor Table: %s",
+#         hps_id,
+#         args.model,
+#         cutoff_date,
+#         covar_set_id,
+#         anchor_table,
+#     )
 
-    univ_loss = _univariate_default_hp(model, client, anchor_df, args, hps_id)
+#     univ_loss = _univariate_default_hp(model, client, anchor_df, args, hps_id)
 
-    min_covar_loss = min_covar_loss_val(
-        alchemyEngine, args.model, symbol, args.symbol_table, cutoff_date
-    )
-    min_covar_loss = min_covar_loss if min_covar_loss is not None else LOSS_CAP
+#     min_covar_loss = min_covar_loss_val(
+#         alchemyEngine, args.model, symbol, args.symbol_table, cutoff_date
+#     )
+#     min_covar_loss = min_covar_loss if min_covar_loss is not None else LOSS_CAP
 
-    base_loss = min(float(univ_loss) * args.loss_quantile, min_covar_loss)
+#     base_loss = min(float(univ_loss) * args.loss_quantile, min_covar_loss)
 
-    # if in resume mode, check if the topk HP is present, and further check if prediction is already conducted.
-    topk_count = count_topk_hp(alchemyEngine, args.model, hps_id, base_loss)
-    if args.resume.lower() != "none" and topk_count >= args.topk:
-        logger.info(
-            "Found %s HP with Loss_val less than %s in HP search history already. Skipping covariate and HP search.",
-            topk_count,
-            base_loss,
-        )
-        df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
-            anchor_df, args, alchemyEngine, logger, cutoff_date
-        )
-        # df_future = client.scatter(df)
-        # ranked_features_future = client.scatter(ranked_features)
-        return hps_id, cutoff_date, ranked_features, df
-    else:
-        logger.info(
-            "Found %s HP with Loss_val less than %s in HP search history. The process will be continued.",
-            topk_count,
-            base_loss,
-        )
+#     # if in resume mode, check if the topk HP is present, and further check if prediction is already conducted.
+#     topk_count = count_topk_hp(alchemyEngine, args.model, hps_id, base_loss)
+#     if args.resume.lower() != "none" and topk_count >= args.topk:
+#         logger.info(
+#             "Found %s HP with Loss_val less than %s in HP search history already. Skipping covariate and HP search.",
+#             topk_count,
+#             base_loss,
+#         )
+#         df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
+#             anchor_df, args, alchemyEngine, logger, cutoff_date
+#         )
+#         # df_future = client.scatter(df)
+#         # ranked_features_future = client.scatter(ranked_features)
+#         return hps_id, cutoff_date, ranked_features, df
+#     else:
+#         logger.info(
+#             "Found %s HP with Loss_val less than %s in HP search history. The process will be continued.",
+#             topk_count,
+#             base_loss,
+#         )
 
-    logger.info("Scaling dask cluster to %s", args.max_worker)
-    client.cluster.scale(args.max_worker)
-    scale_cluster_and_wait(client, args.max_worker)
+#     logger.info("Scaling dask cluster to %s", args.max_worker)
+#     client.cluster.scale(args.max_worker)
+#     scale_cluster_and_wait(client, args.max_worker)
 
-    if args.resume in ("none", "covar"):
-        # run covariate loss calculation in batch
-        logger.info("Starting covariate loss calculation")
-        t1_start = time.time()
-        prep_covar_baseline_metrics(anchor_df, anchor_table, args)
-        # logger.info("waiting dask futures: %s", len(hps.futures))
-        while len(hps.futures) > 0:
-            done, undone = wait(hps.futures)
-            get_results(done)
-            del done
-            hps.futures = list(undone)
-        logger.info(
-            "%s covariate baseline metric computation completed. Time taken: %s seconds",
-            args.symbol,
-            round(time.time() - t1_start, 3),
-        )
-        t1_start = time.time()
-        logger.info("Starting feature engineering and extraction")
-        futures = extract_features(
-            client, alchemyEngine, symbol, anchor_df, anchor_table, args
-        )
-        while len(futures) > 0:
-            done, undone = wait(futures)
-            get_results(done)
-            del done
-            futures = list(undone)
-        logger.info(
-            "%s feature extraction completed. Time taken: %s seconds",
-            args.symbol,
-            round(time.time() - t1_start, 3),
-        )
+#     if args.resume in ("none", "covar"):
+#         # run covariate loss calculation in batch
+#         logger.info("Starting covariate loss calculation")
+#         t1_start = time.time()
+#         prep_covar_baseline_metrics(anchor_df, anchor_table, args)
+#         # logger.info("waiting dask futures: %s", len(hps.futures))
+#         while len(hps.futures) > 0:
+#             done, undone = wait(hps.futures)
+#             get_results(done)
+#             del done
+#             hps.futures = list(undone)
+#         logger.info(
+#             "%s covariate baseline metric computation completed. Time taken: %s seconds",
+#             args.symbol,
+#             round(time.time() - t1_start, 3),
+#         )
+#         t1_start = time.time()
+#         logger.info("Starting feature engineering and extraction")
+#         futures = extract_features(
+#             client, alchemyEngine, symbol, anchor_df, anchor_table, args
+#         )
+#         while len(futures) > 0:
+#             done, undone = wait(futures)
+#             get_results(done)
+#             del done
+#             futures = list(undone)
+#         logger.info(
+#             "%s feature extraction completed. Time taken: %s seconds",
+#             args.symbol,
+#             round(time.time() - t1_start, 3),
+#         )
 
-    min_covar_loss = min_covar_loss_val(
-        alchemyEngine, args.model, symbol, args.symbol_table, cutoff_date
-    )
-    min_covar_loss = min_covar_loss if min_covar_loss is not None else LOSS_CAP
-    base_loss = min(base_loss, min_covar_loss)
+#     min_covar_loss = min_covar_loss_val(
+#         alchemyEngine, args.model, symbol, args.symbol_table, cutoff_date
+#     )
+#     min_covar_loss = min_covar_loss if min_covar_loss is not None else LOSS_CAP
+#     base_loss = min(base_loss, min_covar_loss)
 
-    # run HP search using Bayeopt and check whether needed HP(s) are found
-    logger.info(
-        "Starting Bayesian optimization search for hyper-parameters. Loss_val threshold: %s",
-        round(base_loss, 5),
-    )
+#     # run HP search using Bayeopt and check whether needed HP(s) are found
+#     logger.info(
+#         "Starting Bayesian optimization search for hyper-parameters. Loss_val threshold: %s",
+#         round(base_loss, 5),
+#     )
 
-    # scale-in to preserve more memory for hps
-    if args.model != "NeuralProphet":
-        worker_size = int(math.sqrt(args.min_worker * args.max_worker))
-        # worker_size = args.min_worker
-        # worker_size = min(math.ceil(args.batch_size / 2.0), args.max_worker)
-        logger.info("Scaling down dask cluster to %s", worker_size)
-        scale_cluster_and_wait(client, worker_size)
+#     # scale-in to preserve more memory for hps
+#     if args.model != "NeuralProphet":
+#         worker_size = int(math.sqrt(args.min_worker * args.max_worker))
+#         # worker_size = args.min_worker
+#         # worker_size = min(math.ceil(args.batch_size / 2.0), args.max_worker)
+#         logger.info("Scaling down dask cluster to %s", worker_size)
+#         scale_cluster_and_wait(client, worker_size)
 
-    # NOTE: if data is scattered before scale-down, the error will be thrown:
-    # Removing worker 'tcp://<worker IP & port>' caused the cluster to lose scattered data, which can't be recovered
-    df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
-        anchor_df, args, alchemyEngine, logger, cutoff_date
-    )
-    # df_future = client.scatter(df)
-    # ranked_features_future = client.scatter(ranked_features)
+#     # NOTE: if data is scattered before scale-down, the error will be thrown:
+#     # Removing worker 'tcp://<worker IP & port>' caused the cluster to lose scattered data, which can't be recovered
+#     df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
+#         anchor_df, args, alchemyEngine, logger, cutoff_date
+#     )
+#     # df_future = client.scatter(df)
+#     # ranked_features_future = client.scatter(ranked_features)
 
-    t2_start = time.time()
+#     t2_start = time.time()
 
-    update_covar_set_id(alchemyEngine, hps_id, covar_set_id)
+#     update_covar_set_id(alchemyEngine, hps_id, covar_set_id)
 
-    fast_bayesopt(
-        model,
-        client,
-        alchemyEngine,
-        logger,
-        df,
-        covar_set_id,
-        hps_id,
-        ranked_features,
-        base_loss,
-        args,
-    )
-    logger.info(
-        "%s hyper-parameter search completed. Time taken: %s seconds",
-        args.symbol,
-        round(time.time() - t2_start, 3),
-    )
-    wait(hps.futures)
+#     fast_bayesopt(
+#         model,
+#         client,
+#         alchemyEngine,
+#         logger,
+#         df,
+#         covar_set_id,
+#         hps_id,
+#         ranked_features,
+#         base_loss,
+#         args,
+#     )
+#     logger.info(
+#         "%s hyper-parameter search completed. Time taken: %s seconds",
+#         args.symbol,
+#         round(time.time() - t2_start, 3),
+#     )
+#     wait(hps.futures)
 
-    return hps_id, cutoff_date, ranked_features, df
+#     return hps_id, cutoff_date, ranked_features, df

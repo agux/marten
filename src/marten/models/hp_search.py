@@ -37,20 +37,25 @@ from marten.utils.worker import (
     hps_task_callback,
     restart_all_workers,
 )
+from marten.utils.softs import SOFTSPredictor, baseline_config
 from marten.utils.neuralprophet import select_topk_features
 from marten.utils.softs import is_large_model
-from marten.utils.system import init_cpu_core_id
+# from marten.utils.system import init_cpu_core_id
 from marten.utils.trainer import (
     select_device,
     select_randk_covars,
-    get_accelerator_locks,
+    # get_accelerator_locks,
 )
+from marten.utils.worker import scale_cluster_and_wait
 from marten.models.worker_func import (
     fit_with_covar,
     log_metrics_for_hyper_params,
     validate_hyperparams,
-    get_hpid,
+    LOSS_CAP,
+    count_topk_hp,
+    impute
 )
+from marten.features.build_features import extract_features
 
 from sqlalchemy import text
 
@@ -2164,3 +2169,356 @@ if __name__ == "__main__":
         main(args)
     except Exception as e:
         logger.exception("encountered exception in main()")
+
+
+def init_hps(_model, symbol, _args, _client, _alchemyEngine, _logger):
+    global logger, alchemyEngine, args, client, model
+    # worker = get_worker()
+    # alchemyEngine, logger = worker.alchemyEngine, worker.logger
+
+    _args.symbol = symbol
+    _args.hps_only = False
+    _args.covar_only = False
+    _args.infer_holiday = True
+    _args.method = "fast_bayesopt"
+
+    logger = _logger
+    alchemyEngine = _alchemyEngine
+    args = _args
+
+    client = _client
+    model = _model
+
+    return args
+
+
+def _univariate_default_hp(model, client, anchor_df, args, hps_id):
+    df = anchor_df[["ds", "y"]].copy()
+    params = None
+    match args.model:
+        case "NeuralProphet":
+            from marten.models.hp_search import default_params
+
+            params = default_params
+            # default_params = default_params
+        case "SOFTS":
+            params = baseline_config
+        case _:
+            params = model.baseline_params()
+    return client.submit(
+        log_metrics_for_hyper_params,
+        args.symbol,
+        df,
+        params,
+        args.epochs,
+        args.random_seed,
+        # select_device(
+        #     args.accelerator,
+        #     getattr(args, "gpu_util_threshold", None),
+        #     getattr(args, "gpu_ram_threshold", None),
+        # ),
+        "auto",
+        0,
+        hps_id,
+        args.early_stopping,
+        args.infer_holiday,
+    ).result()
+
+
+def min_covar_loss_val(alchemyEngine, model, symbol, symbol_table, ts_date):
+    with alchemyEngine.connect() as conn:
+        match model:
+            case "NeuralProphet":
+                result = conn.execute(
+                    text(
+                        """
+                            select min(loss_val)
+                            from neuralprophet_corel
+                            where symbol = :symbol 
+                                and ts_date = :ts_date
+                        """
+                    ),
+                    {
+                        "symbol": symbol,
+                        "ts_date": ts_date,
+                    },
+                )
+            case _:
+                result = conn.execute(
+                    text(
+                        """
+                            select min(loss_val)
+                            from paired_correlation
+                            where 
+                                model = :model
+                                and symbol = :symbol 
+                                and symbol_table = :symbol_table
+                                and ts_date = :ts_date
+                        """
+                    ),
+                    {
+                        "model": model,
+                        "symbol": symbol,
+                        "symbol_table": symbol_table,
+                        "ts_date": ts_date,
+                    },
+                )
+        return result.fetchone()[0]
+
+
+def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
+    global futures
+
+    args = init_hps(model, symbol, args, client, alchemyEngine, logger)
+    cutoff_date = _get_cutoff_date(args)
+    anchor_df, anchor_table = load_anchor_ts(
+        args.symbol, args.timestep_limit, alchemyEngine, cutoff_date, args.symbol_table
+    )
+    cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
+
+    hps_id, covar_set_id = get_hps_session(
+        args.symbol,
+        args.symbol_table,
+        args.model,
+        cutoff_date,
+        args.resume.lower() != "none",
+        len(anchor_df),
+    )
+    args.covar_set_id = covar_set_id
+    logger.info(
+        "HPS session ID: %s, Model: %s, Cutoff date: %s, CovarSet ID: %s, Anchor Table: %s",
+        hps_id,
+        args.model,
+        cutoff_date,
+        covar_set_id,
+        anchor_table,
+    )
+
+    univ_loss = _univariate_default_hp(model, client, anchor_df, args, hps_id)
+
+    min_covar_loss = min_covar_loss_val(
+        alchemyEngine, args.model, symbol, args.symbol_table, cutoff_date
+    )
+    min_covar_loss = min_covar_loss if min_covar_loss is not None else LOSS_CAP
+
+    base_loss = min(float(univ_loss) * args.loss_quantile, min_covar_loss)
+
+    # if in resume mode, check if the topk HP is present, and further check if prediction is already conducted.
+    topk_count = count_topk_hp(alchemyEngine, args.model, hps_id, base_loss)
+    if args.resume.lower() != "none" and topk_count >= args.topk:
+        logger.info(
+            "Found %s HP with Loss_val less than %s in HP search history already. Skipping covariate and HP search.",
+            topk_count,
+            base_loss,
+        )
+        df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
+            anchor_df, args, alchemyEngine, logger, cutoff_date
+        )
+        # df_future = client.scatter(df)
+        # ranked_features_future = client.scatter(ranked_features)
+        return hps_id, cutoff_date, ranked_features, df
+    else:
+        logger.info(
+            "Found %s HP with Loss_val less than %s in HP search history. The process will be continued.",
+            topk_count,
+            base_loss,
+        )
+
+    logger.info("Scaling dask cluster to %s", args.max_worker)
+    client.cluster.scale(args.max_worker)
+    scale_cluster_and_wait(client, args.max_worker)
+
+    if args.resume in ("none", "covar"):
+        # run covariate loss calculation in batch
+        logger.info("Starting covariate loss calculation")
+        t1_start = time.time()
+        prep_covar_baseline_metrics(anchor_df, anchor_table, args)
+        # logger.info("waiting dask futures: %s", len(hps.futures))
+        while len(futures) > 0:
+            done, undone = wait(futures)
+            get_results(done)
+            del done
+            futures = list(undone)
+        logger.info(
+            "%s covariate baseline metric computation completed. Time taken: %s seconds",
+            args.symbol,
+            round(time.time() - t1_start, 3),
+        )
+        t1_start = time.time()
+        logger.info("Starting feature engineering and extraction")
+        futures = extract_features(
+            client, alchemyEngine, symbol, anchor_df, anchor_table, args
+        )
+        while len(futures) > 0:
+            done, undone = wait(futures)
+            get_results(done)
+            del done
+            futures = list(undone)
+        logger.info(
+            "%s feature extraction completed. Time taken: %s seconds",
+            args.symbol,
+            round(time.time() - t1_start, 3),
+        )
+
+    min_covar_loss = min_covar_loss_val(
+        alchemyEngine, args.model, symbol, args.symbol_table, cutoff_date
+    )
+    min_covar_loss = min_covar_loss if min_covar_loss is not None else LOSS_CAP
+    base_loss = min(base_loss, min_covar_loss)
+
+    # run HP search using Bayeopt and check whether needed HP(s) are found
+    logger.info(
+        "Starting Bayesian optimization search for hyper-parameters. Loss_val threshold: %s",
+        round(base_loss, 5),
+    )
+
+    # scale-in to preserve more memory for hps
+    if args.model != "NeuralProphet":
+        worker_size = int(math.sqrt(args.min_worker * args.max_worker))
+        # worker_size = args.min_worker
+        # worker_size = min(math.ceil(args.batch_size / 2.0), args.max_worker)
+        logger.info("Scaling down dask cluster to %s", worker_size)
+        scale_cluster_and_wait(client, worker_size)
+
+    # NOTE: if data is scattered before scale-down, the error will be thrown:
+    # Removing worker 'tcp://<worker IP & port>' caused the cluster to lose scattered data, which can't be recovered
+    df, covar_set_id, ranked_features = augment_anchor_df_with_covars(
+        anchor_df, args, alchemyEngine, logger, cutoff_date
+    )
+    # df_future = client.scatter(df)
+    # ranked_features_future = client.scatter(ranked_features)
+
+    t2_start = time.time()
+
+    update_covar_set_id(alchemyEngine, hps_id, covar_set_id)
+
+    fast_bayesopt(
+        model,
+        client,
+        alchemyEngine,
+        logger,
+        df,
+        covar_set_id,
+        hps_id,
+        ranked_features,
+        base_loss,
+        args,
+    )
+    logger.info(
+        "%s hyper-parameter search completed. Time taken: %s seconds",
+        args.symbol,
+        round(time.time() - t2_start, 3),
+    )
+    wait(futures)
+
+    return hps_id, cutoff_date, ranked_features, df
+
+
+def update_covar_set_id(alchemyEngine, hps_id, covar_set_id):
+    sql = """
+        update hps_sessions
+        set covar_set_id = :covar_set_id
+        where id = :hps_id
+    """
+    with alchemyEngine.begin() as conn:
+        conn.execute(text(sql), {"hps_id": hps_id, "covar_set_id": covar_set_id})
+
+
+def fast_bayesopt(
+    model,
+    client,
+    alchemyEngine,
+    logger,
+    df,
+    covar_set_id,
+    hps_id,
+    ranked_features,
+    base_loss,
+    args,
+):
+    # worker = get_worker()
+    # logger = worker.logger
+
+    from scipy.stats import uniform, loguniform, dirichlet
+
+    _cleanup_stale_keys()
+
+    space_str = _search_space(
+        args.model, model, min(args.max_covars, len(ranked_features)), args.topk_covars
+    )
+
+    # Convert args to a dictionary, excluding non-serializable items
+    args_dict = {k: v for k, v in vars(args).items() if not callable(v)}
+    args_json = json.dumps(args_dict, sort_keys=True)
+    update_hps_sessions(hps_id, "fast_bayesopt", args_json, space_str, covar_set_id)
+
+    n_jobs = args.batch_size
+
+    domain_size = args.domain_size
+    base_ds = n_jobs * args.mini_itr * args.max_itr
+    if domain_size < 0:
+        domain_size = None
+    elif domain_size == 0:
+        domain_size = base_ds * 10
+    elif domain_size < base_ds:
+        domain_size = base_ds
+
+    domain_size_base = domain_size
+
+    if args.model == "SOFTS":
+        df, _ = impute(df, args.random_seed, client)
+    if model is not None and not model.accept_missing_data():
+        df, _ = model.impute(df, random_seed=args.random_seed)
+
+    # locks = get_accelerator_locks(cpu_leases=0, timeout="60s")
+    # split large iterations into smaller runs to avoid OOM / memory leak
+    for i in range(args.max_itr):
+        logger.info(
+            "running bayesopt mini-iteration %s/%s batch size: %s  domain size: %s runs: %s",
+            i + 1,
+            args.max_itr,
+            n_jobs,
+            domain_size,
+            args.mini_itr,
+        )
+        min_loss = _bayesopt_run(
+            df,
+            n_jobs,
+            covar_set_id,
+            hps_id,
+            ranked_features,
+            eval(
+                space_str,
+                {"uniform": uniform, "loguniform": loguniform, "dirichlet": dirichlet},
+            ),
+            args,
+            args.mini_itr,
+            domain_size,
+            args.resume.lower() != "none" or i > 0,
+        )
+
+        if domain_size:
+            domain_size += domain_size_base
+
+        if min_loss is None or min_loss > base_loss:
+            continue
+
+        topk_count = count_topk_hp(alchemyEngine, args.model, hps_id, base_loss)
+
+        if topk_count >= args.topk:
+            logger.info(
+                "Found %s HP with Loss_val less than %s. Best score: %s, stopping bayesopt.",
+                topk_count,
+                base_loss,
+                min_loss,
+            )
+            return topk_count
+        else:
+            logger.info(
+                "Found %s HP with Loss_val less than %s. Best score: %s",
+                topk_count,
+                base_loss,
+                min_loss,
+            )
+            # client.restart()
+            restart_all_workers(client)

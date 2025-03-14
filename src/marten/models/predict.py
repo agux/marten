@@ -14,15 +14,16 @@ import time
 
 from marten.models.base_model import BaseModel
 from marten.utils.logger import get_logger
-from marten.utils.worker import init_client, init_ray
+from marten.utils.worker import init_client
 from marten.utils.database import get_database_engine
 from marten.utils.trainer import select_device
 from marten.models.worker_func import (
     predict_best,
     # predict_adhoc,
-    covars_and_search,
+    # covars_and_search,
     ensemble_topk_prediction,
 )
+from marten.models.hp_search import covars_and_search
 
 from types import SimpleNamespace
 
