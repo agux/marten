@@ -1806,10 +1806,11 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
     # TODO commodity prices: oil, copper, aluminum, coal, gold, etc.
     # TODO cash inflow
 
+    tasks = []
     keys = list(table_features.keys())
     for i in range(0, len(keys)):
         cov_table, features = table_features[keys[i]]
-        futures.append(
+        tasks.append(
             client.submit(
                 covar_metric,
                 anchor_symbol,
@@ -1826,11 +1827,13 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
                 + uuid.uuid4().hex,
             )
         )
-        if len(futures) > 1:
-            done, undone = wait(futures, return_when="FIRST_COMPLETED")
+        if len(tasks) > 1:
+            done, undone = wait(tasks, return_when="FIRST_COMPLETED")
             get_results(done)
             del done
-            futures = list(undone)
+            tasks = list(undone)
+    
+    futures.extend(tasks)
 
 
 def univariate_baseline(anchor_df, hps_id, args):
