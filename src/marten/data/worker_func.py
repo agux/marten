@@ -2315,8 +2315,8 @@ def fund_holding(symbol):
                     inplace=True,
                 )
             else:
-                # df = ak.fund_portfolio_hold_em(symbol=symbol, date=year)
-                df = EastMoneyAPI.fund_portfolio_hold_em(symbol=symbol, date=year)
+                df = ak.fund_portfolio_hold_em(symbol=symbol, date=year)
+                # df = EastMoneyAPI.fund_portfolio_hold_em(symbol=symbol, date=year)
                 df.rename(
                     columns={
                         "序号": "serial_number",
