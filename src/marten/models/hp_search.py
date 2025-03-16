@@ -916,41 +916,51 @@ def _get_layers(w_power=6, min_size=2, max_size=20):
     return layers
 
 
-def _search_space(max_covars):
-    # ar_layers, lagged_reg_layers = _get_layers(10, 1, 64), _get_layers(10, 1, 64)
-
-    # ss = dict(
-    #     batch_size=[None, 100, 200, 300, 400, 500],
-    #     n_lags=list(range(0, 60+1)),
-    #     yearly_seasonality=["auto"] + list(range(1, 60+1)),
-    #     # ar_layers=[[]] + ar_layers,
-    #     # lagged_reg_layers=[[]] + lagged_reg_layers,
-    #     ar_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
-    #     lagged_reg_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
-    #     topk_covar=list(range(2, max_covars+1)),
-    #     optimizer=["AdamW", "SGD"],
-    # )
-
-    # NOTE buggy HP in neuralprophet:
-    # trend_reg_threshold=[True, False]
-
-    ss = f"""dict(
-        growth=["linear", "discontinuous"],
-        batch_size=[None, 100, 200, 300, 400, 500],
-        n_lags=list(range(0, 60+1)),
-        yearly_seasonality=["auto"] + list(range(1, 60+1)),
-        ar_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
-        ar_reg=uniform(0, 100),
-        lagged_reg_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
-        topk_covar=list(range(0, {max_covars}+1)),
-        optimizer=["AdamW", "SGD"],
-        trend_reg=uniform(0, 100),
-        trend_reg_threshold=[True, False],
-        seasonality_reg=uniform(0, 100),
-        seasonality_mode=["additive", "multiplicative"],
-        normalize=["off", "standardize", "soft", "soft1"],
-    )"""
-
+def _search_space(model_name, model, max_covars, topk_covars):
+    match model_name:
+        case "NeuralProphet":
+            ss = f"""dict(
+                growth=["linear", "discontinuous"],
+                batch_size=[None, 100, 200, 300, 400, 500],
+                n_lags=range(0, 60+1),
+                yearly_seasonality=["auto"] + list(range(1, 60+1)),
+                ar_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
+                ar_reg=uniform(0, 100),
+                lagged_reg_layer_spec=[None] + [[2**w, d] for w in range(1, 10+1) for d in range(1, 64+1)],
+                topk_covar=range(0, {max_covars}+1),
+                optimizer=["AdamW", "SGD"],
+                trend_reg=uniform(0, 100),
+                trend_reg_threshold=[True, False],
+                seasonality_reg=uniform(0, 100),
+                seasonality_mode=["additive", "multiplicative"],
+                normalize=["off", "standardize", "soft", "soft1"],
+            )"""
+        case "SOFTS":
+            # d_model=[2**w for w in range(5, 8+1)],
+            # d_ff=[2**w for w in range(5, 8+1)],
+            # d_model_d_ff=[2**w for w in range(5, 8+1)],
+            ss = f"""dict(
+                seq_len=range(5, 300+1),
+                d_model=[2**w for w in range(6, 9+1)],
+                d_core=[2**w for w in range(5, 10+1)],
+                d_ff=[2**w for w in range(6, 10+1)],
+                e_layers=range(4, 16+1),
+                learning_rate=loguniform(0.0001, 0.002),
+                lradj=["type1", "type2", "constant", "cosine"],
+                patience=range(3, 10+1),
+                batch_size=[2**w for w in range(5, 8+1)],
+                dropout=uniform(0, 0.5),
+                activation=["relu","gelu","relu6","elu","selu","celu","leaky_relu","prelu","rrelu","glu"],
+                use_norm=[True, False],
+                optimizer=["Adam", "AdamW", "SGD"],
+                topk_covar=list(range(0, {max_covars}+1)),
+                covar_dist=dirichlet([1.0]*{max_covars}),
+            )"""
+        case _:
+            return model.search_space(
+                topk_covars=topk_covars if topk_covars > 0 else max_covars,
+                max_covars=max_covars,
+            )
     return ss
 
 
