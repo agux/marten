@@ -4,7 +4,7 @@ import pandas as pd
 
 from typing import List, Any
 
-from sqlalchemy import Engine
+from sqlalchemy import Engine, text
 
 from dask.distributed import get_worker, worker_client, Client, Future, wait
 
@@ -173,14 +173,14 @@ def _save_result(
     worker = get_worker()
     alchemyEngine = worker.alchemyEngine
 
-    statement = """
+    statement = text("""
         INSERT INTO public.ts_features_result
         (symbol_table, symbol, cov_table, cov_symbol, "date", num_features)
         VALUES (:symbol_table, :symbol, :cov_table, :cov_symbol, :date, :num_features)
         ON CONFLICT (symbol_table, symbol, cov_table, cov_symbol, "date")
         DO UPDATE
             SET num_features = EXCLUDED.num_features
-    """
+    """)
 
     params = {
         "symbol_table": symbol_table,
