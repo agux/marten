@@ -162,7 +162,7 @@ class TSMixerxModel(BaseModel):
             cpu_count = psutil.cpu_count(logical=False)
             # return math.ceil(cpu_count / n_workers)
             # return math.ceil(cpu_count / n_workers)
-            return round(cpu_count / n_workers, 0)
+            return int(round(cpu_count / n_workers, 0))
             # n_workers = num_workers()
             # cpu_count = psutil.cpu_count(logical=True)
             # quotient = math.ceil(cpu_count / n_workers)
