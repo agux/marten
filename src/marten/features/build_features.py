@@ -62,6 +62,7 @@ def extract_features(
                 AND pc.symbol = %(anchor_symbol)s
                 AND pc.symbol_table = %(symbol_table)s
                 AND pc.ts_date = %(ts_date)s
+                AND pc.cov_table <> 'ts_features_view'
             ORDER BY loss_val
             LIMIT %(limit)s
         ), cte AS (
@@ -93,7 +94,7 @@ def extract_features(
 
     from marten.models.hp_search import load_anchor_ts
 
-    n_jobs = int(math.sqrt(args.min_worker * args.max_worker))
+    n_jobs = int(math.pow(args.min_worker * args.max_worker, 0.4))
     for cov_table, cov_symbol in topk_covars.itertuples(index=False):
         # for each symbol, extract features from basic table
         feature_df, _ = load_anchor_ts(cov_symbol, 0, alchemyEngine, ts_date, cov_table)

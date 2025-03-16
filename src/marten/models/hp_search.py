@@ -40,6 +40,7 @@ from marten.utils.worker import (
 from marten.utils.softs import SOFTSPredictor, baseline_config
 from marten.utils.neuralprophet import select_topk_features
 from marten.utils.softs import is_large_model
+
 # from marten.utils.system import init_cpu_core_id
 from marten.utils.trainer import (
     select_device,
@@ -53,7 +54,7 @@ from marten.models.worker_func import (
     validate_hyperparams,
     LOSS_CAP,
     count_topk_hp,
-    impute
+    impute,
 )
 from marten.features.build_features import extract_features
 
@@ -397,7 +398,7 @@ def _pair_covar_metrics(
     worker = get_worker()
     logger = worker.logger
     cpu_count = psutil.cpu_count()
-    covar_futures=[]
+    covar_futures = []
 
     for symbol in cov_symbols:
         logger.debug(
@@ -406,7 +407,7 @@ def _pair_covar_metrics(
             cov_table,
             feature,
         )
-        #NOTE: the worker_client() must be within the for loop rather than outside, 
+        # NOTE: the worker_client() must be within the for loop rather than outside,
         # to avoid scheculer connection lost error
         with worker_client() as client:
             covar_futures.append(
@@ -699,7 +700,9 @@ def _load_covars(
     return df, covar_set_id
 
 
-def _load_covar_feature(anchor_table, anchor_symbol, cov_table, feature, symbols, start_date, end_date):
+def _load_covar_feature(
+    anchor_table, anchor_symbol, cov_table, feature, symbols, start_date, end_date
+):
     worker = get_worker()
     alchemyEngine = worker.alchemyEngine
     params = {"start_date": start_date, "end_date": end_date}
@@ -1835,7 +1838,7 @@ def prep_covar_baseline_metrics(anchor_df, anchor_table, args):
             get_results(done)
             del done
             tasks = list(undone)
-    
+
     futures.extend(tasks)
 
 
@@ -2350,6 +2353,11 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
             args.symbol,
             round(time.time() - t1_start, 3),
         )
+
+        worker_size = int(math.pow(args.min_worker * args.max_worker, 0.6))
+        logger.info("Scaling down dask cluster to %s", worker_size)
+        scale_cluster_and_wait(client, worker_size)
+
         t1_start = time.time()
         logger.info("Starting feature engineering and extraction")
         futures = extract_features(
