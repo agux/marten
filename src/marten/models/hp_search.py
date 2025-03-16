@@ -406,6 +406,8 @@ def _pair_covar_metrics(
             cov_table,
             feature,
         )
+        #NOTE: the worker_client() must be within the for loop rather than outside, 
+        # to avoid scheculer connection lost error
         with worker_client() as client:
             covar_futures.append(
                 client.submit(
@@ -765,7 +767,7 @@ def _load_covar_feature(anchor_table, anchor_symbol, cov_table, feature, symbols
                 params[f"symbol_{idx}"] = symbol
             # Construct the query using named parameters
             query = f"""
-                SELECT table_symbol AS ID, date AS DS, {select_cols}
+                SELECT "table" || '::' || symbol AS ID, date AS DS, {select_cols}
                 FROM {cov_table}
                 WHERE ("table", symbol) IN ({values_list})
                 and date between %(start_date)s and %(end_date)s
