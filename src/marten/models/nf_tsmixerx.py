@@ -150,7 +150,7 @@ class TSMixerxModel(BaseModel):
     def trainable_on_cpu(self, **kwargs: Any) -> bool:
         if "num_covars" not in kwargs:
             return True
-        return self._model_complexity(**kwargs) < kwargs.get("max_covars", 20) * 2.5
+        return self._model_complexity(**kwargs) < kwargs.get("max_covars", 20)*1.3
 
     def torch_num_threads(self) -> float:
         is_baseline = self.is_baseline(**self.model_args)
@@ -337,9 +337,9 @@ class TSMixerxModel(BaseModel):
         # TODO: add random_seed to search space?
         # "boxcox" local_scaler_type supports positive variables only
         return f"""dict(
-            input_size=range(5, 500+1),
-            n_block=range(2, 256+1),
-            ff_dim=range(2, 256+1),
+            input_size=range(5, 128+1),
+            n_block=range(2, 128+1),
+            ff_dim=range(2, 128+1),
             dropout=uniform(0.1, 0.5),
             revin=[True, False],
             local_scaler_type=[None, "standard", "robust", "robust-iqr", "minmax"],
