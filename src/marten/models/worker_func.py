@@ -1870,8 +1870,8 @@ def ensemble_topk_prediction(
     logger.info("prediction settings loaded: %s, group id: %s", len(settings), group_id)
 
     # scale-in to preserve more memory for prediction
-    logger.info("Scaling dask cluster to %s", args.min_worker)
-    scale_cluster_and_wait(client, args.min_worker)
+    # logger.info("Scaling dask cluster to %s", args.min_worker)
+    # scale_cluster_and_wait(client, args.min_worker)
     # client.cluster.scale(args.min_worker)
     # locks = get_accelerator_locks(cpu_leases=0, timeout="60s")
     futures = []

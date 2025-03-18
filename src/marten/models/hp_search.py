@@ -2384,18 +2384,6 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
             round(time.time() - t1_start, 3),
         )
 
-    min_covar_loss = min_covar_loss_val(
-        alchemyEngine, args.model, symbol, args.symbol_table, cutoff_date
-    )
-    min_covar_loss = min_covar_loss if min_covar_loss is not None else LOSS_CAP
-    base_loss = min(base_loss, min_covar_loss)
-
-    # run HP search using Bayeopt and check whether needed HP(s) are found
-    logger.info(
-        "Starting Bayesian optimization search for hyper-parameters. Loss_val threshold: %s",
-        round(base_loss, 5),
-    )
-
     # scale-in to preserve more memory for hps
     if args.model != "NeuralProphet":
         worker_size = int(math.sqrt(args.min_worker * args.max_worker))
@@ -2411,6 +2399,21 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
     )
     # df_future = client.scatter(df)
     # ranked_features_future = client.scatter(ranked_features)
+
+    if args.resume == "predict":
+        return hps_id, cutoff_date, ranked_features, df
+
+    min_covar_loss = min_covar_loss_val(
+        alchemyEngine, args.model, symbol, args.symbol_table, cutoff_date
+    )
+    min_covar_loss = min_covar_loss if min_covar_loss is not None else LOSS_CAP
+    base_loss = min(base_loss, min_covar_loss)
+
+    # run HP search using Bayeopt and check whether needed HP(s) are found
+    logger.info(
+        "Starting Bayesian optimization search for hyper-parameters. Loss_val threshold: %s",
+        round(base_loss, 5),
+    )
 
     t2_start = time.time()
 
