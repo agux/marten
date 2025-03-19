@@ -1712,8 +1712,8 @@ def forecast(
             alchemyEngine,
         )
     else:
-        if hps_metric["sub_topk"] is None:
-            new_df = df
+        if hps_metric["sub_topk"] is None or hps_metric["sub_topk"] == 0:
+            new_df = df[["ds", "y"]]
         else:
             cols = ["ds", "y"] + [
                 covar.strip() for covar in hps_metric["covars"].split(",")
