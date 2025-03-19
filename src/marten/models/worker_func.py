@@ -1685,7 +1685,8 @@ def forecast(
             "covar_set_id: %s\n"
             "sub_topk: %s\n"
             "cutoff_date: %s\n"
-            "hyper-params: %s"
+            "hyper-params: %s\n"
+            "covars: %s"
         ),
         model,
         symbol,
@@ -1696,6 +1697,7 @@ def forecast(
         hps_metric["sub_topk"],
         cutoff_date,
         hp_str,
+        hps_metric["covars"],
     )
 
     if covar_set_id == 0:
@@ -2188,4 +2190,3 @@ def count_topk_hp(alchemyEngine, model, hps_id, base_loss):
             },
         )
         return result.fetchone()[0]
-
