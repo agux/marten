@@ -2124,7 +2124,7 @@ def save_ensemble_snapshot(
             ens_df["yhat_n"] += df["yhat_n"]
 
     ens_df.reset_index(inplace=True)
-    shift_series_on_holiday(ens_df, region)
+    ens_df = shift_series_on_holiday(ens_df, region)
     calc_cum_returns(ens_df)
     avg_yhat = ens_df["yhat_n"].mean()
     # ens_df["plus_one"] = ens_df["yhat_n"] / 100.0 + 1.0

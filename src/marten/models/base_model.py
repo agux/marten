@@ -189,7 +189,7 @@ class BaseModel(ABC):
             return
 
         # if "profiler" not in self.locks:
-            # self.locks["profiler"] = Lock(name=f"""{socket.gethostname()}__profiler""")
+        # self.locks["profiler"] = Lock(name=f"""{socket.gethostname()}__profiler""")
 
         if not self.locks["profiler"].acquire(timeout=2):
             return
@@ -241,7 +241,7 @@ class BaseModel(ABC):
         optim_args = {
             # "lr": kwargs["learning_rate"],
             "fused": kwargs["accelerator"] in ("gpu", "auto")
-            and torch.cuda.is_available(),
+            # and torch.cuda.is_available(),
         }
         return model_optim, optim_args
 
@@ -328,14 +328,14 @@ class BaseModel(ABC):
         is_baseline = self.is_baseline(**self.model_args)
         if accelerator in ("mps", "auto") and torch.backends.mps.is_available():
             accelerator = "mps"
-        elif accelerator in ("gpu", "auto") and not torch.cuda.is_available():
-            accelerator = "cpu"
+        # elif accelerator in ("gpu", "auto") and not self.model_args["cuda_available"]:
+        #     accelerator = "cpu"
         elif accelerator in ("gpu", "auto"):
             accelerator = "gpu"
             # if not is_baseline:
-                # self.release_accelerator_lock()
-                # TODO: confirm if we need to re-create the Lock instance each time to avoid getting stuck
-                # self.locks["gpu"] = Lock(name=f"""{socket.gethostname()}__GPU-auto""")
+            # self.release_accelerator_lock()
+            # TODO: confirm if we need to re-create the Lock instance each time to avoid getting stuck
+            # self.locks["gpu"] = Lock(name=f"""{socket.gethostname()}__GPU-auto""")
 
         # gpu or auto
         if accelerator == "gpu":

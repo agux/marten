@@ -1120,8 +1120,12 @@ def _bayesopt_run(
 ):
     global logger, client, model
 
+    cuda_count = torch.cuda.device_count()
+
     @scheduler.custom(n_jobs=n_jobs)
     def objective(params_batch):
+        nonlocal cuda_count
+        num_gpu = cuda_count
         jobs = []
         t1 = time.time()
         nworker = num_workers(False)
@@ -1130,7 +1134,7 @@ def _bayesopt_run(
         client.set_metadata(["workload_info", "finished"], 0)
         tasks = []
         cpu_task_pos = 0
-        num_gpu = torch.cuda.device_count()
+        
         for params in params_batch:
             new_df = df.copy()
             priority = 1
