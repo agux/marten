@@ -113,7 +113,7 @@ def merge_covar_df(
                 merged_df = anchor_df[["ds", "y", feature]].copy()
                 return merged_df
             
-    if feature in anchor_df.columns:
+    if cov_table == "ts_features_view" and feature in anchor_df.columns:
         merged_df = anchor_df[["ds", "y", feature]].copy()
 
     cov_symbol_sanitized = f"{feature}_{cov_symbol}"
