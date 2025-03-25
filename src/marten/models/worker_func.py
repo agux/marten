@@ -112,6 +112,9 @@ def merge_covar_df(
             elif feature in anchor_df.columns:
                 merged_df = anchor_df[["ds", "y", feature]].copy()
                 return merged_df
+            
+    if feature in anchor_df.columns:
+        merged_df = anchor_df[["ds", "y", feature]].copy()
 
     cov_symbol_sanitized = f"{feature}_{cov_symbol}"
     cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
@@ -209,19 +212,16 @@ def fit_with_covar(
     model = worker.model
 
     def _func():
-        if feature in anchor_df.columns:
-            merged_df = anchor_df[["ds", "y", feature]].copy()
-        else:
-            merged_df = merge_covar_df(
-                anchor_symbol,
-                args.symbol_table,
-                anchor_df,
-                cov_table,
-                cov_symbol,
-                feature,
-                min_date,
-                alchemyEngine,
-            )
+        merged_df = merge_covar_df(
+            anchor_symbol,
+            args.symbol_table,
+            anchor_df,
+            cov_table,
+            cov_symbol,
+            feature,
+            min_date,
+            alchemyEngine,
+        )
 
         if merged_df is None:
             # FIXME: sometimes merged_df is None even if there's data in table
