@@ -210,7 +210,7 @@ def fit_with_covar(
 
     def _func():
         if feature in anchor_df.columns:
-            merged_df = anchor_df.copy()
+            merged_df = anchor_df[["ds", "y", feature]].copy()
         else:
             merged_df = merge_covar_df(
                 anchor_symbol,
