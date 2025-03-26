@@ -114,7 +114,8 @@ def merge_covar_df(
                 return merged_df
             
     if cov_table == "ts_features_view" and feature in anchor_df.columns:
-        merged_df = anchor_df[["ds", "y", feature]].copy()
+        merged_df = anchor_df.copy()
+        return merged_df
 
     cov_symbol_sanitized = f"{feature}_{cov_symbol}"
     cutoff_date = anchor_df["ds"].max().strftime("%Y-%m-%d")
