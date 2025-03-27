@@ -2127,8 +2127,8 @@ def save_ensemble_snapshot(
     ens_df.reset_index(inplace=True)
     ens_df = shift_series_on_holiday(ens_df, region)
     calc_cum_returns(ens_df)
-    ens_df[["symbol", "symbol_table", "snapshot_id"]] = (
-        ens_df[["symbol", "symbol_table", "snapshot_id"]]
+    ens_df[["symbol", "symbol_table"]] = (
+        ens_df[["symbol", "symbol_table"]]
         .fillna(method="ffill")
         .fillna(method="bfill")
     )
