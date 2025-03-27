@@ -2113,7 +2113,7 @@ def save_ensemble_snapshot(
         df["yhat_n"] = df["yhat_n"] * w
 
         if ens_df is None:
-            ens_df = df
+            ens_df = df.copy()
             ens_df.loc[:, "symbol"] = symbol
             ens_df.loc[:, "symbol_table"] = symbol_table
             ens_df.loc[:, "holiday"] = ens_df["date"].apply(
@@ -2127,6 +2127,11 @@ def save_ensemble_snapshot(
     ens_df.reset_index(inplace=True)
     ens_df = shift_series_on_holiday(ens_df, region)
     calc_cum_returns(ens_df)
+    ens_df[["symbol", "symbol_table", "snapshot_id"]] = (
+        ens_df[["symbol", "symbol_table", "snapshot_id"]]
+        .fillna(method="ffill")
+        .fillna(method="bfill")
+    )
     avg_yhat = ens_df["yhat_n"].mean()
     # ens_df["plus_one"] = ens_df["yhat_n"] / 100.0 + 1.0
     # ens_df["accumulated_returns"] = ens_df["plus_one"].cumprod()
