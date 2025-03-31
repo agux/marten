@@ -232,6 +232,11 @@ def configure_parser(parser):
         help="Restart all workers in the dask cluster at each end of mini-iteration.",
     )
     parser.add_argument(
+        "--extract_extra_features",
+        action="store_true",
+        help="Extract extra features based off foundational features.",
+    )
+    parser.add_argument(
         "--log_train_args",
         action="store_true",
         help="Logs model training arguments at info level.",

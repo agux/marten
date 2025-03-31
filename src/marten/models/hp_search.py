@@ -2368,25 +2368,26 @@ def covars_and_search(model, client, symbol, alchemyEngine, logger, args):
             round(time.time() - t1_start, 3),
         )
 
-        worker_size = int(math.pow(args.min_worker * args.max_worker, 0.6))
-        logger.info("Scaling down dask cluster to %s", worker_size)
-        scale_cluster_and_wait(client, worker_size)
+        if args.extract_extra_features:
+            worker_size = int(math.pow(args.min_worker * args.max_worker, 0.6))
+            logger.info("Scaling down dask cluster to %s", worker_size)
+            scale_cluster_and_wait(client, worker_size)
 
-        t1_start = time.time()
-        logger.info("Starting feature engineering and extraction")
-        futures = extract_features(
-            client, alchemyEngine, symbol, anchor_df, anchor_table, args
-        )
-        while len(futures) > 0:
-            done, undone = wait(futures)
-            get_results(done)
-            del done
-            futures = list(undone)
-        logger.info(
-            "%s feature extraction completed. Time taken: %s seconds",
-            args.symbol,
-            round(time.time() - t1_start, 3),
-        )
+            t1_start = time.time()
+            logger.info("Starting feature engineering and extraction")
+            futures = extract_features(
+                client, alchemyEngine, symbol, anchor_df, anchor_table, args
+            )
+            while len(futures) > 0:
+                done, undone = wait(futures)
+                get_results(done)
+                del done
+                futures = list(undone)
+            logger.info(
+                "%s feature extraction completed. Time taken: %s seconds",
+                args.symbol,
+                round(time.time() - t1_start, 3),
+            )
 
     # scale-in to preserve more memory for hps
     if args.model != "NeuralProphet":
