@@ -1431,6 +1431,7 @@ def etf_spot():
             },
             inplace=True,
         )
+        df = df.drop_duplicates(subset=["code", "date"], keep="first")
         with alchemyEngine.begin() as conn:
             update_on_conflict(table_def_fund_etf_spot_em(), conn, df, ["code", "date"])
 
