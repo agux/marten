@@ -17,14 +17,13 @@ warnings.filterwarnings(
     category=UserWarning,
 )
 
+import io
 import time
 import pandas as pd
 import json
 import hashlib
 import math
 # import uuid
-
-
 logging.getLogger("NP.plotly").setLevel(logging.CRITICAL)
 logging.getLogger("prophet.plot").disabled = True
 
@@ -1786,6 +1785,9 @@ def forecast(
         try:
             results = client.gather(futures)
         except Exception as e:
+            buffer = io.StringIO()
+            new_df.info(buf=buffer)
+            info_str = buffer.getvalue()
             get_logger().error(("forecast failed with error: %s, "
                                "hpid: %s, covar_set_id: %s, hyper-params: %s, "
                                "covars: %s, input dataframe: %s\n%s\n%s"), 
@@ -1795,7 +1797,7 @@ def forecast(
                                hp_str,
                                hps_metric["covars"],
                                new_df.shape,
-                               new_df.info(),
+                               info_str,
                                new_df,
                                exc_info=True)
             raise e

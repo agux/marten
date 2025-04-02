@@ -27,6 +27,7 @@ from types import SimpleNamespace
 from typing import Any, Tuple, List, Type
 from dotenv import load_dotenv
 import os
+import io
 import time
 import socket
 import threading
@@ -438,12 +439,15 @@ class BaseModel(ABC):
                     mean_squared_error(forecast["y"], forecast[model_name])
                 )
         except Exception as e:
+            buffer = io.StringIO()
+            self.input_df.info(buf=buffer)
+            info_str = buffer.getvalue()
             get_logger().error(
                 "failed to calculate insample prediction metrics: %s. "+
                 "input dataframe:\n%s\n%s\n"
                 "forecast dataframe:\n%s",
                 e,
-                self.input_df.info(),
+                info_str,
                 self.input_df,
                 forecast,
             )
