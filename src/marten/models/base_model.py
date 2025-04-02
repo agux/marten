@@ -144,6 +144,7 @@ class BaseModel(ABC):
 
     def __init__(self) -> None:
         super().__init__()
+        self.input_df = None
         self.device = None
         self.model_args = None
         self.accelerator_lock = None
@@ -408,33 +409,44 @@ class BaseModel(ABC):
         )
 
         loss = loss_val = eval_mae = eval_rmse = eval_mae_val = eval_rmse_val = np.nan
-        if kwargs["validate"]:
-            train_set = forecast[: -self.val_size]
-            val_set = forecast[-self.val_size :]
+        try:
+            if kwargs["validate"]:
+                train_set = forecast[: -self.val_size]
+                val_set = forecast[-self.val_size :]
 
-            loss = huber_loss(train_set["y"], train_set[model_name])
-            eval_mae = mean_absolute_error(
-                train_set["y"], train_set[model_name]
-            )
-            eval_rmse = np.sqrt(
-                mean_squared_error(train_set["y"], train_set[model_name])
-            )
+                loss = huber_loss(train_set["y"], train_set[model_name])
+                eval_mae = mean_absolute_error(
+                    train_set["y"], train_set[model_name]
+                )
+                eval_rmse = np.sqrt(
+                    mean_squared_error(train_set["y"], train_set[model_name])
+                )
 
-            loss_val = huber_loss(val_set["y"], val_set[model_name])
-            eval_mae_val = mean_absolute_error(
-                val_set["y"], val_set[model_name]
+                loss_val = huber_loss(val_set["y"], val_set[model_name])
+                eval_mae_val = mean_absolute_error(
+                    val_set["y"], val_set[model_name]
+                )
+                eval_rmse_val = np.sqrt(
+                    mean_squared_error(val_set["y"], val_set[model_name])
+                )
+            else:
+                loss = huber_loss(forecast["y"], forecast[model_name])
+                eval_mae = mean_absolute_error(
+                    forecast["y"], forecast[model_name]
+                )
+                eval_rmse = np.sqrt(
+                    mean_squared_error(forecast["y"], forecast[model_name])
+                )
+        except Exception as e:
+            get_logger().error(
+                "failed to calculate insample prediction metrics: %s. "+
+                "input dataframe:\n%s\n"
+                "forecast dataframe:\n%s",
+                e,
+                self.input_df,
+                forecast,
             )
-            eval_rmse_val = np.sqrt(
-                mean_squared_error(val_set["y"], val_set[model_name])
-            )
-        else:
-            loss = huber_loss(forecast["y"], forecast[model_name])
-            eval_mae = mean_absolute_error(
-                forecast["y"], forecast[model_name]
-            )
-            eval_rmse = np.sqrt(
-                mean_squared_error(forecast["y"], forecast[model_name])
-            )
+            raise e
 
         # shutil.rmtree(self.csvLogger.log_dir)
 
@@ -547,6 +559,7 @@ class BaseModel(ABC):
             # NOTE: `devices` selected with `CPUAccelerator` should be an int > 0.
             kwargs["devices"] = 1
         self.model_args = kwargs
+        self.input_df = df
         start_time = time.time()
         # loop = asyncio.get_running_loop()
         # loop = get_worker().io_loop
