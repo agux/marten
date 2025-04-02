@@ -1787,14 +1787,15 @@ def forecast(
             results = client.gather(futures)
         except Exception as e:
             get_logger().error(("forecast failed with error: %s, "
-                               "hpid: %s, covar_set_id: %s, hyper-params: %s"
-                               "covars: %s, input dataframe: %s\n%s"), 
+                               "hpid: %s, covar_set_id: %s, hyper-params: %s, "
+                               "covars: %s, input dataframe: %s\n%s\n%s"), 
                                e, 
                                hps_metric["hpid"],
                                covar_set_id,
                                hp_str,
                                hps_metric["covars"],
                                new_df.shape,
+                               new_df.info(),
                                new_df,
                                exc_info=True)
             raise e

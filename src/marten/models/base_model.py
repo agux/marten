@@ -440,9 +440,10 @@ class BaseModel(ABC):
         except Exception as e:
             get_logger().error(
                 "failed to calculate insample prediction metrics: %s. "+
-                "input dataframe:\n%s\n"
+                "input dataframe:\n%s\n%s\n"
                 "forecast dataframe:\n%s",
                 e,
+                self.input_df.info(),
                 self.input_df,
                 forecast,
             )
