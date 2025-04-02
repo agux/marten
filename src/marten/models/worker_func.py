@@ -1783,7 +1783,17 @@ def forecast(
                 # resources={"MEMORY": worker_mem_needed},
             )
         )
-        results = client.gather(futures)
+        try:
+            results = client.gather(futures)
+        except Exception as e:
+            get_logger().error(("forecast failed with error: %s, "
+                               "hpid: %s, covar_set_id: %s, hyper-params: %s"), 
+                               e, 
+                               hps_metric["hpid"],
+                               covar_set_id,
+                               hp_str,
+                               exc_info=True)
+            raise e
 
     proc_time = time.time() - start_time
     metrics = results[0][1]
