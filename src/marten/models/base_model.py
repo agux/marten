@@ -451,6 +451,9 @@ class BaseModel(ABC):
                 self.input_df,
                 forecast,
             )
+            from datetime import datetime
+            now = datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
+            self.input_df.to_pickle(f"input_df_{now}.pkl")
             raise e
 
         # shutil.rmtree(self.csvLogger.log_dir)
