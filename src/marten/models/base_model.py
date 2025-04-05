@@ -442,18 +442,23 @@ class BaseModel(ABC):
             buffer = io.StringIO()
             self.input_df.info(buf=buffer)
             info_str = buffer.getvalue()
-            get_logger().error(
-                "failed to calculate insample prediction metrics: %s. "+
-                "input dataframe:\n%s\n%s\n"
-                "forecast dataframe:\n%s",
-                e,
-                info_str,
-                self.input_df,
-                forecast,
-            )
             from datetime import datetime
             now = datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
-            self.input_df.to_pickle(f"input_df_{now}.pkl")
+            input_df_path = f"input_df_{now}.pkl"
+            self.input_df.to_pickle(input_df_path)
+            get_logger().error(
+                "failed to calculate insample prediction metrics: %s. \n"
+                "model args: %s\n"
+                "input dataframe:\n%s\n%s\n"
+                "input dataframe has been saved to %s\n"
+                "forecast dataframe:\n%s\n",
+                e,
+                self.model_args,
+                info_str,
+                self.input_df,
+                input_df_path,
+                forecast,
+            )
             raise e
 
         # shutil.rmtree(self.csvLogger.log_dir)
