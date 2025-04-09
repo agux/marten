@@ -451,13 +451,15 @@ class BaseModel(ABC):
                 "model args: %s\n"
                 "input dataframe:\n%s\n%s\n"
                 "input dataframe has been saved to %s\n"
-                "forecast dataframe:\n%s\n",
+                "forecast dataframe:\n%s\n"
+                "hparams:\n%s",
                 e,
                 self.model_args,
                 info_str,
                 self.input_df,
                 input_df_path,
                 forecast,
+                self.nf.models[0].hparams,
             )
             raise e
 
