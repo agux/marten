@@ -7,7 +7,7 @@ from neuralforecast.models import TSMixerx, NHITS
 from neuralforecast.losses.pytorch import HuberLoss
 
 # Prep data
-df_train = pd.read_pickle("input_df_20250405184630794.pkl")
+df_train = pd.read_pickle("input_df.pkl")
 exog = [col for col in df_train.columns if col not in ["unique_id", "ds", "y"]]
 
 logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
@@ -26,21 +26,26 @@ def tsmixerx():
         # stat_exog_list=["airline1"],
         # futr_exog_list=exog,
         hist_exog_list=exog,
+        num_lr_decays=-1,
         n_block=2,
         ff_dim=16,
         revin=True,
         # scaler_type="standard",
-        max_steps=500,
+        max_steps=10000,
         early_stop_patience_steps=-1,
-        val_check_steps=5,
+        val_check_steps=50,
         learning_rate=1e-3,
         # enable_lr_find=True,
         loss=HuberLoss(),
-        valid_loss=HuberLoss(),
-        batch_size=32,
+        batch_size=16,
         random_seed=7,
         optimizer=optim.AdamW,
         optimizer_kwargs={"fused": False},
+        enable_progress_bar=False,
+        enable_model_summary=False,
+        accelerator="cpu",
+        devices=1,
+        log_every_n_steps=10,
     )
     nf = NeuralForecast(
         models=[model],
@@ -52,6 +57,7 @@ def tsmixerx():
     Y_hat_insample = nf.predict_insample(step_size=horizon)
 
     Y_hat_insample.info()
+    print(nf.models[0].hparams)
 
 if __name__ == "__main__":
     # nhits()
