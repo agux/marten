@@ -43,7 +43,7 @@ def tsmixerx():
         optimizer_kwargs={"fused": False},
         enable_progress_bar=False,
         enable_model_summary=False,
-        accelerator="cpu",
+        # accelerator="cpu",
         devices=1,
         log_every_n_steps=10,
     )

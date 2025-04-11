@@ -44,7 +44,7 @@ batch_sizes = {
 baseline_params = {
     "input_size": 60,
     "n_block": 2,
-    "ff_dim": 16,
+    "ff_dim": 32, # if ff_dim=16, predict_insample may yield empty forecast
     "dropout": 0.1,
     "revin": True,
     "learning_rate": 1e-3,
