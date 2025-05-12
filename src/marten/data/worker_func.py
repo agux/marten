@@ -2357,25 +2357,25 @@ def fund_holding(symbol):
     return len(df)
 
 
-def _get_market(alchemyEngine, symbol, asset_type):
+# def _get_market(alchemyEngine, symbol, asset_type):
 
-    with alchemyEngine.connect() as conn:
-        if asset_type.lower() == "etf":
-            results = conn.execute(
-                text(
-                    """
-                select exch 
-                from fund_etf_list_sina 
-                where symbol = :symbol
-            """
-                ),
-                {
-                    "symbol": symbol,
-                },
-            )
-            row = results.fetchone()
+#     with alchemyEngine.connect() as conn:
+#         if asset_type.lower() == "etf":
+#             results = conn.execute(
+#                 text(
+#                     """
+#                 select exch 
+#                 from fund_etf_list_sina 
+#                 where symbol = :symbol
+#             """
+#                 ),
+#                 {
+#                     "symbol": symbol,
+#                 },
+#             )
+#             row = results.fetchone()
 
-    return row[0] if row is not None else None
+#     return row[0] if row is not None else None
 
 
 def cash_inflow(symbol, exch):
