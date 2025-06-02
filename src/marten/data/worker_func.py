@@ -1,3 +1,4 @@
+import os
 import math
 import time
 import pandas as pd
@@ -132,6 +133,8 @@ def hk_index_daily(future_hk_index_list):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
+    delay = float(os.getenv("CRAWLER_DELAY"), "0")
+
     ##query index list from table and submit tasks to client for each
     with alchemyEngine.connect() as conn:
         result = conn.execute(text("select symbol from hk_index_spot_em"))
@@ -139,13 +142,16 @@ def hk_index_daily(future_hk_index_list):
         index_list = [row[0] for row in result_set]
 
     futures = []
-    with worker_client() as client:
-        logger.info("starting tasks on function update_hk_indices()...")
-        for symbol in index_list:
+    logger.info("starting tasks on function update_hk_indices()...")
+    for symbol in index_list:
+        with worker_client() as client:
             futures.append(client.submit(update_hk_indices, symbol, priority=1))
             await_futures(futures, False)
+        time.sleep(delay)
 
+    with worker_client() as client:
         await_futures(futures)
+
     return len(index_list)
 
 
@@ -233,14 +239,19 @@ def get_us_indices(us_index_list):
     worker = get_worker()
     logger = worker.logger
 
+    delay = float(os.getenv("CRAWLER_DELAY"), "0")
+
     futures = []
-    with worker_client() as client:
-        logger.info("starting task on function update_us_indices()...")
-        for symbol in us_index_list:
+    logger.info("starting task on function update_us_indices()...")
+    for symbol in us_index_list:
+        with worker_client() as client:
             futures.append(client.submit(update_us_indices, symbol))
             await_futures(futures, False)
+        time.sleep(delay)
 
+    with worker_client() as client:
         await_futures(futures)
+
     return len(us_index_list)
 
 
@@ -678,18 +689,22 @@ def cn_index_daily(future_cn_index_list):
         "starting tasks on function stock_zh_index_daily_em(), length: %s",
         len(cn_index_fulllist),
     )
+    
+    delay = float(os.getenv("CRAWLER_DELAY"), "0")
 
     futures = []
-    with worker_client() as client:
-        for symbol, src in zip(cn_index_fulllist["symbol"], cn_index_fulllist["src"]):
+    for symbol, src in zip(cn_index_fulllist["symbol"], cn_index_fulllist["src"]):
+        with worker_client() as client:
             futures.append(
                 client.submit(stock_zh_index_daily_em, symbol, src, priority=1)
             )
             await_futures(futures, False)
+        time.sleep(delay)
 
-        logger.debug("cn_index_daily futures before final wait: %s", len(futures))
+    logger.debug("cn_index_daily futures before final wait: %s", len(futures))
+    with worker_client() as client:
         await_futures(futures)
-        logger.debug("cn_index_daily futures after final wait: %s", len(futures))
+    logger.debug("cn_index_daily futures after final wait: %s", len(futures))
 
     return len(cn_index_fulllist)
 
@@ -826,11 +841,15 @@ def get_cn_index_list(cn_index_types):
         "starting task on function stock_zh_index_spot_em() and stock_zh_index_spot_sina()..."
     )
     ##loop thru cn_index_types and send off further tasks to client
+    delay = float(os.getenv("CRAWLER_DELAY"), "0")
     futures = []
-    with worker_client() as client:
-        for symbol, src in cn_index_types:
+    for symbol, src in cn_index_types:
+        with worker_client() as client:
             futures.append(client.submit(stock_zh_index_spot_em, symbol, src))
             await_futures(futures, False)
+        time.sleep(delay)
+
+    with worker_client() as client:
         futures.append(client.submit(stock_zh_index_spot_sina))
         await_futures(futures)
     return True
@@ -1144,7 +1163,6 @@ def bond_ir():
 
 # Function to fetch and process ETF data
 def get_etf_daily(symbol):
-
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
     try:
@@ -1291,16 +1309,20 @@ def etf_list(etf_spot_df):
         df.loc[:, "exch"] = df["exch_x"].combine_first(df["exch_y"])
         df.drop(["exch_x", "exch_y"], axis=1, inplace=True)
 
+        delay = float(os.getenv("CRAWLER_DELAY"), "0")
+
         ## get historical data and holdings for each ETF
         futures = []
-        with worker_client() as client:
-            logger.info("starting sub-tasks for each ETF. Length: %s", len(df))
-            for symbol, exch in zip(df["symbol"], df["exch"]):
+        logger.info("starting sub-tasks for each ETF. Length: %s", len(df))
+        for symbol, exch in zip(df["symbol"], df["exch"]):
+            with worker_client() as client:
                 futures.append(client.submit(get_etf_daily, symbol, priority=1))
                 futures.append(client.submit(fund_holding, symbol, priority=1))
                 futures.append(client.submit(cash_inflow, symbol, exch, priority=1))
                 await_futures(futures, False, multiplier=3)
+            time.sleep(delay)
 
+        with worker_client() as client:
             await_futures(futures)
 
         return len(df)
@@ -1601,13 +1623,16 @@ def stock_zh_daily_hist(stock_list, threads):
     logger = worker.logger
 
     logger.info("running stock_zh_daily_hist() for %s stocks", len(stock_list))
+    delay = float(os.getenv("CRAWLER_DELAY"), "0")
 
     futures = []
-    with worker_client() as client:
-        for symbol in stock_list["symbol"]:
+    for symbol in stock_list["symbol"]:
+        with worker_client() as client:
             futures.append(client.submit(get_stock_daily, symbol, priority=1))
             await_futures(futures, False, multiplier=threads)
+        time.sleep(delay)
 
+    with worker_client() as client:
         await_futures(futures)
 
     return len(stock_list)
@@ -1692,13 +1717,16 @@ def sge_spot_daily_hist(spot_list):
     logger = worker.logger
 
     logger.info("running sge_spot_daily_hist() for %s spot", len(spot_list))
+    delay = float(os.getenv("CRAWLER_DELAY"), "0")
 
     futures = []
-    with worker_client() as client:
-        for symbol in spot_list["product"]:
+    for symbol in spot_list["product"]:
+        with worker_client() as client:
             futures.append(client.submit(get_sge_spot_daily, symbol, priority=1))
             await_futures(futures, False)
+        time.sleep(delay)
 
+    with worker_client() as client:
         await_futures(futures)
 
     return len(spot_list)
@@ -1980,15 +2008,19 @@ def cn_bond_index():
         update_on_conflict(cn_bond_index_period, conn, df, ["symbol"])
 
     # submit tasks to get bond metrics for each period
+    delay = float(os.getenv("CRAWLER_DELAY"), "0")
+
     futures = []
-    with worker_client() as client:
-        logger.info("starting tasks on function get_cn_bond_index_metrics()...")
-        for symbol, symbol_cn in data:
+    logger.info("starting tasks on function get_cn_bond_index_metrics()...")
+    for symbol, symbol_cn in data:
+        with worker_client() as client:
             futures.append(
                 client.submit(get_cn_bond_index_metrics, symbol, symbol_cn, priority=1)
             )
             await_futures(futures, False)
+        time.sleep(delay)
 
+    with worker_client() as client:
         await_futures(futures, task_timeout=180)
 
     return len(df)
@@ -2163,11 +2195,13 @@ def interbank_rate():
     with alchemyEngine.begin() as conn:
         update_on_conflict(interbank_rate_list, conn, df, ["symbol"])
 
+    delay = float(os.getenv("CRAWLER_DELAY"), "0")
+
     # submit tasks to get interbank rate for each symbol
     futures = []
-    with worker_client() as client:
-        logger.info("starting tasks on function get_interbank_rate()...")
-        for symbol, market, symbol_type, indicator in data:
+    logger.info("starting tasks on function get_interbank_rate()...")
+    for symbol, market, symbol_type, indicator in data:
+        with worker_client() as client:
             futures.append(
                 client.submit(
                     get_interbank_rate,
@@ -2179,7 +2213,9 @@ def interbank_rate():
                 )
             )
             await_futures(futures, False)
+        time.sleep(delay)
 
+    with worker_client() as client:
         await_futures(futures)
 
     return len(df)
@@ -2364,8 +2400,8 @@ def fund_holding(symbol):
 #             results = conn.execute(
 #                 text(
 #                     """
-#                 select exch 
-#                 from fund_etf_list_sina 
+#                 select exch
+#                 from fund_etf_list_sina
 #                 where symbol = :symbol
 #             """
 #                 ),
