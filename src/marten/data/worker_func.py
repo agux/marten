@@ -133,7 +133,7 @@ def hk_index_daily(future_hk_index_list):
     worker = get_worker()
     alchemyEngine, logger = worker.alchemyEngine, worker.logger
 
-    delay = float(os.getenv("CRAWLER_DELAY"), "0")
+    delay = float(os.getenv("CRAWLER_DELAY", "0"))
 
     ##query index list from table and submit tasks to client for each
     with alchemyEngine.connect() as conn:
@@ -239,7 +239,7 @@ def get_us_indices(us_index_list):
     worker = get_worker()
     logger = worker.logger
 
-    delay = float(os.getenv("CRAWLER_DELAY"), "0")
+    delay = float(os.getenv("CRAWLER_DELAY", "0"))
 
     futures = []
     logger.info("starting task on function update_us_indices()...")
@@ -690,7 +690,7 @@ def cn_index_daily(future_cn_index_list):
         len(cn_index_fulllist),
     )
     
-    delay = float(os.getenv("CRAWLER_DELAY"), "0")
+    delay = float(os.getenv("CRAWLER_DELAY", "0"))
 
     futures = []
     for symbol, src in zip(cn_index_fulllist["symbol"], cn_index_fulllist["src"]):
@@ -841,7 +841,7 @@ def get_cn_index_list(cn_index_types):
         "starting task on function stock_zh_index_spot_em() and stock_zh_index_spot_sina()..."
     )
     ##loop thru cn_index_types and send off further tasks to client
-    delay = float(os.getenv("CRAWLER_DELAY"), "0")
+    delay = float(os.getenv("CRAWLER_DELAY", "0"))
     futures = []
     for symbol, src in cn_index_types:
         with worker_client() as client:
@@ -1309,7 +1309,7 @@ def etf_list(etf_spot_df):
         df.loc[:, "exch"] = df["exch_x"].combine_first(df["exch_y"])
         df.drop(["exch_x", "exch_y"], axis=1, inplace=True)
 
-        delay = float(os.getenv("CRAWLER_DELAY"), "0")
+        delay = float(os.getenv("CRAWLER_DELAY", "0"))
 
         ## get historical data and holdings for each ETF
         futures = []
@@ -1623,7 +1623,7 @@ def stock_zh_daily_hist(stock_list, threads):
     logger = worker.logger
 
     logger.info("running stock_zh_daily_hist() for %s stocks", len(stock_list))
-    delay = float(os.getenv("CRAWLER_DELAY"), "0")
+    delay = float(os.getenv("CRAWLER_DELAY", "0"))
 
     futures = []
     for symbol in stock_list["symbol"]:
@@ -1717,7 +1717,7 @@ def sge_spot_daily_hist(spot_list):
     logger = worker.logger
 
     logger.info("running sge_spot_daily_hist() for %s spot", len(spot_list))
-    delay = float(os.getenv("CRAWLER_DELAY"), "0")
+    delay = float(os.getenv("CRAWLER_DELAY", "0"))
 
     futures = []
     for symbol in spot_list["product"]:
@@ -2008,7 +2008,7 @@ def cn_bond_index():
         update_on_conflict(cn_bond_index_period, conn, df, ["symbol"])
 
     # submit tasks to get bond metrics for each period
-    delay = float(os.getenv("CRAWLER_DELAY"), "0")
+    delay = float(os.getenv("CRAWLER_DELAY", "0"))
 
     futures = []
     logger.info("starting tasks on function get_cn_bond_index_metrics()...")
@@ -2195,7 +2195,7 @@ def interbank_rate():
     with alchemyEngine.begin() as conn:
         update_on_conflict(interbank_rate_list, conn, df, ["symbol"])
 
-    delay = float(os.getenv("CRAWLER_DELAY"), "0")
+    delay = float(os.getenv("CRAWLER_DELAY", "0"))
 
     # submit tasks to get interbank rate for each symbol
     futures = []
