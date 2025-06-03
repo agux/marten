@@ -44,9 +44,11 @@ def init(args):
             args.symbol_table = "index_daily_em_view"
         case "fund":
             args.symbol_table = "fund_etf_daily_em_view"
+        case "bond":
+            args.symbol_table = "cn_bond_indices_view"
         case _:
             args.symbol_table = "unspecified"
-    
+
     load_dotenv()  # take environment variables from .env.
     print_sys_info()
 

@@ -304,7 +304,7 @@ def configure_parser(parser):
     )
     parser.add_argument(
         "--asset_type",
-        choices=["unspecified", "stock", "index", "fund"],
+        choices=["unspecified", "stock", "index", "fund", "bond"],
         default="unspecified",
         help="Asset type of the symbol(s). Defaults to 'unspecified' and it will be inferred from symbol_dict table.",
     )
